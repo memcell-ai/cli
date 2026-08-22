@@ -1,8 +1,8 @@
 {
   "name": "memcell",
-  "version": "0.1.12",
+  "version": "0.2.0",
   "mcpName": "ai.memcell/memcell",
-  "description": "Living memory for AI coding agents. Your agents recall what this project established \u2014 and what shipped in your dependencies after the model's training cutoff \u2014 before they act, then report outcomes so confidence is earned rather than asserted. One command wires Claude Code, Cursor, Codex, Gemini CLI and more, over hooks and MCP.",
+  "description": "Living memory for AI coding agents. Your agents recall what this project established — and what shipped in your dependencies after the model's training cutoff — before they act, then report outcomes so confidence is earned rather than asserted. One command wires Claude Code, Cursor, Codex, Gemini CLI and more, over hooks and MCP.",
   "keywords": [
     "memcell",
     "agent-memory",
