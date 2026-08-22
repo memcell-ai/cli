@@ -1,0 +1,15 @@
+{
+  "name": "memcell",
+  "owner": {
+    "name": "memcell",
+    "url": "https://github.com/memcell-ai"
+  },
+  "plugins": [
+    {
+      "name": "memcell",
+      "source": "./plugins/memcell",
+      "description": "Living memory for coding agents: this project's decisions and dead ends, braided with continuously-updated memories of the libraries you use, recalled before acting and sharpened by reported outcomes."
+    }
+  ],
+  "description": "Living memory for coding agents \u2014 the memcell plugin: MCP tools plus a skill teaching recall before acting, remember, ingest, and report so confidence is earned."
+}

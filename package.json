@@ -1,0 +1,80 @@
+{
+  "name": "memcell",
+  "version": "0.1.12",
+  "mcpName": "ai.memcell/memcell",
+  "description": "Living memory for AI coding agents. Your agents recall what this project established \u2014 and what shipped in your dependencies after the model's training cutoff \u2014 before they act, then report outcomes so confidence is earned rather than asserted. One command wires Claude Code, Cursor, Codex, Gemini CLI and more, over hooks and MCP.",
+  "keywords": [
+    "memcell",
+    "agent-memory",
+    "ai-memory",
+    "persistent-memory",
+    "memory",
+    "mcp",
+    "mcp-server",
+    "claude-code",
+    "claude",
+    "cursor",
+    "copilot",
+    "gemini-cli",
+    "codex",
+    "hooks",
+    "ai-agents",
+    "llm",
+    "context"
+  ],
+  "homepage": "https://memcell.ai",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "memcell": "dist/bin.js",
+    "mem": "dist/bin.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "format": "prettier --write \"{src,test}/**/*.ts\" \"*.{json,md}\" \"plugins/**/*.{json,md}\" \".claude-plugin/*.json\" && pnpm run sync:skill",
+    "format:check": "prettier --check \"{src,test}/**/*.ts\" \"*.{json,md}\" \"plugins/**/*.{json,md}\" \".claude-plugin/*.json\"",
+    "sync:skill": "node scripts/sync-skill.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8",
+    "prettier": "^3.4.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "smol-toml": "^1.7.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/memcell-ai/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/memcell-ai/cli/issues"
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": false,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2,
+    "arrowParens": "always"
+  },
+  "packageManager": "pnpm@10.18.0"
+}

@@ -1,0 +1,77 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: npm that can speak OIDC
+        run: npm install -g 'npm@^11.5.1'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: tarball carries what the bins point at
+        run: |
+          set -euo pipefail
+          test -f dist/bin.js
+          test -f dist/index.js
+          npm pack --dry-run --json > /tmp/pack.json
+          grep -q '"dist/bin.js"' /tmp/pack.json
+      - name: publish
+        run: npm publish
+      - name: the attestation is on the registry
+        # npm attests only publishes from a PUBLIC repository, so ask what is
+        # possible before requiring it — a run that says nothing about
+        # provenance is how a release ships without any.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ "$(gh api "repos/${{ github.repository }}" --jq .private)" = "true" ]; then
+            echo "memcell@$version has no provenance: the repository is private"
+            exit 0
+          fi
+          for i in $(seq 1 12); do
+            if curl -fsS "https://registry.npmjs.org/memcell" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const v=JSON.parse(d).versions['$version'];process.exit(v&&v.dist&&v.dist.attestations?0:1)})"; then
+              echo "memcell@$version is attested"; exit 0
+            fi
+            sleep 5
+          done
+          echo "memcell@$version has no provenance attestation" >&2
+          exit 1

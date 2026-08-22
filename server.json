@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.memcell/memcell",
+  "title": "MemCell",
+  "description": "Persistent memory for AI coding agents. Recall ranked, outcome-earned statements before acting; report what happened so confidence moves. Public commons readable without an account.",
+  "repository": {
+    "url": "https://github.com/memcell-ai/cli",
+    "source": "github"
+  },
+  "version": "0.1.12",
+  "websiteUrl": "https://memcell.ai",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "memcell",
+      "version": "0.1.12",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "npx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "description": "the stdio face of the paired instance's /mcp door"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://memcell.ai/mcp"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://memcell.ai/mcp/public/{memory}",
+      "variables": {
+        "memory": {
+          "description": "a public memory's slug from https://memcell.ai/commons \u2014 readable without an account",
+          "isRequired": true
+        }
+      }
+    }
+  ]
+}

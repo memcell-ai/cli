@@ -1,0 +1,79 @@
+import { dirname } from "node:path";
+
+import { adapterFor, removeHooks } from "../adapters/index.js";
+import { agentKeyForProject, forgetAgentKey } from "../keyring.js";
+import { runMoment } from "../loop/hook.js";
+import { isMoment, MOMENTS } from "../loop/moments.js";
+import { log } from "../loop/session.js";
+import { findProject, removeProject } from "../project.js";
+import { badge, cmd, good, label, list, place, row, say, value } from "../ui.js";
+
+// `memcell hook <moment> <program> --agent <id>` — what an installed hook runs.
+//
+// The program is which agent's config this is, and decides the output
+// dialect. `--agent` is the wired agent's id — carried for attribution and
+// later use, logged so a firing is traceable to it.
+//
+// Machine-facing: stdout belongs to the agent's parser, and at least one
+// agent treats any stray line as breaking the whole output. So nothing here
+// speaks the CLI's voice; the only thing ever written is the agent's own
+// dialect, or nothing at all.
+
+export async function hook(moment: string, program: string): Promise<number> {
+  // A wrong invocation still exits 0. This runs inside somebody's session,
+  // and failing closed over a typo in a config file would break their agent
+  // to report our mistake. It is written down, though: silence made a typo'd
+  // moment look exactly like a hook that was never installed.
+  if (!isMoment(moment)) {
+    await log(`${moment} ${program} · not a moment · one of ${MOMENTS.join(", ")}`);
+    return 0;
+  }
+
+  const result = await runMoment(moment, program);
+  // The adapter owns the dialect. An agent this build does not know gets
+  // silence, never a guess — a wrong dialect is worse than a dropped
+  // injection.
+  const spoken = adapterFor(program)?.speak(moment, result.context ?? null, result.heard) ?? null;
+  if (spoken) process.stdout.write(spoken);
+  return 0;
+}
+
+// `memcell hook remove` — the inverse of what `connect` wired here, scoped to
+// this directory. Unlike the runner above this one talks to a person, so it
+// speaks the CLI's voice.
+//
+// It takes memcell's hooks out of every agent config in this project and drops
+// the local `.memcell` pointer and this machine's copy of the key. It does NOT
+// reach the server: the key was minted through a pairing that never signed
+// this machine in, so there is usually no session to revoke with — and a
+// surviving key is said out loud, with the one command that kills it, rather
+// than left silent.
+export async function hookRemove(): Promise<number> {
+  const found = await findProject();
+  if (!found) {
+    say(
+      row(0, [badge("memcell"), place(process.cwd())]),
+      row(1, [label("nothing wired here")], [label("this folder is not connected")]),
+    );
+    return 0;
+  }
+
+  const { project, at } = found;
+  const here = dirname(at);
+  const removed = await removeHooks(here);
+  // Identity lives in the keyring now — find it by the directory before the
+  // pointer to it goes.
+  const held = await agentKeyForProject(project.instance, here);
+  if (held) await forgetAgentKey(held.instance, held.keyId);
+  await removeProject(at);
+
+  say(
+    row(0, [badge("memcell"), value(project.space)]),
+    row(1, [good("disconnected")], [place(here)]),
+    removed.length > 0
+      ? row(1, [good("hooks removed")], [list(removed)])
+      : row(2, [label("no hook files here")]),
+    held ? row(2, [label("key still lives")], [cmd(`memcell agents revoke ${held.keyId}`)]) : null,
+  );
+  return 0;
+}
