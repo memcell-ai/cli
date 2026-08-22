@@ -7,13 +7,13 @@
     "url": "https://github.com/memcell-ai/cli",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "websiteUrl": "https://memcell.ai",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "memcell",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },
@@ -37,7 +37,7 @@
       "url": "https://memcell.ai/mcp/public/{memory}",
       "variables": {
         "memory": {
-          "description": "a public memory's slug from https://memcell.ai/commons \u2014 readable without an account",
+          "description": "a public memory's slug from https://memcell.ai/commons — readable without an account",
           "isRequired": true
         }
       }
