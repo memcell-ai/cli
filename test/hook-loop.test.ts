@@ -132,6 +132,51 @@ describe("recall", () => {
     expect(out.context).toContain("0.80");
   });
 
+  it("leads with what this session has already gone against", async () => {
+    // The correction only works if the agent reads it. Buried fifteenth in a
+    // list it is one more fact; the session has already demonstrated that is
+    // not enough, which is the whole reason it is being said twice.
+    reset();
+    answer = () => ({
+      momentId: "m2",
+      results: [
+        { statementId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" },
+        {
+          statementId: "s2",
+          text: "Never call the gateway from a migration.",
+          confidence: 0.7,
+          layer: "team",
+          diverged: true,
+        },
+      ],
+    });
+    fed({ session_id: "r9", cwd: project, prompt: "add the migration" });
+
+    const out = await runMoment("prompt-submit", "claude");
+    const context = out.context ?? "";
+    expect(context).toContain("already gone against these this session");
+    // It leads: the warning comes before the ordinary recall heading.
+    expect(context.indexOf("Never call the gateway from a migration.")).toBeLessThan(
+      context.indexOf("From this project's memory"),
+    );
+    // And it is not repeated below as an ordinary statement.
+    expect(context.split("Never call the gateway from a migration.")).toHaveLength(2);
+    // Everything else still arrives, in its own section.
+    expect(context).toContain("Amounts are cents.");
+  });
+
+  it("says nothing about divergence when there is none", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m3",
+      results: [{ statementId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" }],
+    });
+    fed({ session_id: "r10", cwd: project, prompt: "how do we handle money?" });
+
+    const out = await runMoment("prompt-submit", "claude");
+    expect(out.context).not.toContain("gone against");
+  });
+
   it("asks about the work itself at session start, where there is no prompt yet", async () => {
     reset();
     answer = () => ({ momentId: "m2", results: [] });

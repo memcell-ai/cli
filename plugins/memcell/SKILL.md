@@ -68,6 +68,10 @@ report on it.
   contradicts what you remember about a library, it is the later source.
 - **`pinned`** — a standing rule, present whatever you asked. It did not
   answer your question; do not read its presence as relevance.
+- **`diverged`** — you already went against this one earlier in this
+  session. It is served again for that reason. Re-read it before continuing,
+  and if you believe it no longer applies, say so plainly instead of working
+  around it a second time.
 
 Nothing served means nothing is established here yet. That is an answer:
 proceed, and file what you learn.
@@ -100,8 +104,11 @@ This is the only thing that moves confidence, and it is what separates this
 from a notes file. A recall nobody reports on teaches the record nothing,
 and stale confidence is worse than none.
 
-Report `failed` when your work contradicts a served statement — and say so
-in the conversation too, rather than silently overriding it.
+Report `failed` when you followed a statement and the work went wrong, or
+when it turned out untrue. Going against a statement that still stands is a
+different thing: it is recorded on its own, moves no confidence, and brings
+the statement back on your next recall. Say so in the conversation either
+way, rather than silently overriding it.
 
 ## ingest — when a document carries decisions
 

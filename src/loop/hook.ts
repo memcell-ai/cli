@@ -153,15 +153,32 @@ interface Recalled {
   confidence: number;
   layer: string;
   contested?: boolean;
+  /** Served because this session already went against it. */
+  diverged?: boolean;
 }
 
 /** Recalled statements, written for a model's turn: each carries what it is
  *  worth and where it sits, because a statement stripped of its confidence
  *  invites treating a 0.4 guess as a 0.9 fact. */
 function asContext(results: Recalled[], space: string): string {
+  // What this session has already gone against leads, and says so. Buried in
+  // a list of fifteen it reads as one more fact; the session has already
+  // demonstrated that is not enough.
+  const against = results.filter((r) => r.diverged);
+  const rest = results.filter((r) => !r.diverged);
   return [
+    ...(against.length > 0
+      ? [
+          "You have already gone against these this session — re-read them before continuing:",
+          ...against.map((r) => `- ${r.text}  [${r.confidence.toFixed(2)} · ${r.layer}]`),
+          "",
+          "If you believe one no longer applies, say so plainly rather than",
+          "working around it again.",
+          "",
+        ]
+      : []),
     `From this project's memory (${space}) — already learned here:`,
-    ...results.map(
+    ...rest.map(
       (r) =>
         `- ${r.text}  [${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
     ),
@@ -297,6 +314,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         created: { statementId: string }[];
         reinforced: { statementId: string }[];
         attributed: { statementId: string; outcome: "worked" | "failed" }[];
+        diverged?: { statementId: string; text: string }[];
         superseded?: { statementId: string; byStatementId: string }[];
         note?: string;
       }>(
@@ -357,6 +375,13 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
             await log(`${tag} · report · ${worked} worked${failed ? `, ${failed} failed` : ""}`);
           } else {
             await log(`${tag} · report · nothing the session bore on`);
+          }
+          // Divergence is not an outcome and is counted apart from them: it
+          // says what this turn did, not whether anything is true. The next
+          // recall re-asserts what is named here.
+          const against = kept.diverged ?? [];
+          if (against.length > 0) {
+            await log(`${tag} · report · went against ${against.length}, re-asserting next turn`);
           }
         } else {
           await log(`${tag} · report · not asked — the hand-over did not land`);
