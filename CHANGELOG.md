@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/memcell-ai/cli/compare/memcell-v0.2.0...memcell-v0.3.0) (2026-08-22)
+
+
+### Features
+
+* **loop:** lead recall with what this session went against ([#6](https://github.com/memcell-ai/cli/issues/6)) ([237caad](https://github.com/memcell-ai/cli/commit/237caadc41630e4b1b4f54a1c9509989d4707e6e))
+
 ## [0.2.0](https://github.com/memcell-ai/cli/compare/memcell-v0.1.12...memcell-v0.2.0) (2026-08-22)
 
 
