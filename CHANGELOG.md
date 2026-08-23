@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/memcell-ai/cli/compare/memcell-v0.3.1...memcell-v0.3.2) (2026-08-23)
+
+
+### Bug Fixes
+
+* **loop:** the turn-end hook hands over instead of waiting ([#10](https://github.com/memcell-ai/cli/issues/10)) ([5fa5ca9](https://github.com/memcell-ai/cli/commit/5fa5ca982c6692e4d9d015d8cdfd0df36c27a203))
+
 ## [0.3.1](https://github.com/memcell-ai/cli/compare/memcell-v0.3.0...memcell-v0.3.1) (2026-08-23)
 
 
