@@ -32,6 +32,13 @@ import { adapterFor } from "../adapters/index.js";
  *  open-ended work, because none runs under a watched deadline any more. */
 const WATCHED_MS = 8_000;
 const UNWATCHED_MS = 20_000;
+/** The hand-over's own budget. The instance takes a named turn and QUEUES
+ *  it, so what this covers is shipping the material and getting the claim
+ *  written — not the reading, which is several model passes and was never
+ *  something a hook could wait out. Roomier than the rest because a turn's
+ *  material can be large and the link can be slow; nothing here waits on a
+ *  model. */
+const HANDOVER_MS = 60_000;
 
 interface Incoming {
   prompt?: string;
@@ -85,7 +92,8 @@ async function standing(cwd?: string): Promise<Standing> {
  *  nothing landed, and there "the instance refused" and "nothing durable"
  *  are different facts. Conflating them made a misconfigured instance read
  *  as an honest zero for a whole working day. */
-type Answered<T> = { at: "answered"; body: T } | { at: "refused"; status: number } | null;
+type Answered<T> =
+  { at: "answered"; status: number; body: T } | { at: "refused"; status: number } | null;
 
 /** One call to a loop door. Null when the instance was never reached. */
 async function door<T>(
@@ -139,7 +147,7 @@ async function door<T>(
         signal: stop.signal,
       });
       if (!response.ok) return { at: "refused", status: response.status };
-      return { at: "answered", body: (await response.json()) as T };
+      return { at: "answered", status: response.status, body: (await response.json()) as T };
     } catch {
       if (attempt === 2) return null;
     } finally {
@@ -343,13 +351,19 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
           // as prose. Absent when the transcript named none.
           ...(material.touched.length > 0 ? { touched: material.touched } : {}),
         },
-        UNWATCHED_MS,
+        HANDOVER_MS,
         session,
         agentId,
         turn,
       );
       const kept = handed?.at === "answered" ? handed.body : null;
-      if (kept) {
+      // 202 means the instance TOOK the turn, durably, and has not read it
+      // yet. Counting that as "0 kept" would put a lie in the log on every
+      // ordinary turn, so it is said as what it is.
+      const queued = handed?.at === "answered" && handed.status === 202;
+      if (kept && queued) {
+        await log(`${tag} · remember · handed over${kept.note ? ` · ${kept.note}` : ""}`);
+      } else if (kept) {
         const created = kept.created.length;
         const reinforced = kept.reinforced;
         const superseded = kept.superseded?.length ?? 0;
@@ -386,7 +400,10 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
       // call it worked — is gone: it was a judgment, and it never once said
       // failed.
       if (legs.includes("report")) {
-        if (kept) {
+        if (queued) {
+          // The judge runs where the reading runs. Nothing to say yet, and
+          // "nothing the session bore on" would be a verdict nobody reached.
+        } else if (kept) {
           const attributed = kept.attributed ?? [];
           if (attributed.length > 0) {
             const worked = attributed.filter((a) => a.outcome === "worked").length;
