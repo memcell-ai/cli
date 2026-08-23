@@ -25,13 +25,25 @@ interface CallOptions {
    *  space-scoped verb run there needs no login at all. */
   bearer?: string;
   signal?: AbortSignal;
+  /** Milliseconds before the call gives up. A caller with its own deadline
+   *  passes `signal` instead. */
+  timeoutMs?: number;
 }
+
+/** How long a person waits before an unanswered instance is a failure
+ *  rather than a wait. The hooks carry their own, tighter, budgets; this is
+ *  for the commands somebody typed. */
+const CALL_TIMEOUT_MS = 30_000;
 
 export async function call<T>(
   instance: string,
   path: string,
-  { method = "GET", body, anonymous, bearer, signal }: CallOptions = {},
+  { method = "GET", body, anonymous, bearer, signal, timeoutMs }: CallOptions = {},
 ): Promise<T> {
+  // An instance that accepts the connection and never answers would
+  // otherwise hang the terminal forever, with nothing printed. Every call
+  // gets a deadline unless its caller brought one.
+  const deadline = signal ? undefined : AbortSignal.timeout(timeoutMs ?? CALL_TIMEOUT_MS);
   const headers: Record<string, string> = {
     "content-type": "application/json",
     // Same-origin rules do not apply to a terminal, but the server checks
@@ -53,10 +65,18 @@ export async function call<T>(
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
+      signal: signal ?? deadline,
     });
   } catch (cause) {
-    throw new MemcellError(`Could not reach ${instance}.`, 0, cause);
+    // A timeout and a refused connection are different facts, and the
+    // difference is what somebody debugs on: one means the instance is not
+    // there, the other that it is there and not answering.
+    const timedOut = cause instanceof Error && cause.name === "TimeoutError";
+    throw new MemcellError(
+      timedOut ? `${instance} did not answer in time.` : `Could not reach ${instance}.`,
+      0,
+      cause,
+    );
   }
 
   // The body may not be JSON — a wrong instance answers with an HTML page, a

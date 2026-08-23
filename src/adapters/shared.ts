@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { isOurs, type Moment } from "../loop/moments.js";
@@ -67,17 +67,50 @@ export const exists = (path: string): Promise<boolean> =>
     () => false,
   );
 
+/** A config file that exists but cannot be parsed. Its own error, because
+ *  the two failures have opposite correct answers. */
+export class UnreadableConfig extends Error {
+  constructor(readonly file: string) {
+    super(
+      `${file} is not valid JSON. memcell will not rewrite a file it cannot read — fix or move it, then run this again.`,
+    );
+    this.name = "UnreadableConfig";
+  }
+}
+
+/**
+ * The document, or an empty one when there is NO file.
+ *
+ * Absent and unreadable are different facts and used to share an answer:
+ * any failure returned `{}`, and the caller then merged its own entry into
+ * that empty object and wrote it back — over a config the user wrote, with
+ * a trailing comma or a comment in it. The file was theirs and it was gone.
+ * Missing is an empty document; malformed is a refusal.
+ */
 export async function readJson<T>(file: string): Promise<T> {
+  let text: string;
   try {
-    return JSON.parse(await readFile(file, "utf8")) as T;
+    text = await readFile(file, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {} as T;
+    throw err;
+  }
+  // An empty file is a new one somebody touched, not a broken one.
+  if (text.trim() === "") return {} as T;
+  try {
+    return JSON.parse(text) as T;
   } catch {
-    return {} as T;
+    throw new UnreadableConfig(file);
   }
 }
 
 export async function writeJson(file: string, value: unknown): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+  // Written beside and moved into place: a crash midway through leaves the
+  // previous file whole rather than half a document.
+  const at = `${file}.memcell-tmp`;
+  await writeFile(at, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(at, file);
 }
 
 /** Write the document back — or remove the file entirely when taking our
@@ -155,9 +188,22 @@ export async function staleText(files: string[]): Promise<boolean> {
  */
 export async function memcellOnPath(): Promise<boolean> {
   const { spawn } = await import("node:child_process");
+  const { THROWAWAY } = await import("../loop/moments.js");
   return new Promise((done) => {
-    const p = spawn("sh", ["-lc", "command -v memcell"], { stdio: "ignore" });
-    p.on("close", (code) => done(code === 0));
+    // WHERE it resolves is the whole question. Under `npx`, `memcell`
+    // resolves inside the runner's own cache, so an exit code alone says
+    // "found" for a path that will be pruned — and the hooks this command
+    // just wrote name `memcell`, so they die with it. That is the silent
+    // failure this check exists to prevent, and it was reporting success
+    // in exactly the case it was written for.
+    const p = spawn("sh", ["-lc", "command -v memcell"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let where = "";
+    p.stdout?.on("data", (chunk: Buffer) => {
+      where += chunk.toString();
+    });
+    p.on("close", (code) => done(code === 0 && where.trim() !== "" && !THROWAWAY.test(where)));
     p.on("error", () => done(false));
   });
 }

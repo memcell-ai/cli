@@ -59,6 +59,7 @@ export const COMMANDS: Command[] = [
         pair: typeof flags.pair === "string" ? flags.pair : undefined,
         space: typeof flags.space === "string" ? flags.space : undefined,
         noBrowser: flags["no-browser"] === true,
+        instanceFlag: typeof flags.instance === "string" ? flags.instance : undefined,
       }),
   },
   {

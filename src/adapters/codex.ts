@@ -199,11 +199,37 @@ async function locateRollout(payload: Incoming): Promise<string | null> {
   return cwdMatch;
 }
 
-/** The metadata on a rollout's first line, read without slurping the file
- *  twice for the common newest-first hit. */
+/** How much of a rollout to read to find its header. The first line is a
+ *  session_meta record; anything past this is not one. */
+const HEADER_BYTES = 64 * 1024;
+
+/**
+ * The metadata on a rollout's first line.
+ *
+ * A PREFIX, not the file. Locating a session walks every rollout on the
+ * machine asking each "are you the one", and this used to answer by reading
+ * each one whole — hundreds of megabytes of other sessions' transcripts
+ * pulled through memory at turn-end, to look at one line of each.
+ */
 async function metaLine(path: string): Promise<{ session_id?: string; cwd?: string } | null> {
-  const whole = await readFile(path, "utf8").catch(() => "");
-  const line = whole.slice(0, whole.indexOf("\n") + 1 || whole.length);
+  const { open } = await import("node:fs/promises");
+  let head = "";
+  try {
+    const fd = await open(path, "r");
+    try {
+      const { buffer, bytesRead } = await fd.read(Buffer.alloc(HEADER_BYTES), 0, HEADER_BYTES, 0);
+      head = buffer.subarray(0, bytesRead).toString("utf8");
+    } finally {
+      await fd.close();
+    }
+  } catch {
+    return null;
+  }
+  const breakAt = head.indexOf("\n");
+  // No newline inside the prefix means the first record is larger than any
+  // header could be — not a rollout header, and not worth reading further.
+  if (breakAt === -1 && head.length === HEADER_BYTES) return null;
+  const line = breakAt === -1 ? head : head.slice(0, breakAt);
   try {
     const entry = JSON.parse(line) as { payload?: { session_id?: string; cwd?: string } };
     return entry.payload ?? null;

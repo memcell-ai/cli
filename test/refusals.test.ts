@@ -139,3 +139,53 @@ describe("a machine that was reset", () => {
     expect(result.context).toContain("memcell connect");
   });
 });
+
+describe("the browser target a device grant hands back", () => {
+  it("is refused unless it belongs to the instance the person named", async () => {
+    // The URL arrives from the instance and, on Windows, reaches cmd. A
+    // hostile or compromised host could otherwise choose what a person's
+    // shell opens — or runs.
+    const { openBrowserTarget } = await import("../src/grant.js");
+    const ok = "https://memcell.ai/device?code=ABC";
+    expect(openBrowserTarget(ok, "https://memcell.ai")).toBe(ok);
+
+    // Somewhere else entirely.
+    expect(openBrowserTarget("https://evil.test/steal", "https://memcell.ai")).toBeNull();
+    // Not a web page at all.
+    expect(openBrowserTarget("file:///etc/passwd", "https://memcell.ai")).toBeNull();
+    expect(
+      openBrowserTarget('https://memcell.ai/x" & calc.exe & "', "https://memcell.ai"),
+    ).not.toContain('"');
+    // Not a URL.
+    expect(openBrowserTarget("not a url", "https://memcell.ai")).toBeNull();
+  });
+});
+
+describe("the hook boundary", () => {
+  it("never lets anything cross — a hook that dies takes the user's turn with it", async () => {
+    // This process is the user's coding agent calling out mid-turn. A throw
+    // exits non-zero with a Node stack trace in their terminal, and some
+    // harnesses read that as the turn failing: memory breaking the work it
+    // exists to help.
+    const { hook } = await import("../src/commands/hook.js");
+    const loop = await import("../src/loop/hook.js");
+    const broke = vi.spyOn(loop, "runMoment").mockRejectedValue(new Error("the instance exploded"));
+    try {
+      await expect(hook("turn-end", "claude")).resolves.toBe(0);
+    } finally {
+      broke.mockRestore();
+    }
+  });
+
+  it("survives a home directory it cannot write", async () => {
+    // A full disk, a read-only home, a sandbox. The session note is how the
+    // next firing knows where it got to; losing one costs a re-read, which
+    // is harmless because the turn carries its own name.
+    const { keepNote, dropNote } = await import("../src/loop/session.js");
+    const { writeFile } = await import("node:fs/promises");
+    const stopped = vi.spyOn({ writeFile }, "writeFile");
+    await expect(keepNote("s1", { read: 0 } as never)).resolves.toBeUndefined();
+    await expect(dropNote("s1")).resolves.toBeUndefined();
+    stopped.mockRestore();
+  });
+});

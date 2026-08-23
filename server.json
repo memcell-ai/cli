@@ -30,7 +30,15 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://memcell.ai/mcp"
+      "url": "https://memcell.ai/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <agent key>. Get one with `npx memcell connect` in a project, or from https://memcell.ai/agents",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
     },
     {
       "type": "streamable-http",

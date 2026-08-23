@@ -34,14 +34,28 @@ export async function noteFor(id: string): Promise<Note> {
   }
 }
 
+// Best-effort, both of them, like `log` below. A session note is how the
+// next firing knows where it got to — losing one costs a re-read, and a
+// re-read is harmless because the turn carries its own name. Throwing here
+// would take the hook down with it, and a hook that dies takes the user's
+// agent turn with it. A full disk is not a reason to break somebody's
+// editor.
 export async function keepNote(id: string, note: Note): Promise<void> {
-  await mkdir(dir(), { recursive: true });
-  await writeFile(file(id), `${JSON.stringify(note)}\n`, { mode: 0o600 });
+  try {
+    await mkdir(dir(), { recursive: true });
+    await writeFile(file(id), `${JSON.stringify(note)}\n`, { mode: 0o600 });
+  } catch {
+    // Nothing to say to anyone: the log lives on the same disk.
+  }
 }
 
 export async function dropNote(id: string): Promise<void> {
-  const { rm } = await import("node:fs/promises");
-  await rm(file(id), { force: true });
+  try {
+    const { rm } = await import("node:fs/promises");
+    await rm(file(id), { force: true });
+  } catch {
+    // As above.
+  }
 }
 
 /**
