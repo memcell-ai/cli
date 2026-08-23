@@ -134,8 +134,7 @@ export async function deviceGrant(
   const paceSeconds = Number(grant.interval);
   const deadline =
     Date.now() + (Number.isFinite(seconds) ? Math.min(Math.max(seconds, 60), 1800) : 900) * 1000;
-  let interval =
-    (Number.isFinite(paceSeconds) ? Math.min(Math.max(paceSeconds, 1), 30) : 5) * 1000;
+  let interval = (Number.isFinite(paceSeconds) ? Math.min(Math.max(paceSeconds, 1), 30) : 5) * 1000;
 
   for (;;) {
     await wait(interval);
