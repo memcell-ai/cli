@@ -26,8 +26,35 @@ interface Token {
   token_type: string;
 }
 
-/** Open the approval page if this machine can; say so plainly if it cannot. */
-function openBrowser(url: string): boolean {
+/**
+ * Open the approval page if this machine can; say so plainly if it cannot.
+ *
+ * The URL comes from the INSTANCE, over the wire, and on Windows it is
+ * handed to `cmd`. A `--instance` pointed at a hostile or compromised host
+ * could therefore choose what a person's shell runs. So it is parsed before
+ * it is spawned, must be http(s), and must belong to the instance the
+ * person named — a device grant that sends you somewhere else is not a
+ * device grant.
+ */
+export function openBrowserTarget(url: string, instance: string): string | null {
+  let target: URL;
+  let home: URL;
+  try {
+    target = new URL(url);
+    home = new URL(instance);
+  } catch {
+    return null;
+  }
+  if (target.protocol !== "https:" && target.protocol !== "http:") return null;
+  if (target.origin !== home.origin) return null;
+  // Serialised, not the raw string: URL encoding escapes quotes and the
+  // characters a command line would otherwise treat as its own.
+  return target.href;
+}
+
+function openBrowser(url: string, instance: string): boolean {
+  const safe = openBrowserTarget(url, instance);
+  if (!safe) return false;
   try {
     // Windows: `start` is cmd's own, its first QUOTED argument is a window
     // title, and an args array with `shell: true` is the exact shape Node
@@ -35,12 +62,12 @@ function openBrowser(url: string): boolean {
     // url quoted verbatim — no shell, nothing for cmd to split on.
     const child =
       process.platform === "win32"
-        ? spawn("cmd", ["/c", "start", '""', `"${url}"`], {
+        ? spawn("cmd", ["/c", "start", '""', `"${safe}"`], {
             stdio: "ignore",
             detached: true,
             windowsVerbatimArguments: true,
           })
-        : spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], {
+        : spawn(process.platform === "darwin" ? "open" : "xdg-open", [safe], {
             stdio: "ignore",
             detached: true,
           });
@@ -82,7 +109,7 @@ export async function deviceGrant(
   // have a window thrown at them.
   const noBrowser =
     options.noBrowser || Boolean(process.env.MEMCELL_NO_BROWSER) || Boolean(process.env.CI);
-  const opened = noBrowser ? false : openBrowser(grant.verification_uri_complete);
+  const opened = noBrowser ? false : openBrowser(grant.verification_uri_complete, instance);
 
   say(
     row(0, [badge("memcell"), place(instance)], [variant("connecting")]),
@@ -99,8 +126,15 @@ export async function deviceGrant(
     opened && row(2, [label("finish in the window that opened")]),
   );
 
-  const deadline = Date.now() + grant.expires_in * 1000;
-  let interval = grant.interval * 1000;
+  // Clamped, because these two numbers come from the instance and drive a
+  // loop. A malformed or hostile body — `expires_in: null`, `interval: 0` —
+  // otherwise turns approval into an unbounded hot loop against the token
+  // endpoint, from the person's own machine.
+  const seconds = Number(grant.expires_in);
+  const paceSeconds = Number(grant.interval);
+  const deadline =
+    Date.now() + (Number.isFinite(seconds) ? Math.min(Math.max(seconds, 60), 1800) : 900) * 1000;
+  let interval = (Number.isFinite(paceSeconds) ? Math.min(Math.max(paceSeconds, 1), 30) : 5) * 1000;
 
   for (;;) {
     await wait(interval);

@@ -29,7 +29,20 @@ export async function hook(moment: string, program: string): Promise<number> {
     return 0;
   }
 
-  const result = await runMoment(moment, program);
+  // THE HOOK BOUNDARY. Nothing may cross it.
+  //
+  // This process is the user's coding agent calling out mid-turn. Anything
+  // thrown from here exits non-zero with a Node stack trace in their
+  // terminal, and some harnesses treat that as the turn failing — memory
+  // breaking the work it exists to help. Fail open means fail open: the
+  // trouble is written to the log and the moment produces nothing.
+  let result: Awaited<ReturnType<typeof runMoment>>;
+  try {
+    result = await runMoment(moment, program);
+  } catch (trouble) {
+    await log(`${moment} ${program} · fell over · ${(trouble as Error)?.message ?? trouble}`);
+    return 0;
+  }
   // The adapter owns the dialect. An agent this build does not know gets
   // silence, never a guess — a wrong dialect is worse than a dropped
   // injection.

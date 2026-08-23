@@ -63,3 +63,31 @@ describe("the client, when the answer is not JSON", () => {
     expect(body.pair).toBe("ABC123");
   });
 });
+
+describe("an instance that accepts the connection and never answers", () => {
+  it("gives up rather than hanging the terminal, and says which it was", async () => {
+    // A command somebody typed must end. Without a deadline the call waits
+    // forever with nothing printed — verified against a socket that accepts
+    // and never replies.
+    vi.stubGlobal("fetch", (_url: string, init?: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "TimeoutError";
+          reject(err);
+        });
+      });
+    });
+
+    const { call, MemcellError } = await import("../src/client.js");
+    const failed = await call("http://nowhere.test", "/api/v1/recall", {
+      method: "POST",
+      bearer: "mc_k",
+      timeoutMs: 20,
+    }).catch((e) => e);
+
+    expect(failed).toBeInstanceOf(MemcellError);
+    // A timeout and a refusal are different facts to debug on.
+    expect((failed as Error).message).toContain("did not answer in time");
+  });
+});

@@ -102,9 +102,18 @@ async function door<T>(
   // instance spoke — and retrying it would just ask twice. A hand-over
   // names its turn, so a delivery whose response was lost lands once: the
   // second arrival finds the first's moment.
+  //
+  // The deadline is the TOTAL budget, not a per-attempt one. It used to be
+  // per attempt, so an unreachable instance froze the cursor for twice the
+  // number the caller chose — 16 seconds at prompt-submit, on every prompt,
+  // for a person who has no idea memcell is why their agent has stopped.
+  // What was promised is what is spent.
+  const startedAt = Date.now();
   for (const attempt of [1, 2]) {
+    const left = deadlineMs - (Date.now() - startedAt);
+    if (left <= 0) return null;
     const stop = new AbortController();
-    const timer = setTimeout(() => stop.abort(), deadlineMs);
+    const timer = setTimeout(() => stop.abort(), left);
     try {
       const response = await fetch(`${instance}/api/v1/${path}`, {
         method: "POST",
@@ -298,6 +307,11 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
       read: note.read,
     };
     const advanced = material.read !== note.read;
+    // Where this turn started, kept so a delivery that did NOT land can be
+    // read again. Advancing past material the instance never took is how a
+    // turn's work disappears silently, which is the same shape as the offset
+    // bug that wedged capture for two days — the other direction.
+    const startedAt = note.read;
     note.read = material.read;
 
     // Material without an advance is never handed over. The turn's name is
@@ -351,10 +365,15 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         // lost its response may well have landed — the instance arms a
         // safety net before distilling, and the turn is named, so the next
         // delivery of it is a no-op either way. Say which case this is.
+        // Nothing landed, so the offset goes back: the next firing re-reads
+        // this material rather than skipping it. Safe to re-deliver, because
+        // the turn's name is derived from this very offset — an instance
+        // that DID land it sees the same name and stands the repeat down.
+        note.read = startedAt;
         await log(
           handed?.at === "refused"
-            ? `${tag} · remember · ${doorTrouble(handed)} — this turn was not captured`
-            : `${tag} · remember · ${doorTrouble(handed)} — the instance may still land it`,
+            ? `${tag} · remember · ${doorTrouble(handed)} — not captured, holding this turn for the next firing`
+            : `${tag} · remember · ${doorTrouble(handed)} — no answer, holding this turn for the next firing`,
         );
       }
 

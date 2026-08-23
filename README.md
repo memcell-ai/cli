@@ -11,7 +11,8 @@ recalled before your agents act, sharpened by the outcomes they report back.</p>
 > **Hooks make the loop deterministic. MCP rides beside them as reach.**
 
 ```sh
-npx memcell connect
+npm install -g memcell
+memcell connect
 ```
 
 Run it in a project you code in. It prints a code, one tap in your browser
@@ -19,6 +20,10 @@ approves it — no account needed, and a guest's memory carries over on
 sign-in. Wires **Claude Code, Cursor, Codex, Gemini CLI, Copilot CLI,
 OpenCode, Qwen, Grok, Droid, Kiro, Devin** and more: hooks, the
 `memcell mcp` bridge, an agent key for this directory, and `.memcell`.
+
+Installed rather than `npx`ed on purpose: the hooks this writes name
+`memcell`, and a runner's cached copy is gone by the next session. `npx
+memcell connect` works and will say so if the command will not survive.
 
 ## Commands
 
@@ -61,7 +66,7 @@ Revoking a credential never forgets what the agents filed.
   entry is just that command: no secret in any config file.
 - **`.memcell`** — the instance and the space. Project truth, identical for
   every clone, safe to commit. Keys live in the machine keyring; a teammate
-  who clones runs one `npx memcell connect` of their own.
+  who clones runs one `memcell connect` of their own.
 
 ## Options
 
@@ -85,7 +90,7 @@ This repo is also a plugin marketplace:
 
 The plugin registers the MCP bridge and a skill teaching the four doors
 (recall, remember, ingest, report). Hooks still come from
-`npx memcell connect` — the plugin is reach, the hooks are the loop.
+`memcell connect` — the plugin is reach, the hooks are the loop.
 
 ## Links
 

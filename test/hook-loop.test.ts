@@ -450,7 +450,7 @@ describe("failing open", () => {
     const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
     const today = log.slice(log.indexOf("down-2") - 200);
     expect(today).toContain("answered 503");
-    expect(today).toContain("this turn was not captured");
+    expect(today).toContain("not captured, holding this turn for the next firing");
     expect(today).toContain("not asked");
     expect(today).not.toContain("0 served");
     expect(today).not.toContain("0 kept");

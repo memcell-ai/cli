@@ -82,3 +82,58 @@ describe("an older release's wiring is carried forward", () => {
     expect(await claude.stale!(dir)).toBe(false);
   });
 });
+
+describe("a config file memcell cannot read", () => {
+  it("is refused, never rewritten", async () => {
+    // The file belongs to the user. readJson used to answer any failure with
+    // {} — absent and malformed shared one answer — and install then merged
+    // its entry into that empty object and wrote it back, over a config with
+    // a comment or a trailing comma in it. Theirs, and gone.
+    const { mkdtempSync, writeFileSync, readFileSync, mkdirSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { claude } = await import("../src/adapters/claude.js");
+    const { UnreadableConfig } = await import("../src/adapters/shared.js");
+
+    const proj = mkdtempSync(join(tmpdir(), "memcell-badcfg-"));
+    mkdirSync(join(proj, ".claude"), { recursive: true });
+    const file = join(proj, ".claude", "settings.json");
+    const theirs = '{\n  // mine\n  "env": { "FOO": "bar" },\n}';
+    writeFileSync(file, theirs);
+
+    await expect(claude.install(proj)).rejects.toBeInstanceOf(UnreadableConfig);
+    expect(readFileSync(file, "utf8")).toBe(theirs);
+  });
+
+  it("an absent config is still an empty document, not a refusal", async () => {
+    const { mkdtempSync, existsSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { claude } = await import("../src/adapters/claude.js");
+
+    const proj = mkdtempSync(join(tmpdir(), "memcell-nocfg-"));
+    await claude.install(proj);
+    expect(existsSync(join(proj, ".claude", "settings.json"))).toBe(true);
+  });
+});
+
+describe("whether the wiring's command will still exist tomorrow", () => {
+  it("does not count a runner's throwaway copy as installed", async () => {
+    // The hooks name `memcell`. Under npx it resolves inside the runner's
+    // cache, which is pruned — so an exit code alone reported "installed"
+    // for a command that dies with the cache, and the hooks with it. The
+    // warning existed and never fired in the one case it was written for.
+    const { THROWAWAY } = await import("../src/loop/moments.js");
+    for (const cached of [
+      "/Users/x/.npm/_npx/1a2b3c/node_modules/.bin/memcell",
+      "/home/x/.cache/node/corepack/dlx-9f8/node_modules/.bin/memcell",
+      "/Users/x/Library/pnpm/.pnpm-store/v3/tmp/memcell",
+    ]) {
+      expect(THROWAWAY.test(cached), cached).toBe(true);
+    }
+    // A real installation is not a throwaway.
+    for (const real of ["/opt/homebrew/bin/memcell", "/usr/local/bin/memcell"]) {
+      expect(THROWAWAY.test(real), real).toBe(false);
+    }
+  });
+});

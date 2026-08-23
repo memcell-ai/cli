@@ -2,6 +2,7 @@ import { hostname } from "node:os";
 import { basename, dirname } from "node:path";
 
 import { memcellOnPath } from "../adapters/shared.js";
+import { UnreadableConfig } from "../adapters/shared.js";
 import { installSkill } from "../adapters/skill.js";
 import { adapterFor } from "../adapters/index.js";
 import { detected } from "../agents.js";
@@ -31,10 +32,24 @@ interface Exchanged {
 
 export async function connect(
   instance: string,
-  options: { pair?: string; space?: string; noBrowser?: boolean },
+  options: { pair?: string; space?: string; noBrowser?: boolean; instanceFlag?: string },
 ): Promise<number> {
   const pair = options.pair?.trim();
   const space = options.space?.trim();
+
+  // WHERE this is about to authenticate, said out loud when the directory
+  // chose it. `.memcell` is committed and outranks this machine's own
+  // config, so a cloned repository decides which host receives the device
+  // grant and mints the key. That is fine when it is expected and worth
+  // seeing when it is not — the host is named before anything is sent.
+  const { whereInstance } = await import("../instance.js");
+  const chose = await whereInstance(options.instanceFlag);
+  if (chose.from === "project") {
+    say(
+      row(0, [badge("memcell"), label("connecting to")], [place(chose.instance)]),
+      row(1, [label("chosen by this directory's .memcell")]),
+    );
+  }
 
   const here = basename(process.cwd());
   const present = [...(await detected())];
@@ -79,13 +94,24 @@ export async function connect(
   // The project file carries project truth only — safe to commit, identical
   // for every teammate. Identity (the agent, the key) is personal and goes to
   // the machine keyring, so a re-connect never rewrites a committed file.
+  // Pinned to the host that was ASKED, not the one named in the answer. A
+  // response that renames its own instance would otherwise redirect every
+  // later call — and the credential with it — to somewhere the person never
+  // typed.
+  if (exchanged.instance && new URL(exchanged.instance).origin !== new URL(instance).origin) {
+    say(
+      row(0, [badge("memcell"), place(instance)]),
+      row(1, [warn("refused")], [label(`that instance answered for ${exchanged.instance}`)]),
+    );
+    return 1;
+  }
   const at = await saveProject({
-    instance: exchanged.instance,
+    instance,
     space: exchanged.space.slug,
     spaceId: exchanged.space.id,
   });
   await saveAgentKey({
-    instance: exchanged.instance,
+    instance,
     keyId: exchanged.keyId,
     key: exchanged.key,
     project: process.cwd(),
@@ -95,11 +121,23 @@ export async function connect(
   // The hooks: the loop fires because the harness runs them. Installed for
   // whatever agents this machine actually uses.
   const wired: string[] = [];
+  const refused: string[] = [];
   for (const name of present) {
     const adapter = adapterFor(name);
     if (!adapter) continue;
-    await adapter.install(process.cwd());
-    wired.push(name);
+    try {
+      await adapter.install(process.cwd());
+      wired.push(name);
+    } catch (trouble) {
+      // One agent's config being unreadable is not a reason to abandon the
+      // others, and it is never a reason to rewrite it. Named here so the
+      // person knows which file to look at.
+      if (trouble instanceof UnreadableConfig) {
+        refused.push(name);
+        continue;
+      }
+      throw trouble;
+    }
   }
   // The wiring names `memcell` and nothing else, so it travels. That only
   // works if a hook's shell can find it — and a hook that cannot is a hook
@@ -123,6 +161,12 @@ export async function connect(
           [label("recall runs before your agent answers")],
         )
       : row(1, [warn("no agents detected here")], [label("run this in a project you code in")]),
+    refused.length > 0 &&
+      row(
+        1,
+        [warn(`not wired: ${refused.join(", ")}`)],
+        [label("its config is not valid JSON — fix it, then run this again")],
+      ),
     row(
       1,
       [good("skill")],
