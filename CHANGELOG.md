@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/memcell-ai/cli/compare/memcell-v0.3.0...memcell-v0.3.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* harden the client and hooks before the public listing ([#8](https://github.com/memcell-ai/cli/issues/8)) ([1e54749](https://github.com/memcell-ai/cli/commit/1e547495514dff1d8b4074a0ab74d8ca5af79598))
+
 ## [0.3.0](https://github.com/memcell-ai/cli/compare/memcell-v0.2.0...memcell-v0.3.0) (2026-08-22)
 
 
