@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/memcell-ai/cli/compare/memcell-v0.3.2...memcell-v0.4.0) (2026-08-24)
+
+
+### Features
+
+* **loop:** rules can apply at an act, and refuse it ([#12](https://github.com/memcell-ai/cli/issues/12)) ([dc952d5](https://github.com/memcell-ai/cli/commit/dc952d5eb9bebce7c38c97bf81383830a1b78a8a))
+
 ## [0.3.2](https://github.com/memcell-ai/cli/compare/memcell-v0.3.1...memcell-v0.3.2) (2026-08-23)
 
 
