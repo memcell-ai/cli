@@ -126,6 +126,25 @@ export interface Session {
 }
 
 /** Who this machine is, as far as the instance is concerned. */
+/** What an agent KEY is, and whether it can still work.
+ *
+ *  A different question from `whoami`, which answers for the person's
+ *  session. The two credentials fail independently: a session stays live for
+ *  a week while every hook on the machine is being turned away, and
+ *  `memcell status` reported the healthy one.
+ */
+export interface AgentStanding {
+  agent: string | null;
+  space: string | null;
+  standing: "ok" | "over_ceiling" | "suspended" | "revoked";
+  calls: { used: number; ceiling: number; resetsAt: string };
+  says: string | null;
+}
+
+export async function agentStanding(instance: string, key: string): Promise<AgentStanding> {
+  return call<AgentStanding>(instance, "/api/v1/agent", { bearer: key });
+}
+
 export async function whoami(instance: string): Promise<Session | null> {
   const session = await call<Session | null>(instance, "/api/auth/get-session");
   return session?.user ? session : null;

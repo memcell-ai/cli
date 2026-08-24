@@ -1,4 +1,6 @@
-import { MemcellError, whoami } from "../client.js";
+import { dirname } from "node:path";
+import { MemcellError, agentStanding, whoami } from "../client.js";
+import { agentKeyForProject } from "../keyring.js";
 import { credentialFor, DEFAULT_INSTANCE, knownInstances, whereInstance } from "../instance.js";
 import { findProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, time, value, variant, warn } from "../ui.js";
@@ -72,6 +74,7 @@ export async function status(instance: string): Promise<number> {
       row(1, [good("live")], [value(who)], session.user.isAnonymous && [variant("anonymous")]),
       linked,
       row(2, [label("since"), time(credential.obtainedAt.slice(0, 16).replace("T", " "))]),
+      await hookKey(instance, found?.at),
     );
     return 0;
   } catch (error) {
@@ -87,5 +90,33 @@ export async function status(instance: string): Promise<number> {
       linked,
     );
     return 1;
+  }
+}
+
+/** The credential the HOOKS carry, which is not the one above.
+ *
+ *  `whoami` answers for the person's session; the hooks present an agent key
+ *  minted by `memcell connect`. They fail independently, and the way this
+ *  goes wrong is silent: a refused hook writes a line to a log nobody reads
+ *  and carries on, the agent works without memory, and this command said
+ *  "live" the whole time because it was verifying the wrong credential.
+ */
+async function hookKey(instance: string, projectAt: string | undefined) {
+  if (!projectAt) return null;
+  const held = await agentKeyForProject(instance, dirname(projectAt));
+  if (!held) return row(3, [warn("no agent key")], [label("run"), cmd("memcell connect")]);
+
+  try {
+    const said = await agentStanding(instance, held.key);
+    if (said.standing === "ok") {
+      return row(3, [good("agent key live")], said.agent ? [value(said.agent)] : null, [
+        label(`${said.calls.used} of ${said.calls.ceiling} calls today`),
+      ]);
+    }
+    return row(3, [warn(said.standing.replace(/_/g, " "))], [label(said.says ?? "")]);
+  } catch (error) {
+    // A key the instance will not answer for is the failure this exists to
+    // catch — say it, rather than letting the session's "live" stand for it.
+    return row(3, [warn("agent key refused")], [label((error as MemcellError).message)]);
   }
 }
