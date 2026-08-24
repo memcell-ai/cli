@@ -2,6 +2,7 @@ import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises
 import { dirname } from "node:path";
 
 import { isOurs, type Moment } from "../loop/moments.js";
+import type { Surface } from "./surface.js";
 import type { Incoming, Session } from "./capture.js";
 
 // What every adapter shares — and the principle the whole layer stands on:
@@ -35,6 +36,16 @@ export interface Heard {
 export interface Adapter {
   name: string;
 
+  /**
+   * What this harness can do, declared — see surface.ts.
+   *
+   * Optional only while the thirteen are being filled in; every capability
+   * inside it is answered with how or with why not, so absence here is the
+   * one remaining place a reader could mistake our backlog for the agent's
+   * limit. That is what the migration closes.
+   */
+  surface?: Surface;
+
   // ── wiring — writing and removing memcell's hooks in this agent's config ─
   install(projectDir: string): Promise<string>;
   /** Whether what is wired here was written by an older release and should
@@ -50,6 +61,17 @@ export interface Adapter {
    * injection.
    */
   speak(moment: Moment, context: string | null, heard: Heard): string | null;
+
+  /**
+   * Stop the act about to happen, in this harness's own refusal, with the
+   * rule's words as the reason.
+   *
+   * Absent where a harness has no richer way to say it than an exit code —
+   * the command falls back to exit 2 with the reason on stderr, which every
+   * harness surveyed understands. Null from an adapter that HAS this means
+   * the same: say nothing, fall back.
+   */
+  refuse?(reason: string): string | null;
 
   /**
    * Read this agent's session record — the capture dialect, the mirror of
@@ -163,6 +185,30 @@ export const oursMcp = (entry: unknown): boolean => {
  * that names memcell in a file this build no longer writes is in the wrong
  * place. Neither needs the file parsed to be recognised.
  */
+/**
+ * Wiring that is missing a moment memcell now fires at.
+ *
+ * `staleText` catches wiring written in an older SHAPE. This catches wiring
+ * that is the right shape and simply predates a moment — which is what an
+ * upgrade that adds one leaves behind everywhere, and it is invisible to
+ * every other check: the hooks are current, portable, and quietly one
+ * moment short.
+ *
+ * Nobody should have to know that. The migration already runs on every entry
+ * including the hook firings, so the first hook after an upgrade carries the
+ * wiring forward on its own — but only if something notices, and until now
+ * nothing did.
+ *
+ * A project with no memcell wiring at all is not stale, it is unwired, and
+ * installing into it uninvited is a different act entirely.
+ */
+export async function missingMoments(files: string[], events: string[]): Promise<boolean> {
+  const texts = await Promise.all(files.map((at) => readFile(at, "utf8").catch(() => "")));
+  const text = texts.join("\n");
+  if (!text.includes("memcell")) return false;
+  return events.some((event) => event.length > 0 && !text.includes(event));
+}
+
 export async function staleText(files: string[]): Promise<boolean> {
   for (const at of files) {
     const text = await readFile(at, "utf8").catch(() => "");

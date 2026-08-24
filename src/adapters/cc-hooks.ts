@@ -108,6 +108,22 @@ export function ccHookOps(
           }
         }
       }
+      // A moment this release fires at that the wiring has never heard of.
+      // Everything above catches wiring of the wrong SHAPE; this catches
+      // wiring of the right shape that simply predates a moment, which is
+      // what every upgrade adding one leaves behind — hooks that are
+      // current, portable, and quietly one moment short.
+      //
+      // Wired means wired for what we fire NOW, so the first hook after an
+      // upgrade carries itself forward and nobody has to be told.
+      const wired = new Set(
+        MOMENTS.filter((moment) =>
+          (events[EVENT[moment]] ?? []).some((entry) =>
+            (entry.hooks ?? []).some((h) => ours(h.command)),
+          ),
+        ),
+      );
+      if (wired.size > 0 && wired.size < MOMENTS.length) return true;
       return false;
     },
 

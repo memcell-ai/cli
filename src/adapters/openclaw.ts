@@ -1,3 +1,4 @@
+import type { Surface } from "./surface.js";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -20,6 +21,7 @@ import {
   type Adapter,
   type Wiring,
   oursMcp,
+  missingMoments,
   staleText,
 } from "./shared.js";
 
@@ -98,6 +100,7 @@ ${END}
 const EVENT: Record<Moment, string> = {
   "session-start": "promptBuilder",
   "prompt-submit": "before_prompt_build",
+  "before-act": "before_tool_call",
   "turn-end": "agent_end",
   "session-end": "—",
 };
@@ -107,10 +110,17 @@ const WRITE_TOOLS = new Set(["write", "edit", "apply_patch"]);
 
 export const openclaw: Adapter = {
   name: "openclaw",
+  get surface() {
+    return SURFACE;
+  },
 
   /** An older release's shape — a path or an --agent in the wiring. */
   async stale(dir: string): Promise<boolean> {
-    return staleText([pluginFile(resolve(dir)), configFile()]);
+    const files = [pluginFile(resolve(dir)), configFile()];
+    // Wiring of the right shape that predates a moment — what every
+    // upgrade adding one leaves behind. Caught here so the first hook
+    // after an upgrade carries itself forward and nobody is told to.
+    return (await staleText(files)) || missingMoments(files, Object.values(EVENT));
   },
 
   async install(projectDir: string): Promise<string> {
@@ -229,5 +239,57 @@ export const openclaw: Adapter = {
     }
     const nextFrom = rows.length ? rows[rows.length - 1]!.seq + 1 : from;
     return { text: said.join("\n\n"), touched: touched.slice(0, TOUCHED_CAP), read: nextFrom };
+  },
+};
+
+/**
+ * What this harness can do, declared — see surface.ts.
+ *
+ * `tools` is the piece that can live nowhere else. The record holds five
+ * words every trade shares and knows nothing about tools, because it
+ * outlives whichever agents exist. Naming which of THIS agent's tools count
+ * as sending is knowledge about one harness, and this is the file allowed to
+ * hold it.
+ *
+ * `change` is the same set the capture side already learned — one list, so
+ * the two halves cannot drift into disagreeing about what a write is. A tool
+ * nobody verified is left out: that act goes unguarded, which is silence
+ * rather than a rule shown where it does not apply.
+ */
+export const SURFACE: Surface = {
+  moments: {
+    "session-start": {
+      event: "promptBuilder",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "prompt-submit": {
+      event: "before_prompt_build",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "before-act": {
+      event: "before_tool_call",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "turn-end": {
+      event: "agent_end",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "session-end": {
+      event: "—",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+  },
+  guard: {
+    event: "before_tool_call",
+    matcher: (tools) => (tools.length > 0 ? tools.join("|") : undefined),
+    inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    refuse: { via: "exit-code", code: 2 },
+    tools: {
+      read: ["read", "grep"],
+      change: [...WRITE_TOOLS],
+      // One shell is record AND send; which one is decided from the command.
+      record: ["exec"],
+      send: ["exec"],
+    },
   },
 };

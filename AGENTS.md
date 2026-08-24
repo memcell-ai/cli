@@ -11,15 +11,15 @@ hook runtime, and the MCP bridge.
 
 ## Layout
 
-| Path            | What                                                              |
-| --------------- | ----------------------------------------------------------------- |
-| `src/`          | the CLI — commands, parser, keyring, project wiring               |
-| `src/commands/` | one file per command; `index.ts` is the registry the parser reads |
-| `src/adapters/` | one file per supported agent — hooks, dialect, session record     |
-| `src/loop/`     | the hook runtime: capture, recall, hand-over                      |
-| `test/`         | vitest suites                                                     |
-| `plugins/`      | the Claude Code plugin (marketplace at `.claude-plugin/`)         |
-| `server.json`   | the MCP registry manifest                                         |
+| Path            | What                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `src/`          | the CLI — commands, parser, keyring, project wiring                                        |
+| `src/commands/` | one file per command; `index.ts` is the registry the parser reads                          |
+| `src/adapters/` | one file per supported agent — hooks, dialect, session record, and the surface it declares |
+| `src/loop/`     | the hook runtime: capture, recall, hand-over                                               |
+| `test/`         | vitest suites                                                                              |
+| `plugins/`      | the Claude Code plugin (marketplace at `.claude-plugin/`)                                  |
+| `server.json`   | the MCP registry manifest                                                                  |
 
 ## Commands
 

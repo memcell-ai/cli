@@ -372,6 +372,8 @@ describe("reading a session in each agent's dialect", () => {
     );
     // The file IS the events map — no `hooks` wrapper.
     expect(Object.keys(hooks).sort()).toEqual([
+      // Before every act, not only at the top of a turn.
+      "PreToolUse",
       "SessionEnd",
       "SessionStart",
       "Stop",
@@ -485,7 +487,7 @@ describe("reading a session in each agent's dialect", () => {
     }
   });
 
-  it("kiro wiring: an owned agent file with three of four moments", async () => {
+  it("kiro wiring: an owned agent file, every moment its harness has", async () => {
     const proj2 = join(root, "kiro-proj");
     await mkdir(proj2, { recursive: true });
     const kiro = adapterFor("kiro")!;
@@ -495,11 +497,17 @@ describe("reading a session in each agent's dialect", () => {
       await fs.readFile(join(proj2, ".kiro", "agents", "memcell.json"), "utf8"),
     );
     expect(agent.name).toBe("memcell");
-    expect(Object.keys(agent.hooks).sort()).toEqual(["agentSpawn", "stop", "userPromptSubmit"]);
+    expect(Object.keys(agent.hooks).sort()).toEqual([
+      "PreToolUse",
+      "agentSpawn",
+      "stop",
+      "userPromptSubmit",
+    ]);
     expect(agent.hooks.agentSpawn[0].command).toContain(" hook session-start kiro");
     const wiring = await kiro.verify(proj2);
-    // Three moments wired; session-end honestly not (no Kiro trigger).
-    expect(wiring.filter((w) => w.ok).length).toBe(3);
+    // Four wired; session-end honestly not — Kiro has no trigger for it.
+    // `before-act` is the fourth: its harness has PreToolUse and always did.
+    expect(wiring.filter((w) => w.ok).length).toBe(4);
     expect(wiring.find((w) => w.moment === "session-end")!.ok).toBe(false);
     await kiro.remove(proj2);
     expect((await kiro.verify(proj2)).every((w) => !w.ok)).toBe(true);

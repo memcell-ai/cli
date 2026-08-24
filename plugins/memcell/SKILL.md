@@ -90,6 +90,22 @@ File decisions, constraints discovered, and approaches that failed. Do not
 file activity ("fixed the retry bug"), restatements of code, or anything
 `git log` already carries.
 
+A **rule** — something a future session could disobey — takes `--at`, naming
+the moments it bears on, so it is served again at the one it applies to
+rather than only at the start of a session:
+
+```
+memcell remember "Never push straight to main." --at send
+memcell remember "Run the formatter before committing." --at record
+memcell remember "Work on a copy; the original is the reference." --at change
+```
+
+`read` looked something up, nothing changed · `change` something of yours
+changed and you can still undo it · `record` it is durable and your own side
+will act on it · `send` it left and cannot be taken back · `answer` the
+person you are working for has your words. Several are fine. Leave `--at`
+off for knowledge — a fact cannot be disobeyed.
+
 ## report — what makes the figures real
 
 When something memory served turns out to have worked or failed, say so

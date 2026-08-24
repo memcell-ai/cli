@@ -27,19 +27,19 @@ memcell connect` works and will say so if the command will not survive.
 
 ## Commands
 
-| command               | what it does                                                       |
-| --------------------- | ------------------------------------------------------------------ |
-| `memcell connect`     | wire this directory — approves in your browser the first time      |
-| `memcell recall`      | what memory serves before you act                                  |
-| `memcell remember`    | file one thing this project has established                        |
-| `memcell report`      | what happened when something memory served was acted on            |
-| `memcell status`      | who this machine is, and what this directory is linked to          |
-| `memcell ingest <f>`  | hand a document to this directory's memory                         |
-| `memcell import`      | bring existing instruction files into memory — bare, it finds them |
-| `memcell export`      | carry this space out — one document, no account needed             |
-| `memcell hook remove` | take memcell's hooks out of this directory                         |
-| `memcell login`       | sign this machine in                                               |
-| `memcell reset`       | forget everything memcell keeps on this machine                    |
+| command               | what it does                                                         |
+| --------------------- | -------------------------------------------------------------------- |
+| `memcell connect`     | wire this directory — approves in your browser the first time        |
+| `memcell recall`      | what memory serves before you act                                    |
+| `memcell remember`    | file one thing this project has established (`--at` when it applies) |
+| `memcell report`      | what happened when something memory served was acted on              |
+| `memcell status`      | who this machine is, and what this directory is linked to            |
+| `memcell ingest <f>`  | hand a document to this directory's memory                           |
+| `memcell import`      | bring existing instruction files into memory — bare, it finds them   |
+| `memcell export`      | carry this space out — one document, no account needed               |
+| `memcell hook remove` | take memcell's hooks out of this directory                           |
+| `memcell login`       | sign this machine in                                                 |
+| `memcell reset`       | forget everything memcell keeps on this machine                      |
 
 | resource           | acts on                                   |
 | ------------------ | ----------------------------------------- |
@@ -58,9 +58,12 @@ Revoking a credential never forgets what the agents filed.
 ## How it works
 
 - **Hooks** — recall runs at session start and prompt submit; remember and
-  report run at turn end. MCP tool calls are model-invoked with no session
-  lifecycle, so they cannot guarantee either moment; hooks fire regardless
-  of what the model decides to call. Fails open, always.
+  report run at turn end; and a rule that names a moment is served again
+  before the act it bears on, which costs no extra call — the rules come
+  down with the turn's recall and the matching is local. MCP tool calls are
+  model-invoked with no session lifecycle, so they cannot guarantee any of
+  those moments; hooks fire regardless of what the model decides to call.
+  Fails open, always.
 - **MCP** — wiring also registers `memcell mcp`, a stdio bridge to the
   paired instance, so the model can ask memory mid-turn. The committed
   entry is just that command: no secret in any config file.
