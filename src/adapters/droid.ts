@@ -1,3 +1,4 @@
+import type { Surface } from "./surface.js";
 import { join } from "node:path";
 
 import type { Moment } from "../loop/moments.js";
@@ -37,6 +38,7 @@ import {
 const EVENT: Record<Moment, string> = {
   "session-start": "SessionStart",
   "prompt-submit": "UserPromptSubmit",
+  "before-act": "PreToolUse",
   "turn-end": "Stop",
   "session-end": "SessionEnd",
 };
@@ -68,6 +70,9 @@ const WRITE_TOOLS = new Set(["Create", "Edit", "ApplyPatch", "create", "edit", "
 
 export const droid: Adapter = {
   name: "droid",
+  get surface() {
+    return SURFACE;
+  },
   ...ccHookOps("droid", file, EVENT, { afterInstall: installMcp, alsoRemove: removeMcp }),
 
   speak(_moment: Moment, context: string | null): string | null {
@@ -122,3 +127,55 @@ function blockText(content: unknown): string {
     .map((c) => c.text)
     .join("\n");
 }
+
+/**
+ * What this harness can do, declared — see surface.ts.
+ *
+ * `tools` is the piece that can live nowhere else. The record holds five
+ * words every trade shares and knows nothing about tools, because it
+ * outlives whichever agents exist. Naming which of THIS agent's tools count
+ * as sending is knowledge about one harness, and this is the file allowed to
+ * hold it.
+ *
+ * `change` is the same set the capture side already learned — one list, so
+ * the two halves cannot drift into disagreeing about what a write is. A tool
+ * nobody verified is left out: that act goes unguarded, which is silence
+ * rather than a rule shown where it does not apply.
+ */
+export const SURFACE: Surface = {
+  moments: {
+    "session-start": {
+      event: "SessionStart",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "prompt-submit": {
+      event: "UserPromptSubmit",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "before-act": {
+      event: "PreToolUse",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "turn-end": {
+      event: "Stop",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "session-end": {
+      event: "SessionEnd",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+  },
+  guard: {
+    event: "PreToolUse",
+    matcher: (tools) => (tools.length > 0 ? tools.join("|") : undefined),
+    inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    refuse: { via: "exit-code", code: 2 },
+    tools: {
+      read: ["Read", "Glob", "Grep", "WebSearch", "FetchUrl"],
+      change: [...WRITE_TOOLS],
+      // One shell is record AND send; which one is decided from the command.
+      record: ["Execute"],
+      send: ["Execute"],
+    },
+  },
+};

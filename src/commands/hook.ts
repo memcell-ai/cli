@@ -43,10 +43,36 @@ export async function hook(moment: string, program: string): Promise<number> {
     await log(`${moment} ${program} · fell over · ${(trouble as Error)?.message ?? trouble}`);
     return 0;
   }
+  const adapter = adapterFor(program);
+
+  // A rule somebody asked to STOP this act. Spoken in the harness's own
+  // refusal, and the reason is always the rule's own words — nobody is
+  // stopped without being told what stopped them.
+  //
+  // This is the ONE place the loop is allowed to stand in the way, and only
+  // because a person turned it on for that rule. Everything else fails open:
+  // a hook that blocks work it should not is a hook that gets removed, and a
+  // removed hook remembers nothing at all.
+  if (result.refuse) {
+    const spoken = adapter?.refuse?.(result.refuse) ?? null;
+    if (spoken) {
+      process.stdout.write(spoken);
+      return 0;
+    }
+    // No dialect for refusing here: exit 2 with the reason on stderr, which
+    // every harness surveyed reads as "do not run this, and tell the model
+    // why". An agent this build does not know still gets silence.
+    if (adapter) {
+      process.stderr.write(result.refuse);
+      return 2;
+    }
+    return 0;
+  }
+
   // The adapter owns the dialect. An agent this build does not know gets
   // silence, never a guess — a wrong dialect is worse than a dropped
   // injection.
-  const spoken = adapterFor(program)?.speak(moment, result.context ?? null, result.heard) ?? null;
+  const spoken = adapter?.speak(moment, result.context ?? null, result.heard) ?? null;
   if (spoken) process.stdout.write(spoken);
   return 0;
 }

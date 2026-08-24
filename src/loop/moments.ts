@@ -8,8 +8,20 @@
 //   turn end · session end        → report.   A statement the turn's own
 //     work corroborated is one the recall got right, and saying so is the
 //     only thing that moves confidence.
+//   before act                    → recall, again, and differently. A rule
+//     read at the top of a session and needed forty steps later is a rule
+//     nobody is holding by the time it applies. This fires before an
+//     individual act and serves only what bears on THAT act. It fires many
+//     times a turn, so it costs no call: the standing rules come down once
+//     and the matching happens here.
 
-export const MOMENTS = ["session-start", "prompt-submit", "turn-end", "session-end"] as const;
+export const MOMENTS = [
+  "session-start",
+  "prompt-submit",
+  "before-act",
+  "turn-end",
+  "session-end",
+] as const;
 export type Moment = (typeof MOMENTS)[number];
 
 export const isMoment = (word: string): word is Moment =>
@@ -20,6 +32,8 @@ export type Leg = "recall" | "remember" | "report";
 export const LEGS: Record<Moment, Leg[]> = {
   "session-start": ["recall"],
   "prompt-submit": ["recall"],
+  // Served from what the session already holds — see `guard`. No leg runs.
+  "before-act": [],
   "turn-end": ["remember", "report"],
   "session-end": ["remember", "report"],
 };

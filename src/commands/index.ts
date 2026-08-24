@@ -99,11 +99,15 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["remember"],
-    what: "file one thing this project has established",
+    what: "file one thing this project has established — --at names when a rule applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
-    takes: ["kind"],
+    takes: ["kind", "at"],
     run: ({ args, flags }) =>
-      remember(args.text!, typeof flags.kind === "string" ? flags.kind : undefined),
+      remember(
+        args.text!,
+        typeof flags.kind === "string" ? flags.kind : undefined,
+        typeof flags.at === "string" ? flags.at : undefined,
+      ),
   },
   {
     path: ["report"],

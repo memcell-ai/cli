@@ -15,6 +15,22 @@ import { machineDir, machineFile } from "../machine.js";
 
 export interface Note {
   space: string;
+  /** The standing rules this session has been served that bear on an act,
+   *  kept so `before-act` costs no call of its own. Refreshed by every
+   *  recall; a session that has not recalled yet simply guards nothing. */
+  standing?: { statementId: string; text: string; appliesAt: string[]; refuses?: boolean }[];
+  /**
+   * Rules SERVED immediately before an act, and which act.
+   *
+   * The pairing is a fact rather than an inference: the guard knows it put
+   * this rule in front of this act, at this moment. Judging afterwards from
+   * a transcript has to work out both halves from prose, and measurably does
+   * not — it is what catches a rule broken in the open and calls it nothing.
+   *
+   * Kept here and handed over with the turn, so the judging costs one call
+   * on material already being sent rather than a call per act.
+   */
+  servedAt?: { statementId: string; act: string; tool: string; became: string }[];
   /** Characters of the transcript already handed over, so a turn ships what
    *  is new rather than the whole conversation again. */
   read: number;
@@ -24,7 +40,7 @@ export interface Note {
 const dir = () => machineFile("sessions");
 const file = (id: string) => join(dir(), `${id.replace(/[^\w-]/g, "")}.json`);
 
-const EMPTY: Note = { space: "", read: 0, fired: {} };
+const EMPTY: Note = { space: "", read: 0, fired: {}, standing: [], servedAt: [] };
 
 export async function noteFor(id: string): Promise<Note> {
   try {

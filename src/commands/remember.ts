@@ -15,7 +15,30 @@ interface Written {
   note: string;
 }
 
-export async function remember(text: string, kind?: string): Promise<number> {
+/** The five moments a rule can bear on — the record's own words, so a person
+ *  filing one by hand can say WHEN it applies and have it served then. */
+const APPLIES_AT = ["read", "change", "record", "send", "answer"] as const;
+
+export async function remember(text: string, kind?: string, at?: string): Promise<number> {
+  // Refused by name rather than dropped: a rule filed as applying at a
+  // moment nothing fires would sit here looking wired and never be served.
+  const appliesAt = (at ?? "")
+    .split(",")
+    .map((word) => word.trim())
+    .filter(Boolean);
+  const unknown = appliesAt.filter((word) => !(APPLIES_AT as readonly string[]).includes(word));
+  if (unknown.length > 0) {
+    say(
+      row(0, [badge("memcell"), label("remember")]),
+      row(1, [bad("no such moment")], [label(unknown.join(", "))]),
+      row(2, [label("try")], [value(APPLIES_AT.join(", "))]),
+    );
+    return 1;
+  }
+  return file(text, kind, appliesAt);
+}
+
+async function file(text: string, kind?: string, appliesAt: string[] = []): Promise<number> {
   const here = await wired("remember");
   if (!here) return 1;
 
@@ -23,7 +46,15 @@ export async function remember(text: string, kind?: string): Promise<number> {
     const written = await call<Written>(
       here.instance,
       `/api/v1/spaces/${encodeURIComponent(here.space)}/statements`,
-      { method: "POST", bearer: here.key, body: { text, ...(kind ? { kind } : {}) } },
+      {
+        method: "POST",
+        bearer: here.key,
+        body: {
+          text,
+          ...(kind ? { kind } : {}),
+          ...(appliesAt.length > 0 ? { applies_at: appliesAt } : {}),
+        },
+      },
     );
     say(
       row(0, [badge("memcell"), label("remember"), place(here.space)]),

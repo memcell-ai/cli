@@ -1,3 +1,4 @@
+import type { Surface } from "./surface.js";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,7 +13,7 @@ import {
   type Incoming,
   type Session,
 } from "./capture.js";
-import { staleText, type Adapter, type Wiring } from "./shared.js";
+import { missingMoments, staleText, type Adapter, type Wiring } from "./shared.js";
 
 // Codex. Its config is TOML, and this adapter carries no TOML parser on
 // purpose: everything memcell writes lives between two markers, appended
@@ -31,6 +32,7 @@ const END = "# memcell:end";
 const EVENT: Record<Moment, string> = {
   "session-start": "SessionStart",
   "prompt-submit": "UserPromptSubmit",
+  "before-act": "PreToolUse",
   "turn-end": "Stop",
   "session-end": "SessionEnd",
 };
@@ -72,10 +74,17 @@ function stripped(text: string): string {
 
 export const codex: Adapter = {
   name: "codex",
+  get surface() {
+    return SURFACE;
+  },
 
   /** An older release's shape — a path or an --agent in the wiring. */
   async stale(_dir: string): Promise<boolean> {
-    return staleText([join(homedir(), ".codex", "config.toml")]);
+    const files = [join(homedir(), ".codex", "config.toml")];
+    // Wiring of the right shape that predates a moment — what every
+    // upgrade adding one leaves behind. Caught here so the first hook
+    // after an upgrade carries itself forward and nobody is told to.
+    return (await staleText(files)) || missingMoments(files, Object.values(EVENT));
   },
 
   async install(_projectDir: string): Promise<string> {
@@ -237,3 +246,55 @@ async function metaLine(path: string): Promise<{ session_id?: string; cwd?: stri
     return null;
   }
 }
+
+/**
+ * What this harness can do, declared — see surface.ts.
+ *
+ * `tools` is the piece that can live nowhere else. The record holds five
+ * words every trade shares and knows nothing about tools, because it
+ * outlives whichever agents exist. Naming which of THIS agent's tools count
+ * as sending is knowledge about one harness, and this is the file allowed to
+ * hold it.
+ *
+ * `change` is the same set the capture side already learned — one list, so
+ * the two halves cannot drift into disagreeing about what a write is. A tool
+ * nobody verified is left out: that act goes unguarded, which is silence
+ * rather than a rule shown where it does not apply.
+ */
+export const SURFACE: Surface = {
+  moments: {
+    "session-start": {
+      event: "SessionStart",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "prompt-submit": {
+      event: "UserPromptSubmit",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "before-act": {
+      event: "PreToolUse",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "turn-end": {
+      event: "Stop",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "session-end": {
+      event: "SessionEnd",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+  },
+  guard: {
+    event: "PreToolUse",
+    matcher: (tools) => (tools.length > 0 ? tools.join("|") : undefined),
+    inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    refuse: { via: "exit-code", code: 2 },
+    tools: {
+      read: ["Read", "Grep", "Glob"],
+      change: ["Edit", "Write", "apply_patch"],
+      // One shell is record AND send; which one is decided from the command.
+      record: ["Bash"],
+      send: ["Bash"],
+    },
+  },
+};

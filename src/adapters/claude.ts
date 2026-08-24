@@ -1,3 +1,4 @@
+import { unsupported, type Surface } from "./surface.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -27,8 +28,65 @@ import { MCP_ARGS, MCP_COMMAND, oursMcp, readJson, writeJson, type Adapter } fro
 const EVENT: Record<Moment, string> = {
   "session-start": "SessionStart",
   "prompt-submit": "UserPromptSubmit",
+  "before-act": "PreToolUse",
   "turn-end": "Stop",
   "session-end": "SessionEnd",
+};
+
+/**
+ * What this harness can do, declared — see adapters/surface.ts.
+ *
+ * Claude Code documents thirty-one events; the loop rides four of them. That
+ * is a statement about what memcell asks for, not about what the agent
+ * offers, and the difference is written down here so nobody reads one as the
+ * other again.
+ *
+ * `PreToolUse` fires before every individual tool call — its own tools and
+ * MCP tools alike — takes a regex matcher on the tool NAME, and reads
+ * `hookSpecificOutput.additionalContext` back into the model's context.
+ * Exit code 2 refuses the call and shows stderr to the model as the reason.
+ */
+export const SURFACE: Surface = {
+  moments: {
+    "session-start": {
+      event: "SessionStart",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "prompt-submit": {
+      event: "UserPromptSubmit",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "before-act": {
+      event: "PreToolUse",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "turn-end": {
+      event: "Stop",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "session-end": {
+      event: "SessionEnd",
+      inject: unsupported("the session is over — there is nobody left to tell"),
+    },
+  },
+  guard: {
+    event: "PreToolUse",
+    // Alternation on the tool name, which is what its matcher takes.
+    matcher: (tools) => (tools.length > 0 ? tools.join("|") : undefined),
+    inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    refuse: { via: "exit-code", code: 2 },
+    // THIS agent's tools, by the moment each belongs to. The record knows
+    // only the five words; which tool is which is knowledge about Claude
+    // Code and lives here.
+    tools: {
+      read: ["Read", "Glob", "Grep", "WebFetch", "WebSearch", "NotebookRead"],
+      change: ["Write", "Edit", "NotebookEdit"],
+      // Bash is every one of change/record/send depending on the command,
+      // so it is guarded and the class is decided from the command itself.
+      record: ["Bash"],
+      send: ["Bash"],
+    },
+  },
 };
 
 const file = (dir: string) => join(dir, ".claude", "settings.json");
@@ -75,6 +133,7 @@ const wiring = ccHookOps("claude", file, EVENT, {
 
 export const claude: Adapter = {
   name: "claude",
+  surface: SURFACE,
   ...wiring,
 
   // ── speak — hookSpecificOutput carries the injection ─────────────────────
@@ -84,6 +143,18 @@ export const claude: Adapter = {
       hookSpecificOutput: {
         hookEventName: EVENT[moment],
         additionalContext: context,
+      },
+    });
+  },
+
+  // Claude Code has a richer refusal than an exit code: a permission
+  // decision, with the reason shown to the model rather than to a log.
+  refuse(reason: string): string {
+    return JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
       },
     });
   },

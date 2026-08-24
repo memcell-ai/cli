@@ -1,3 +1,5 @@
+import { actOf } from "./act.js";
+import { can } from "../adapters/surface.js";
 import { dirname } from "node:path";
 
 import { agentKeyForProject } from "../keyring.js";
@@ -39,6 +41,10 @@ const UNWATCHED_MS = 20_000;
  *  material can be large and the link can be slow; nothing here waits on a
  *  model. */
 const HANDOVER_MS = 60_000;
+/** How many rule-and-act pairings one turn hands over. A turn with forty
+ *  acts must not cost forty judgements, and the same rule against the same
+ *  kind of act twice says nothing the first one did not. */
+const SERVED_AT_LIMIT = 12;
 
 interface Incoming {
   prompt?: string;
@@ -48,6 +54,12 @@ interface Incoming {
   sessionId?: string;
   transcript_path?: string;
   transcriptPath?: string;
+  /** The act about to happen, at `before-act`. Every harness names these two
+   *  things; only the spelling differs, so both are read. */
+  tool_name?: string;
+  toolName?: string;
+  tool_input?: Record<string, unknown>;
+  toolInput?: Record<string, unknown>;
 }
 
 async function incoming(): Promise<Incoming> {
@@ -169,9 +181,14 @@ interface Recalled {
   text: string;
   confidence: number;
   layer: string;
+  /** The moments this bears on — read, change, record, send, answer. Empty
+   *  for knowledge, which is most of a memory. */
+  appliesAt?: string[];
   contested?: boolean;
   /** Served because this session already went against it. */
   diverged?: boolean;
+  /** Somebody asked this rule to STOP the act it bears on. */
+  refuses?: boolean;
 }
 
 /** Recalled statements, written for a model's turn: each carries what it is
@@ -207,6 +224,10 @@ function asContext(results: Recalled[], space: string): string {
 
 export interface HookResult {
   context?: string;
+  /** A rule somebody asked to stop this act, in its own words. The command
+   *  turns it into whatever refusal this harness understands — the reason is
+   *  always the rule itself, so nobody is stopped without being told why. */
+  refuse?: string;
   heard: { prompt?: string; transformedPrompt?: string };
 }
 
@@ -248,6 +269,68 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
   const legs = LEGS[moment];
   const result: HookResult = { heard };
 
+  // ── before an act ─────────────────────────────────────────────────────
+  //
+  // A rule read at the top of a session and needed forty steps later is a
+  // rule nobody is holding by the time it applies. This says the one that
+  // bears on THIS act, at the moment of it.
+  //
+  // It costs no call: the rules came down with the turn's recall and the
+  // choosing happens here. It says nothing far more often than it says
+  // something — an act nothing bears on, or an act this build cannot name,
+  // is silence. A rule shown where it does not apply is worse than none,
+  // because the next one is skipped too.
+  if (moment === "before-act") {
+    const tool = payload.tool_name ?? payload.toolName ?? "";
+    const guard = adapterFor(program)?.surface?.guard;
+    if (!tool || !guard || !can(guard)) return result;
+    const act = actOf(tool, payload.tool_input ?? payload.toolInput, guard);
+    if (!act) return result;
+    const bears = (note.standing ?? []).filter((r) => r.appliesAt.includes(act));
+    if (bears.length === 0) return result;
+    // A rule somebody asked to STOP this act. Said every time, never once
+    // per session: a wall that only stands the first time is not a wall.
+    // What was put in front of what, recorded as a FACT. The judge is asked
+    // afterwards whether the act complied — a narrow question with the act
+    // in hand — instead of being asked to find both halves in prose.
+    // Bounded: a long turn must not hand over a list that grows with it.
+    const pairs = note.servedAt ?? (note.servedAt = []);
+    const stops = bears.filter((r) => r.refuses);
+    for (const r of bears) {
+      if (pairs.length >= SERVED_AT_LIMIT) break;
+      if (pairs.some((p) => p.statementId === r.statementId && p.act === act)) continue;
+      // What became of it, said by the only thing that saw it. A refusal is
+      // known here and nowhere else — the act never happened, so no later
+      // reading of the turn could tell it apart from a rule that was simply
+      // followed.
+      pairs.push({
+        statementId: r.statementId,
+        act,
+        tool,
+        became: r.refuses ? "refused" : "served",
+      });
+    }
+
+    if (stops.length > 0) {
+      result.refuse = stops.map((r) => r.text).join(" · ");
+      await log(`${tag} · before-act · ${tool} is ${act} · refused · ${result.refuse}`);
+      return result;
+    }
+
+    // Said once per act-class per session. The same rule in front of every
+    // one of forty shell commands is noise, and noise is what gets a hook
+    // uninstalled.
+    const said = `said:${act}`;
+    if (note.fired[said]) return result;
+    note.fired[said] = Date.now();
+    result.context = [
+      `memcell — standing here, for what you are about to do:`,
+      ...bears.map((r) => `· ${r.text}`),
+    ].join("\n");
+    await log(`${tag} · before-act · ${tool} is ${act} · ${bears.length} said`);
+    return result;
+  }
+
   // ── recall ────────────────────────────────────────────────────────────
   if (legs.includes("recall")) {
     // Prompt-submit asks the prompt. Session start has no prompt yet, so it
@@ -275,6 +358,19 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         await log(`${tag} · recall · ${doorTrouble(asked)}`);
       }
       const results = answer?.results ?? [];
+      // Kept for `before-act`, which fires many times a turn and must cost
+      // nothing: what bears on an act is chosen from here, not asked for.
+      // Only the rules that name a moment are kept — knowledge is most of a
+      // memory and none of it belongs in front of somebody mid-act.
+      const bearing = results.filter((r) => (r.appliesAt ?? []).length > 0);
+      if (bearing.length > 0) {
+        note.standing = bearing.map((r) => ({
+          statementId: r.statementId,
+          text: r.text,
+          appliesAt: r.appliesAt ?? [],
+          ...(r.refuses ? { refuses: true } : {}),
+        }));
+      }
       if (results.length > 0) {
         result.context = asContext(results, project.space);
         // No served-set is tracked here any more: recall already writes the
@@ -346,6 +442,9 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         {
           raw: material.text,
           origin: { title: `${program} session` },
+          // What was put in front of what, and before which act. The record
+          // knows the pairing already; this is the half only the client saw.
+          ...((note.servedAt ?? []).length > 0 ? { served_at: note.servedAt } : {}),
           // The names of the files this turn wrote — names only, never
           // contents — so the session can be read back as work, not just
           // as prose. Absent when the transcript named none.
@@ -357,6 +456,9 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         turn,
       );
       const kept = handed?.at === "answered" ? handed.body : null;
+      // Judged once. Cleared only on a delivery that landed — a held turn
+      // carries them to the redelivery, the same way it carries its offset.
+      if (kept) note.servedAt = [];
       // 202 means the instance TOOK the turn, durably, and has not read it
       // yet. Counting that as "0 kept" would put a lie in the log on every
       // ordinary turn, so it is said as what it is.
