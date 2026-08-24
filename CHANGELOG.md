@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/memcell-ai/cli/compare/memcell-v0.4.0...memcell-v0.5.0) (2026-08-24)
+
+
+### Features
+
+* **status:** check the credential the hooks actually carry ([#14](https://github.com/memcell-ai/cli/issues/14)) ([d99660c](https://github.com/memcell-ai/cli/commit/d99660cd1ef08a3a581f28f0aa8bf4d47f433674))
+
 ## [0.4.0](https://github.com/memcell-ai/cli/compare/memcell-v0.3.2...memcell-v0.4.0) (2026-08-24)
 
 
