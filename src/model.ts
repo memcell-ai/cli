@@ -90,6 +90,14 @@ export const FLAGS: Record<string, FlagSpec> = {
     what: "decision · convention · gotcha · dead_end · preference · fact",
   },
   note: { name: "note", takes: "text", what: "what happened, in a sentence" },
+  "all-spaces": {
+    name: "all-spaces",
+    what: "every space this account reaches, not just this directory's",
+  },
+  // The window, named rather than configured. The instance buckets seven
+  // days and serves that; a flag offering thirty would be a window nothing
+  // behind it can answer.
+  "7d": { name: "7d", what: "the window — the seven days the instance buckets" },
 };
 
 export interface Invocation {

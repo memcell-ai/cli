@@ -34,6 +34,7 @@ memcell connect` works and will say so if the command will not survive.
 | `memcell remember`    | file one thing this project has established (`--at` when it applies) |
 | `memcell report`      | what happened when something memory served was acted on              |
 | `memcell status`      | who this machine is, and what this directory is linked to            |
+| `memcell stats`       | what the last seven days did — recalls, dead ends, the commons       |
 | `memcell ingest <f>`  | hand a document to this directory's memory                           |
 | `memcell import`      | bring existing instruction files into memory — bare, it finds them   |
 | `memcell export`      | carry this space out — one document, no account needed               |

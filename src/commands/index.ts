@@ -15,6 +15,7 @@ import { logout } from "./logout.js";
 import { reset } from "./reset.js";
 import { seed } from "./seed.js";
 import { listSpaces, newSpace, useSpace } from "./spaces.js";
+import { stats } from "./stats.js";
 import { status } from "./status.js";
 
 // Every command the CLI has, declared rather than dispatched by hand.
@@ -148,6 +149,12 @@ export const COMMANDS: Command[] = [
         typeof flags.format === "string" ? flags.format : "json",
         typeof flags.out === "string" ? flags.out : undefined,
       ),
+  },
+  {
+    path: ["stats"],
+    what: "what the last seven days did — recalls, dead ends, the commons",
+    takes: ["instance", "all-spaces", "7d"],
+    run: ({ instance, flags }) => stats(instance, { allSpaces: flags["all-spaces"] === true }),
   },
   {
     path: ["status"],
