@@ -79,6 +79,26 @@ export type OpenSlice = (path: string, start: number) => NodeJS.ReadableStream;
 
 const openFile: OpenSlice = (path, start) => createReadStream(path, { start, encoding: "utf8" });
 
+/**
+ * The most of a record one turn will read.
+ *
+ * A backlog has to be BOUNDED, and the bound has to be here rather than at
+ * the door. A delivery the instance refuses for size rolls the offset back
+ * so the turn can be retried — correct for an outage, and a trap for a
+ * refusal the same bytes will always earn: the next read starts at the same
+ * place, reaches a now-larger end, and is refused again. Nothing recovers.
+ *
+ * Measured on 2026-08-26: one session's record reached 879 MB against a
+ * door that takes 600k characters, and capture had been wedged for two days
+ * — reading the whole file into memory each turn to be refused each turn.
+ *
+ * Generous against any real turn, and small enough that reading it costs
+ * nothing. Past it the read starts near the END: recent work is what a
+ * session is worth capturing for, and the alternative on a backlog this
+ * size is to capture nothing at all, forever.
+ */
+export const READ_CEILING = 4_000_000;
+
 export async function readJsonlSlice(
   path: string,
   from: number,
@@ -101,7 +121,16 @@ export async function readJsonlSlice(
   // Unreadable, or the file was replaced by a shorter one — start over
   // rather than seek past its end and report silence.
   if (size < 0) return from;
-  const start = from > size ? 0 : from;
+  const behind = from > size ? 0 : from;
+  // Skipping lands mid-line, which drops one entry: the parse below already
+  // tolerates that — it is the same shape as the half-written tail of a live
+  // file — and one lost line beside a skipped backlog is not the problem.
+  const start = size - behind > READ_CEILING ? size - READ_CEILING : behind;
+  if (start !== behind) {
+    await log(
+      `record is ${Math.round((size - behind) / 1e6)}MB behind — reading the last ${Math.round(READ_CEILING / 1e6)}MB and skipping the rest`,
+    );
+  }
 
   let read = start;
   await new Promise<void>((resolve, reject) => {

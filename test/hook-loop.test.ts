@@ -34,6 +34,10 @@ vi.stubGlobal(
       headers: init.headers,
     });
     const body = answer(path);
+    // A number is a refusal with that status — the difference between an
+    // outage and a refusal the content earned is the whole point of one of
+    // the suites below.
+    if (typeof body === "number") return { ok: false, status: body, json: async () => ({}) };
     if (body === null) return { ok: false, status: 503, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => body };
   },
@@ -554,5 +558,91 @@ describe("the wired invocation is portable", () => {
     // and says nothing.
     const { memcellOnPath } = await import("../src/adapters/shared.js");
     expect(typeof (await memcellOnPath())).toBe("boolean");
+  });
+});
+
+describe("a hand-over the instance will never take", () => {
+  /** Everything the ingest door was actually sent, in order. */
+  const handedOver = () =>
+    calls.filter((c) => c.path.includes("/ingest")).map((c) => String(c.body.raw ?? ""));
+
+  /** Add a turn to the record, so the next firing has something new. */
+  const grow = async (path: string, what: string) => {
+    const line = JSON.stringify({ message: { role: "assistant", content: what } });
+    await writeFile(path, `${line}\n`, { flag: "a" });
+  };
+
+  it("moves past a turn the door refused, instead of re-sending it forever", async () => {
+    // The failure this exists for, measured on 2026-08-26: one session's
+    // record reached 879 MB against a door that takes 600k characters. Every
+    // turn-end read the whole file, was refused, rolled the offset back, and
+    // read a LARGER file next time. Seventy refusals over two days, and the
+    // log said "holding this turn for the next firing" every one of them.
+    reset();
+    const record = join(project, "refused.jsonl");
+    await writeFile(record, "");
+    await grow(record, "the first turn, which the door will refuse");
+
+    answer = (path) => (path.includes("/ingest") ? 400 : {});
+    fed({ session_id: "wedged", cwd: project, transcript_path: record });
+    await runMoment("turn-end", "claude");
+
+    await grow(record, "the second turn, which is new work");
+    fed({ session_id: "wedged", cwd: project, transcript_path: record });
+    await runMoment("turn-end", "claude");
+
+    const sent = handedOver();
+    expect(sent).toHaveLength(2);
+    // The second delivery must not contain the first turn again. Holding a
+    // refusal the content earned is not a retry — it is a loop that grows.
+    expect(sent[1]).not.toContain("the first turn");
+    expect(sent[1]).toContain("the second turn");
+
+    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    expect(log).toContain("not worth re-sending; moving past it");
+  });
+
+  it("still holds a turn the instance merely could not take right now", async () => {
+    // The other half, and why this cannot simply always advance: an outage,
+    // a spent budget or a restart are all worth waiting on, and a turn
+    // dropped on one of those is work the record never sees.
+    reset();
+    const record = join(project, "outage.jsonl");
+    await writeFile(record, "");
+    await grow(record, "the first turn, during an outage");
+
+    answer = (path) => (path.includes("/ingest") ? 503 : {});
+    fed({ session_id: "waiting", cwd: project, transcript_path: record });
+    await runMoment("turn-end", "claude");
+
+    await grow(record, "the second turn, still during it");
+    fed({ session_id: "waiting", cwd: project, transcript_path: record });
+    await runMoment("turn-end", "claude");
+
+    const sent = handedOver();
+    expect(sent).toHaveLength(2);
+    // Both turns ride the redelivery — the first was never taken.
+    expect(sent[1]).toContain("the first turn");
+    expect(sent[1]).toContain("the second turn");
+  });
+
+  it("never hands over more than the door will take", async () => {
+    // The client knows the ceiling rather than discovering it by being
+    // refused. Learned the hard way costs a turn's work per turn, forever.
+    reset();
+    const record = join(project, "huge.jsonl");
+    await writeFile(record, "");
+    await grow(record, `${"the beginning, long since scrolled past. ".repeat(20_000)}`);
+    await grow(record, "and the conclusion the turn actually reached");
+
+    answer = () => ({ created: [], reinforced: [], attributed: [] });
+    fed({ session_id: "huge", cwd: project, transcript_path: record });
+    await runMoment("turn-end", "claude");
+
+    const [sent] = handedOver();
+    expect(sent!.length).toBeLessThanOrEqual(600_000);
+    // The TAIL ships: on a turn this long the end is the conclusion and the
+    // start is the search that got there.
+    expect(sent).toContain("the conclusion the turn actually reached");
   });
 });

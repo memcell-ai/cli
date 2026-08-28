@@ -170,6 +170,27 @@ async function door<T>(
 }
 
 /** The failure, in the log's words. */
+/**
+ * The most one hand-over may carry, mirroring the door's own ceiling.
+ *
+ * Declared here rather than discovered: the door refuses a larger delivery
+ * with a 400, and a client that only learns its limit by being refused
+ * spends a turn's work to find it out. Kept a little under the door's
+ * 600k so a delivery is never refused for a rounding difference.
+ *
+ * The TAIL is what ships. A turn long enough to hit this is one where the
+ * end is the conclusion and the start is the search that got there.
+ */
+const MAX_HANDOVER_CHARS = 560_000;
+
+/** Will the same bytes earn the same refusal? Then holding them is not a
+ *  retry, it is a loop: the next read starts where this one did, reaches a
+ *  larger end, and is refused again. Only a refusal the CONTENT caused
+ *  behaves that way — an outage, a spent budget or a revoked key are all
+ *  worth waiting on. */
+const refusedForGood = (status: number): boolean =>
+  status === 400 || status === 413 || status === 422;
+
 function doorTrouble(answer: Answered<unknown>): string {
   return answer?.at === "refused"
     ? `the instance answered ${answer.status}`
@@ -440,7 +461,10 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         key,
         `spaces/${encodeURIComponent(project.space)}/ingest`,
         {
-          raw: material.text,
+          raw:
+            material.text.length > MAX_HANDOVER_CHARS
+              ? material.text.slice(-MAX_HANDOVER_CHARS)
+              : material.text,
           origin: { title: `${program} session` },
           // What was put in front of what, and before which act. The record
           // knows the pairing already; this is the half only the client saw.
@@ -485,11 +509,20 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         // this material rather than skipping it. Safe to re-deliver, because
         // the turn's name is derived from this very offset — an instance
         // that DID land it sees the same name and stands the repeat down.
-        note.read = startedAt;
+        // Held for a retry — unless retrying is what wedges it. A refusal
+        // the content earned will be earned again by the same content, and
+        // the offset going back means the next read is BIGGER: the delivery
+        // that was too large becomes larger still, forever. That ran for two
+        // days on a real machine before anyone could see it, because the log
+        // said "holding for the next firing" every single time.
+        const forGood = handed?.at === "refused" && refusedForGood(handed.status);
+        if (!forGood) note.read = startedAt;
         await log(
-          handed?.at === "refused"
-            ? `${tag} · remember · ${doorTrouble(handed)} — not captured, holding this turn for the next firing`
-            : `${tag} · remember · ${doorTrouble(handed)} — no answer, holding this turn for the next firing`,
+          forGood
+            ? `${tag} · remember · ${doorTrouble(handed as Answered<unknown>)} — this turn was refused and is not worth re-sending; moving past it`
+            : handed?.at === "refused"
+              ? `${tag} · remember · ${doorTrouble(handed)} — not captured, holding this turn for the next firing`
+              : `${tag} · remember · ${doorTrouble(handed)} — no answer, holding this turn for the next firing`,
         );
       }
 

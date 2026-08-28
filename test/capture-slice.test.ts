@@ -161,3 +161,50 @@ describe("material and the offset move together", () => {
     expect(after).toBeGreaterThan(0);
   });
 });
+
+describe("a record that ran far ahead of the reader", () => {
+  it("reads the recent end and skips the backlog, rather than growing forever", async () => {
+    // Measured on 2026-08-26: one session's record reached 879 MB while the
+    // stored offset sat at 0. Every turn-end read the whole file to build a
+    // delivery the door refuses at 600k characters, was refused, put the
+    // offset back, and read a larger file next time. Capture could not
+    // recover on its own, and the machine paid 879 MB of reading per turn
+    // for the privilege.
+    const { READ_CEILING } = await import("../src/adapters/capture.js");
+    const at = join(mkdtempSync(join(tmpdir(), "memcell-huge-")), "transcript.jsonl");
+
+    // A backlog comfortably past the ceiling, then the recent work.
+    const filler = JSON.stringify({ message: { role: "user", content: "x".repeat(50_000) } });
+    writeFileSync(at, `${filler}\n`.repeat(Math.ceil(READ_CEILING / filler.length) + 20));
+    appendFileSync(
+      at,
+      `${JSON.stringify({ message: { role: "user", content: "the recent turn" } })}\n`,
+    );
+
+    const seen: unknown[] = [];
+    const size = readFileSync(at).length;
+    const read = await readJsonlSlice(at, 0, (entry) => seen.push(entry));
+
+    // The whole backlog is not read, and the offset lands at the end — so
+    // the next turn reads only what is genuinely new.
+    expect(read).toBe(size);
+    const said = JSON.stringify(seen);
+    expect(said).toContain("the recent turn");
+    // And it read about a ceiling's worth, not a file's worth.
+    expect(said.length).toBeLessThan(READ_CEILING * 1.5);
+
+    // Said out loud: an operator reading the log has to know work was
+    // skipped, or a silent gap reads as a session that did nothing.
+    const log = readFileSync(join(home, ".memcell", "hook.log"), "utf8");
+    expect(log).toContain("skipping the rest");
+  });
+
+  it("reads from the offset when the record has not run away", async () => {
+    const at = write([{ message: { role: "user", content: "ordinary" } }]);
+    const seen: unknown[] = [];
+    await readJsonlSlice(at, 0, (entry) => seen.push(entry));
+    // The ceiling is a backstop, not the normal path: an ordinary record is
+    // read from wherever the reader left off.
+    expect(JSON.stringify(seen)).toContain("ordinary");
+  });
+});
