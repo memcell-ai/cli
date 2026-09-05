@@ -166,10 +166,19 @@ export const gemini: Adapter = {
   },
 };
 
-/** Gemini's write tools: `write_file` and `replace` (the edit tool's real
- *  name). `run_shell_command` writes are invisible to argument parsing and
+/** Gemini's write tools: legacy `write_file` and `replace`, plus modern
+ *  variants like `write_to_file`, `replace_file_content`, and `edit_file`.
+ *  `run_shell_command` writes are invisible to argument parsing and
  *  honestly absent. */
-const WRITE_TOOLS = new Set(["write_file", "replace"]);
+const WRITE_TOOLS = new Set([
+  "write_file",
+  "replace",
+  "write_to_file",
+  "replace_file_content",
+  "edit_file",
+  "Write",
+  "Edit",
+]);
 
 /** The text of a genai PartListUnion — the plain words, dropping the
  *  functionCall / functionResponse parts that carry no prose. */
@@ -227,11 +236,11 @@ export const SURFACE: Surface = {
     inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
     refuse: { via: "exit-code", code: 2 },
     tools: {
-      read: ["read_file", "read_many_files", "glob", "search_file_content"],
+      read: ["read_file", "read_many_files", "glob", "search_file_content", "view_file"],
       change: [...WRITE_TOOLS],
       // One shell is record AND send; which one is decided from the command.
-      record: ["run_shell_command"],
-      send: ["run_shell_command"],
+      record: ["run_shell_command", "run_command"],
+      send: ["run_shell_command", "run_command"],
     },
   },
 };

@@ -172,7 +172,7 @@ export const oursMcp = (entry: unknown): boolean => {
     ...(Array.isArray(held.command) ? held.command : [held.command ?? ""]),
     ...(held.args ?? []),
   ];
-  return words.some((w) => w.includes("memcell")) && words[words.length - 1] === "mcp";
+  return words.some((w) => w.includes("memcell")) && words.includes("mcp");
 };
 
 /**

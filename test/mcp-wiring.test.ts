@@ -7,6 +7,8 @@ import { claude } from "../src/adapters/claude.js";
 import { MCP_ARGS, MCP_COMMAND } from "../src/adapters/shared.js";
 import { copilot } from "../src/adapters/copilot.js";
 import { gemini } from "../src/adapters/gemini.js";
+import { windsurf } from "../src/adapters/windsurf.js";
+import { cline } from "../src/adapters/cline.js";
 
 // Wiring a directory registers the MCP bridge beside the hooks — the same
 // law: the committed entry is just `memcell mcp`, no secret anywhere, the
@@ -96,5 +98,33 @@ describe("copilot — .github/mcp.json, a shared file", () => {
     const after = await read(join(dir, ".github", "mcp.json"));
     expect(after.mcpServers.memcell).toBeUndefined();
     expect(after.mcpServers.github.url).toBe("https://gh/mcp");
+  });
+});
+
+describe("windsurf — .windsurf/mcp_config.json", () => {
+  it("installs MCP bridge and strips cleanly on remove", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "memcell-mcp-windsurf-"));
+    await mkdir(join(dir, ".windsurf"), { recursive: true });
+    await windsurf.install(dir);
+    const doc = await read(join(dir, ".windsurf", "mcp_config.json"));
+    expect(doc.mcpServers.memcell).toEqual({ command: MCP_COMMAND, args: MCP_ARGS });
+
+    await windsurf.remove(dir);
+    const after = await read(join(dir, ".windsurf", "mcp_config.json")).catch(() => null);
+    expect(after?.mcpServers?.memcell).toBeUndefined();
+  });
+});
+
+describe("cline — .cline/mcp.json", () => {
+  it("installs MCP bridge and strips cleanly on remove", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "memcell-mcp-cline-"));
+    await mkdir(join(dir, ".cline"), { recursive: true });
+    await cline.install(dir);
+    const doc = await read(join(dir, ".cline", "mcp.json"));
+    expect(doc.mcpServers.memcell).toEqual({ command: MCP_COMMAND, args: MCP_ARGS });
+
+    await cline.remove(dir);
+    const after = await read(join(dir, ".cline", "mcp.json")).catch(() => null);
+    expect(after?.mcpServers?.memcell).toBeUndefined();
   });
 });

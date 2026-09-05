@@ -211,3 +211,88 @@ export function pathOf(input: Record<string, unknown> | undefined): string | und
   }
   return undefined;
 }
+
+/**
+ * Extract clean prompt text from a user message content string.
+ * Unwraps <USER_REQUEST>...</USER_REQUEST> tags if present, and removes <ADDITIONAL_METADATA>.
+ */
+export function cleanUserPrompt(raw: string): string {
+  const requestMatch = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
+  if (requestMatch && requestMatch[1] && requestMatch[1].trim()) {
+    return requestMatch[1].trim();
+  }
+  return raw
+    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/gi, "")
+    .replace(/<USER_REQUEST>[\s\S]*?<\/USER_REQUEST>/gi, "")
+    .trim();
+}
+
+/**
+ * Read the most recent user prompt from a session transcript (e.g. JSONL transcript).
+ * Looks backward from the end of the file to quickly locate the latest user input.
+ */
+export async function readLatestUserPrompt(transcriptPath: string): Promise<string | null> {
+  try {
+    const info = await stat(transcriptPath).catch(() => null);
+    if (!info || info.size === 0) return null;
+
+    // Read up to the last 2MB which covers turns with multiple large tool steps
+    const CHUNK_SIZE = 2 * 1024 * 1024;
+    const start = Math.max(0, info.size - CHUNK_SIZE);
+    const stream = createReadStream(transcriptPath, { start, encoding: "utf8" });
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+    const lines: string[] = [];
+    for await (const line of rl) {
+      if (line.trim()) lines.push(line.trim());
+    }
+
+    // Inspect from newest to oldest
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line) continue;
+      if (
+        !line.includes("USER_INPUT") &&
+        !line.includes("USER_EXPLICIT") &&
+        !line.includes('"user"')
+      ) {
+        continue;
+      }
+      try {
+        const rec = JSON.parse(line) as {
+          type?: string;
+          source?: string;
+          role?: string;
+          content?: unknown;
+        };
+        const isUser =
+          rec.type === "USER_INPUT" || rec.source === "USER_EXPLICIT" || rec.role === "user";
+
+        if (isUser && rec.content) {
+          let text = "";
+          if (typeof rec.content === "string") {
+            text = rec.content;
+          } else if (Array.isArray(rec.content)) {
+            text = rec.content
+              .map((c: unknown) => {
+                if (typeof c === "string") return c;
+                if (typeof c === "object" && c !== null && "text" in c) {
+                  return String((c as { text: unknown }).text);
+                }
+                return "";
+              })
+              .join(" ");
+          }
+
+          const cleaned = cleanUserPrompt(text);
+          if (cleaned) return cleaned;
+        }
+      } catch {
+        // Skip malformed/truncated lines near chunk boundary
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

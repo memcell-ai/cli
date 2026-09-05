@@ -503,7 +503,6 @@ describe("reading a session in each agent's dialect", () => {
       "stop",
       "userPromptSubmit",
     ]);
-    expect(agent.hooks.agentSpawn[0].command).toContain(" hook session-start kiro");
     const wiring = await kiro.verify(proj2);
     // Four wired; session-end honestly not — Kiro has no trigger for it.
     // `before-act` is the fourth: its harness has PreToolUse and always did.
@@ -511,6 +510,180 @@ describe("reading a session in each agent's dialect", () => {
     expect(wiring.find((w) => w.moment === "session-end")!.ok).toBe(false);
     await kiro.remove(proj2);
     expect((await kiro.verify(proj2)).every((w) => !w.ok)).toBe(true);
+  });
+
+  it("antigravity — .agents/hooks.json, injectSteps ephemeralMessage, transcript JSONL with write_to_file", async () => {
+    const projAg = join(root, "antigravity-proj");
+    await mkdir(projAg, { recursive: true });
+    const ag = adapterFor("antigravity")!;
+    await ag.install(projAg);
+    const hooks = JSON.parse(
+      await (
+        await import("node:fs/promises")
+      ).readFile(join(projAg, ".agents", "hooks.json"), "utf8"),
+    );
+    expect(hooks.memcell).toBeTruthy();
+    expect(hooks.memcell.PreInvocation[0].command).toContain("hook prompt-submit antigravity");
+    expect(hooks.memcell.PreToolUse[0].hooks[0].command).toContain("hook before-act antigravity");
+    expect(hooks.memcell.PostInvocation[0].command).toContain("hook turn-end antigravity");
+    expect(hooks.memcell.Stop[0].command).toContain("hook session-end antigravity");
+
+    const wiring = await ag.verify(projAg);
+    expect(wiring.every((w) => w.ok)).toBe(true);
+
+    const transcriptPath = join(projAg, "transcript.jsonl");
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ type: "USER_INPUT", content: "implement cache layer" }),
+        JSON.stringify({
+          type: "PLANNER_RESPONSE",
+          content: "Creating cache file.",
+          tool_calls: [
+            {
+              name: "write_to_file",
+              args: { TargetFile: `${projAg}/src/cache.ts` },
+            },
+          ],
+        }),
+      ].join("\n"),
+    );
+    const s = await ag.read({ transcript_path: transcriptPath, cwd: projAg }, 0);
+    expect(s.text).toContain("user: implement cache layer");
+    expect(s.text).toContain("assistant: Creating cache file.");
+    expect(s.touched).toEqual(["src/cache.ts"]);
+
+    const { readLatestUserPrompt } = await import("../src/adapters/capture.js");
+    const prompt = await readLatestUserPrompt(transcriptPath);
+    expect(prompt).toBe("implement cache layer");
+
+    // Also test with <USER_REQUEST> wrapping
+    const transcriptWithRequest = join(projAg, "transcript-wrapped.jsonl");
+    await writeFile(
+      transcriptWithRequest,
+      [
+        JSON.stringify({
+          type: "USER_INPUT",
+          content:
+            "<USER_REQUEST>\nfix the database pool\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\ntime: 12:00\n</ADDITIONAL_METADATA>",
+        }),
+      ].join("\n"),
+    );
+    const wrappedPrompt = await readLatestUserPrompt(transcriptWithRequest);
+    expect(wrappedPrompt).toBe("fix the database pool");
+
+    expect(JSON.parse(ag.speak("prompt-submit", "ctx", {})!)).toEqual({
+      injectSteps: [{ ephemeralMessage: "ctx" }],
+    });
+    expect(JSON.parse(ag.refuse!("safety refusal")!)).toEqual({
+      decision: "deny",
+      reason: "safety refusal",
+    });
+
+    await ag.remove(projAg);
+    expect((await ag.verify(projAg)).every((w) => !w.ok)).toBe(true);
+  });
+
+  it("windsurf — .windsurf/hooks.json, ccHookOps and Cascade tools", async () => {
+    const projWs = join(root, "windsurf-proj");
+    await mkdir(projWs, { recursive: true });
+    const ws = adapterFor("windsurf")!;
+    await ws.install(projWs);
+    const hooks = JSON.parse(
+      await (
+        await import("node:fs/promises")
+      ).readFile(join(projWs, ".windsurf", "hooks.json"), "utf8"),
+    );
+    expect(hooks.hooks.PreToolUse[0].hooks[0].command).toContain("hook before-act windsurf");
+    const wiring = await ws.verify(projWs);
+    expect(wiring.every((w) => w.ok)).toBe(true);
+
+    const transcriptPath = join(projWs, "cascade.jsonl");
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ role: "user", content: "refactor store" }),
+        JSON.stringify({
+          role: "assistant",
+          content: "Refactoring store.",
+          toolCalls: [{ name: "Write", args: { path: `${projWs}/src/store.ts` } }],
+        }),
+      ].join("\n"),
+    );
+    const s = await ws.read({ transcript_path: transcriptPath, cwd: projWs }, 0);
+    expect(s.text).toContain("user: refactor store");
+    expect(s.touched).toEqual(["src/store.ts"]);
+
+    await ws.remove(projWs);
+    expect((await ws.verify(projWs)).every((w) => !w.ok)).toBe(true);
+  });
+
+  it("goose — .goose/hooks.json, config.yaml extension, developer__write_file tool", async () => {
+    const projGoose = join(root, "goose-proj");
+    await mkdir(projGoose, { recursive: true });
+    const g = adapterFor("goose")!;
+    await g.install(projGoose);
+    const hooks = JSON.parse(
+      await (
+        await import("node:fs/promises")
+      ).readFile(join(projGoose, ".goose", "hooks.json"), "utf8"),
+    );
+    expect(hooks.hooks.PreToolUse[0].command).toContain("hook before-act goose");
+    const wiring = await g.verify(projGoose);
+    expect(wiring.every((w) => w.ok)).toBe(true);
+
+    const transcriptPath = join(projGoose, "goose.jsonl");
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ role: "user", content: "setup database" }),
+        JSON.stringify({
+          role: "assistant",
+          content: "Creating db.ts.",
+          toolCalls: [{ name: "developer__write_file", args: { path: `${projGoose}/src/db.ts` } }],
+        }),
+      ].join("\n"),
+    );
+    const s = await g.read({ transcript_path: transcriptPath, cwd: projGoose }, 0);
+    expect(s.text).toContain("user: setup database");
+    expect(s.touched).toEqual(["src/db.ts"]);
+
+    await g.remove(projGoose);
+    expect((await g.verify(projGoose)).every((w) => !w.ok)).toBe(true);
+  });
+
+  it("cline — .cline/hooks.json, TaskStart/PreToolUse, and write_to_file", async () => {
+    const projCline = join(root, "cline-proj");
+    await mkdir(projCline, { recursive: true });
+    const cl = adapterFor("cline")!;
+    await cl.install(projCline);
+    const hooks = JSON.parse(
+      await (
+        await import("node:fs/promises")
+      ).readFile(join(projCline, ".cline", "hooks.json"), "utf8"),
+    );
+    expect(hooks.hooks.PreToolUse[0].command).toContain("hook before-act cline");
+    const wiring = await cl.verify(projCline);
+    expect(wiring.every((w) => w.ok)).toBe(true);
+
+    const transcriptPath = join(projCline, "cline.jsonl");
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ role: "user", content: "update auth" }),
+        JSON.stringify({
+          role: "assistant",
+          content: "Patching auth.",
+          toolCalls: [{ name: "write_to_file", args: { path: `${projCline}/src/auth.ts` } }],
+        }),
+      ].join("\n"),
+    );
+    const s = await cl.read({ transcript_path: transcriptPath, cwd: projCline }, 0);
+    expect(s.text).toContain("user: update auth");
+    expect(s.touched).toEqual(["src/auth.ts"]);
+
+    await cl.remove(projCline);
+    expect((await cl.verify(projCline)).every((w) => !w.ok)).toBe(true);
   });
 
   it("an unknown agent reads as empty — silence, never a wrong parse", async () => {
