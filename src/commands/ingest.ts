@@ -16,8 +16,8 @@ interface Kept {
   note?: string;
 }
 
-export async function ingest(file: string): Promise<number> {
-  const here = await wired("ingest");
+export async function ingest(file: string, url?: string): Promise<number> {
+  const here = await wired("ingest", url);
   if (!here) return 1;
 
   let raw: string;

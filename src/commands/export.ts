@@ -77,7 +77,7 @@ export function renderCursorrules(doc: ExportDoc): string {
   );
 }
 
-export async function exportSpace(format: string, out?: string): Promise<number> {
+export async function exportSpace(format: string, out?: string, url?: string): Promise<number> {
   if (!(EXPORT_FORMATS as readonly string[]).includes(format)) {
     say(
       row(0, [badge("memcell"), label("export")]),
@@ -86,7 +86,7 @@ export async function exportSpace(format: string, out?: string): Promise<number>
     return 1;
   }
 
-  const here = await wired("export");
+  const here = await wired("export", url);
   if (!here) return 1;
 
   let doc: ExportDoc;

@@ -70,7 +70,9 @@ export function actOf(
 
   // Several claim it, which is how a shell is declared — it is genuinely all
   // of them, and only the command says which.
-  const command = String(input?.command ?? input?.cmd ?? input?.script ?? "").toLowerCase();
+  const command = String(
+    input?.command ?? input?.cmd ?? input?.script ?? input?.CommandLine ?? input?.commandLine ?? "",
+  ).toLowerCase();
   if (!command) return null;
   if (has(command, SENDS)) return "send";
   if (has(command, RECORDS)) return "record";

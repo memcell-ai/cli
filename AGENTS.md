@@ -61,4 +61,4 @@ different instructions under one name is worse than either.
 
 Suites run hermetically — filesystem and network are faked at seams
 (`OpenSlice`, fetch stubs). To try the CLI against a real instance, run any
-memcell server and `node dist/bin.js connect --instance <url>`.
+memcell server and `node dist/bin.js connect --url <url>`.

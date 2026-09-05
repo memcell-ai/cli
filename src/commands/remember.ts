@@ -19,7 +19,12 @@ interface Written {
  *  filing one by hand can say WHEN it applies and have it served then. */
 const APPLIES_AT = ["read", "change", "record", "send", "answer"] as const;
 
-export async function remember(text: string, kind?: string, at?: string): Promise<number> {
+export async function remember(
+  text: string,
+  kind?: string,
+  at?: string,
+  url?: string,
+): Promise<number> {
   // Refused by name rather than dropped: a rule filed as applying at a
   // moment nothing fires would sit here looking wired and never be served.
   const appliesAt = (at ?? "")
@@ -35,11 +40,16 @@ export async function remember(text: string, kind?: string, at?: string): Promis
     );
     return 1;
   }
-  return file(text, kind, appliesAt);
+  return file(text, kind, appliesAt, url);
 }
 
-async function file(text: string, kind?: string, appliesAt: string[] = []): Promise<number> {
-  const here = await wired("remember");
+async function file(
+  text: string,
+  kind?: string,
+  appliesAt: string[] = [],
+  url?: string,
+): Promise<number> {
+  const here = await wired("remember", url);
   if (!here) return 1;
 
   try {

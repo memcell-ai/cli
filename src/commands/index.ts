@@ -39,7 +39,7 @@ export const COMMANDS: Command[] = [
   {
     path: ["login"],
     what: "sign this machine in",
-    takes: ["instance", "force", "no-browser"],
+    takes: ["url", "force", "no-browser"],
     landing: true,
     run: ({ instance, flags }) =>
       login(instance, { force: flags.force === true, noBrowser: flags["no-browser"] === true }),
@@ -47,20 +47,21 @@ export const COMMANDS: Command[] = [
   {
     path: ["logout"],
     what: "sign out and forget the session here",
-    takes: ["instance"],
+    takes: ["url"],
     run: ({ instance }) => logout(instance),
   },
   {
     path: ["connect"],
     what: "wire this directory — approves in your browser the first time",
-    takes: ["instance", "pair", "space", "no-browser"],
+    takes: ["url", "pair", "space", "agent", "no-browser"],
     landing: true,
-    run: ({ instance, flags }) =>
+    run: ({ instance, from, flags }) =>
       connect(instance, {
         pair: typeof flags.pair === "string" ? flags.pair : undefined,
         space: typeof flags.space === "string" ? flags.space : undefined,
+        agent: typeof flags.agent === "string" ? flags.agent : undefined,
         noBrowser: flags["no-browser"] === true,
-        instanceFlag: typeof flags.instance === "string" ? flags.instance : undefined,
+        from,
       }),
   },
   {
@@ -86,28 +87,38 @@ export const COMMANDS: Command[] = [
   {
     path: ["mcp"],
     what: "the stdio face of this directory's memory, for MCP clients",
+    takes: ["dir", "agent"],
     hidden: true,
-    run: () => mcp(),
+    run: ({ flags }) =>
+      mcp(
+        typeof flags.dir === "string" ? flags.dir : undefined,
+        typeof flags.agent === "string" ? flags.agent : undefined,
+      ),
   },
   {
     path: ["recall"],
     what: "what memory serves before you act",
     args: [{ name: "intent", required: true, what: "what you are trying to do or know" }],
-    takes: ["limit"],
+    takes: ["limit", "url"],
     landing: true,
     run: ({ args, flags }) =>
-      recall(args.intent!, typeof flags.limit === "string" ? flags.limit : undefined),
+      recall(
+        args.intent!,
+        typeof flags.limit === "string" ? flags.limit : undefined,
+        typeof flags.url === "string" ? flags.url : undefined,
+      ),
   },
   {
     path: ["remember"],
     what: "file one thing this project has established — --at names when a rule applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
-    takes: ["kind", "at"],
+    takes: ["kind", "at", "url"],
     run: ({ args, flags }) =>
       remember(
         args.text!,
         typeof flags.kind === "string" ? flags.kind : undefined,
         typeof flags.at === "string" ? flags.at : undefined,
+        typeof flags.url === "string" ? flags.url : undefined,
       ),
   },
   {
@@ -117,51 +128,57 @@ export const COMMANDS: Command[] = [
       { name: "statement", required: true, what: "the statement's id, from recall" },
       { name: "outcome", required: true, what: "worked · failed · avoided" },
     ],
-    takes: ["note"],
+    takes: ["note", "url"],
     run: ({ args, flags }) =>
       report(
         args.statement!,
         args.outcome!,
         typeof flags.note === "string" ? flags.note : undefined,
+        typeof flags.url === "string" ? flags.url : undefined,
       ),
   },
   {
     path: ["ingest"],
     what: "hand a document to this directory's memory",
     args: [{ name: "file", required: true, what: "the document to distill" }],
+    takes: ["url"],
     landing: true,
-    run: ({ args }) => ingest(args.file!),
+    run: ({ args, flags }) =>
+      ingest(args.file!, typeof flags.url === "string" ? flags.url : undefined),
   },
   {
     path: ["import"],
     what: "bring existing instruction files into memory — bare, it finds them",
     args: [{ name: "files", rest: true, what: "documents or a JSON export to distill" }],
+    takes: ["url"],
     landing: true,
-    run: ({ many }) => importFiles(many.files ?? []),
+    run: ({ many, flags }) =>
+      importFiles(many.files ?? [], typeof flags.url === "string" ? flags.url : undefined),
   },
   {
     path: ["export"],
     what: "carry this space out — one document, no account needed",
-    takes: ["format", "out"],
+    takes: ["format", "out", "url"],
     landing: true,
     run: ({ flags }) =>
       exportSpace(
         typeof flags.format === "string" ? flags.format : "json",
         typeof flags.out === "string" ? flags.out : undefined,
+        typeof flags.url === "string" ? flags.url : undefined,
       ),
   },
   {
     path: ["stats"],
-    what: "what the last seven days did — recalls, dead ends, the commons",
-    takes: ["instance", "all-spaces", "7d"],
-    run: ({ instance, flags }) => stats(instance, { allSpaces: flags["all-spaces"] === true }),
+    what: "what the window did — recalls, dead ends, the commons",
+    takes: ["url"],
+    run: ({ instance }) => stats(instance),
   },
   {
     path: ["status"],
     what: "who this machine is, and what this directory is linked to",
-    takes: ["instance"],
+    takes: ["url"],
     landing: true,
-    run: ({ instance }) => status(instance),
+    run: ({ instance, from }) => status(instance, from),
   },
   {
     path: ["reset"],
@@ -192,35 +209,35 @@ export const COMMANDS: Command[] = [
   {
     path: ["spaces", "ls"],
     what: "list them",
-    takes: ["instance"],
+    takes: ["url"],
     run: ({ instance }) => listSpaces(instance),
   },
   {
     path: ["spaces", "new"],
     what: "make one",
     args: [{ name: "name", required: true, what: "what it holds the truth about" }],
-    takes: ["instance"],
+    takes: ["url"],
     run: ({ instance, args }) => newSpace(instance, args.name!),
   },
   {
     path: ["spaces", "use"],
     what: "work on this one from now on, everywhere",
     args: [{ name: "slug", required: true, what: "from the list" }],
-    takes: ["instance"],
+    takes: ["url"],
     run: ({ instance, args }) => useSpace(instance, args.slug!),
   },
 
   {
     path: ["agents", "ls"],
     what: "list them",
-    takes: ["instance"],
+    takes: ["url"],
     run: ({ instance }) => listAgents(instance),
   },
   {
     path: ["agents", "revoke"],
     what: "take one agent's key back",
     args: [{ name: "id", required: true, what: "from the list" }],
-    takes: ["instance"],
+    takes: ["url"],
     run: ({ instance, args }) => revokeAgent(instance, args.id!),
   },
 
@@ -228,7 +245,7 @@ export const COMMANDS: Command[] = [
     path: ["memories", "seed"],
     what: "put a source into the commons, or propose one",
     args: [{ name: "source", required: true, what: "a repository or documentation URL" }],
-    takes: ["instance", "reason", "no-watch"],
+    takes: ["url", "reason", "no-watch"],
     run: ({ instance, args, flags }) =>
       seed(instance, args.source, {
         reason: typeof flags.reason === "string" ? flags.reason : undefined,

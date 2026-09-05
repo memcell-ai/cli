@@ -1,15 +1,17 @@
+import { rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
-import { basename, dirname } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 import { memcellOnPath } from "../adapters/shared.js";
 import { UnreadableConfig } from "../adapters/shared.js";
 import { installSkill } from "../adapters/skill.js";
 import { adapterFor } from "../adapters/index.js";
-import { detected } from "../agents.js";
+import { currentAgent, detected } from "../agents.js";
 import { call, MemcellError, whoami } from "../client.js";
 import { deviceGrant } from "../grant.js";
 import { credentialFor } from "../instance.js";
 import { saveAgentKey } from "../keyring.js";
+import { machineFile } from "../machine.js";
 import { saveProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, value, viaNpx, warn } from "../ui.js";
 
@@ -28,11 +30,12 @@ interface Exchanged {
   agentId: string;
   space: { id: string; slug: string; name: string };
   instance: string;
+  agents?: Record<string, { key: string; keyId: string; agentId: string; agentName: string }>;
 }
 
 export async function connect(
   instance: string,
-  options: { pair?: string; space?: string; noBrowser?: boolean; instanceFlag?: string },
+  options: { pair?: string; space?: string; agent?: string; noBrowser?: boolean; from: string },
 ): Promise<number> {
   const pair = options.pair?.trim();
   const space = options.space?.trim();
@@ -42,18 +45,17 @@ export async function connect(
   // config, so a cloned repository decides which host receives the device
   // grant and mints the key. That is fine when it is expected and worth
   // seeing when it is not — the host is named before anything is sent.
-  const { whereInstance } = await import("../instance.js");
-  const chose = await whereInstance(options.instanceFlag);
-  if (chose.from === "project") {
+  if (options.from === "project") {
     say(
-      row(0, [badge("memcell"), label("connecting to")], [place(chose.instance)]),
+      row(0, [badge("memcell"), label("connecting to")], [place(instance)]),
       row(1, [label("chosen by this directory's .memcell")]),
     );
   }
 
   const here = basename(process.cwd());
   const present = [...(await detected())];
-  const identity = { agent: present[0] ?? here, machine: hostname() };
+  const activeAgent = options.agent?.trim() || currentAgent() || present[0] || here;
+  const identity = { agent: activeAgent, agents: present, machine: hostname() };
 
   let exchanged: Exchanged;
   try {
@@ -115,8 +117,27 @@ export async function connect(
     keyId: exchanged.keyId,
     key: exchanged.key,
     project: process.cwd(),
+    space: exchanged.space.slug,
     agentId: exchanged.agentId,
+    agent: activeAgent,
   });
+
+  if (exchanged.agents) {
+    for (const [name, sub] of Object.entries(exchanged.agents)) {
+      if (sub.keyId === exchanged.keyId) continue;
+      await saveAgentKey({
+        instance,
+        keyId: sub.keyId,
+        key: sub.key,
+        project: process.cwd(),
+        space: exchanged.space.slug,
+        agentId: sub.agentId,
+        agent: name,
+      });
+    }
+  }
+
+  await rm(machineFile("last-project"), { force: true }).catch(() => undefined);
 
   // The hooks: the loop fires because the harness runs them. Installed for
   // whatever agents this machine actually uses.

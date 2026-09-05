@@ -37,7 +37,7 @@ export function normalize(instance: string): string {
 /**
  * Whether this could be an instance at all.
  *
- * A typo in `--instance` used to be carried all the way down and surface as
+ * A typo in `--url` used to be carried all the way down and surface as
  * "not signed in · run memcell login" — sending somebody to sign in to
  * something that cannot exist. Caught once, where the instance is decided,
  * so every command refuses the same way.
@@ -72,7 +72,7 @@ async function write(store: Store): Promise<void> {
  * Which memcell this invocation talks to — the first setting to go through
  * the config chain, and the reason that chain exists.
  *
- * `--instance` · MEMCELL_INSTANCE · the project's `instance` · the
+ * `--url` · MEMCELL_INSTANCE · the project's `instance` · the
  * machine's `instance` · whatever was last connected · the hosted one.
  * The last-connected fallback stays beneath config on purpose: it is a
  * memory of what happened, and a setting somebody wrote is a statement of

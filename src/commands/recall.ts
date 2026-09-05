@@ -18,8 +18,8 @@ interface Served {
   pinned?: boolean;
 }
 
-export async function recall(intent: string, limit?: string): Promise<number> {
-  const here = await wired("recall");
+export async function recall(intent: string, limit?: string, url?: string): Promise<number> {
+  const here = await wired("recall", url);
   if (!here) return 1;
 
   const asked = Number(limit);

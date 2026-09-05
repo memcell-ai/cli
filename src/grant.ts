@@ -30,7 +30,7 @@ interface Token {
  * Open the approval page if this machine can; say so plainly if it cannot.
  *
  * The URL comes from the INSTANCE, over the wire, and on Windows it is
- * handed to `cmd`. A `--instance` pointed at a hostile or compromised host
+ * handed to `cmd`. A `--url` pointed at a hostile or compromised host
  * could therefore choose what a person's shell runs. So it is parsed before
  * it is spawned, must be http(s), and must belong to the instance the
  * person named — a device grant that sends you somewhere else is not a

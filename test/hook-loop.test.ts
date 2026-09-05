@@ -38,6 +38,13 @@ vi.stubGlobal(
     // outage and a refusal the content earned is the whole point of one of
     // the suites below.
     if (typeof body === "number") return { ok: false, status: body, json: async () => ({}) };
+    // A refusal that SAYS something — `{ refuse, message }`. The instance
+    // always sends its reason on a 4xx; a fake that never does cannot show
+    // whether the hook keeps it.
+    if (body && typeof body === "object" && "refuse" in body) {
+      const r = body as { refuse: number; message: string };
+      return { ok: false, status: r.refuse, json: async () => ({ message: r.message }) };
+    }
     if (body === null) return { ok: false, status: 503, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => body };
   },
@@ -644,5 +651,153 @@ describe("a hand-over the instance will never take", () => {
     // The TAIL ships: on a turn this long the end is the conclusion and the
     // start is the search that got there.
     expect(sent).toContain("the conclusion the turn actually reached");
+  });
+});
+
+describe("the pairing survives the process", () => {
+  // Each hook firing is its own process. `before-act` is the ONLY thing that
+  // ever sees which rule was put in front of which act — the instance cannot
+  // recover that from the transcript, which is the entire reason the pairing
+  // is recorded on this side. It is written into the session note and handed
+  // over with the turn.
+  //
+  // Every path out of `before-act` returned early, and the note was kept at
+  // the bottom of the function, so none of them reached it. The pairing was
+  // written to memory and died with the process on every act since the leg
+  // was introduced: no `rule_act` row was ever written, and a memory whose
+  // rules fired every single turn read as one whose rules had never fired.
+  //
+  // This asserts the note ON DISK, not the return value, because the return
+  // value was always right.
+  const noteOf = async (id: string) =>
+    JSON.parse(await readFile(join(home, ".memcell", "sessions", `${id}.json`), "utf8")) as {
+      standing?: unknown[];
+      servedAt?: { statementId: string; act: string; tool: string; became: string }[];
+    };
+
+  it("keeps what was put in front of an act, where the next process can read it", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m9",
+      results: [
+        {
+          statementId: "s-rule",
+          text: "Never widen a consented scope.",
+          confidence: 0.8,
+          layer: "team",
+          appliesAt: ["change"],
+        },
+      ],
+    });
+    fed({ session_id: "pair1", cwd: project, prompt: "widen the scope" });
+    await runMoment("prompt-submit", "claude");
+    expect((await noteOf("pair1")).standing).toHaveLength(1);
+
+    reset();
+    fed({
+      session_id: "pair1",
+      cwd: project,
+      tool_name: "Edit",
+      tool_input: { file_path: `${project}/src/scope.ts` },
+    });
+    await runMoment("before-act", "claude");
+
+    const kept = (await noteOf("pair1")).servedAt ?? [];
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ statementId: "s-rule", act: "change", became: "served" });
+  });
+
+  it("keeps it on the paths that say nothing, too", async () => {
+    // Four of the six ways out of this leg return before anything is said —
+    // no tool, no act, no rule bearing on it, already said this session.
+    // They still have to leave the note where they found it rather than
+    // dropping a pairing an earlier act recorded.
+    reset();
+    answer = () => ({
+      momentId: "m10",
+      results: [
+        {
+          statementId: "s-rule",
+          text: "Never widen a consented scope.",
+          confidence: 0.8,
+          layer: "team",
+          appliesAt: ["change"],
+        },
+      ],
+    });
+    fed({ session_id: "pair2", cwd: project, prompt: "widen the scope" });
+    await runMoment("prompt-submit", "claude");
+
+    reset();
+    fed({
+      session_id: "pair2",
+      cwd: project,
+      tool_name: "Edit",
+      tool_input: { file_path: `${project}/src/scope.ts` },
+    });
+    await runMoment("before-act", "claude");
+    expect((await noteOf("pair2")).servedAt).toHaveLength(1);
+
+    // A read bears on nothing here: the leg returns without saying anything.
+    reset();
+    fed({
+      session_id: "pair2",
+      cwd: project,
+      tool_name: "Read",
+      tool_input: { file_path: `${project}/README.md` },
+    });
+    await runMoment("before-act", "claude");
+    expect((await noteOf("pair2")).servedAt).toHaveLength(1);
+  });
+});
+
+describe("a turn the door refuses", () => {
+  // Capture was wedged for nine days and the log could not say why.
+  //
+  // Two faults, one on each side. The hook guarded `material.text.length >=
+  // 20` while the door measures `raw.trim().length` — so a turn whose delta
+  // was mostly whitespace passed here and was refused there. A refused turn
+  // is HELD and retried, so the same material came back every firing and
+  // nothing behind it could land either: 204 refusals, all of them this.
+  //
+  // And the refusal's own sentence was dropped at the transport, so the log
+  // read "the instance answered 400" two hundred times with no reason in it.
+
+  const logText = async () => readFile(join(home, ".memcell", "hook.log"), "utf8").catch(() => "");
+
+  it("says WHAT the instance refused, not just that it did", async () => {
+    reset();
+    answer = (path) =>
+      path.includes("ingest") ? { refuse: 400, message: "Ingest needs a few sentences." } : {};
+    fed({ session_id: "refused-1", cwd: project, transcript_path: transcript });
+    await runMoment("turn-end", "claude");
+
+    // The REASON, which is the whole point: a bare status told nobody what
+    // to fix, and the same turn was refused every firing for nine days.
+    const said = await logText();
+    expect(said).toContain("Ingest needs a few sentences.");
+  });
+
+  it("does not hand over a turn the door will refuse for being empty", async () => {
+    // Whitespace is not material. The hook counted it as material and the
+    // door does not, so this turn was SENT and refused — every firing,
+    // forever, holding everything behind it.
+    const thin = join(project, "thin.jsonl");
+    await writeFile(
+      thin,
+      JSON.stringify({
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: `${"   \n\t  \n".repeat(8)}` }],
+        },
+      }),
+    );
+
+    reset();
+    answer = () => ({});
+    fed({ session_id: "thin-1", cwd: project, transcript_path: thin });
+    await runMoment("turn-end", "claude");
+
+    expect(calls.filter((c) => c.path.includes("ingest"))).toHaveLength(0);
   });
 });
