@@ -152,14 +152,24 @@ export async function agentKeyForProject(
   );
   const held: AgentKey[] = [];
   for (const k of entries) if ((await real(k.project)) === at) held.push(k);
-  if (agentName) {
-    const forAgent = held.filter((k) => k.agent?.toLowerCase() === agentName.toLowerCase());
+  const target = agentName ?? process.env.MEMCELL_AGENT;
+  if (target) {
+    const forAgent = held.filter((k) => k.agent?.toLowerCase() === target.toLowerCase());
     if (forAgent.length > 0) return forAgent[forAgent.length - 1]!;
     const generic = held.filter((k) => !k.agent);
     if (generic.length > 0) return generic[generic.length - 1]!;
     return null;
   }
-  return held[held.length - 1] ?? null;
+  const generic = held.find((k) => !k.agent);
+  if (generic) return generic;
+  const antigravity = held.find((k) => k.agent?.toLowerCase() === "antigravity");
+  if (
+    antigravity &&
+    (process.env.GEMINI_CLI || process.env.ANTIGRAVITY_AGENT || process.env.AGENT_NAME === "antigravity")
+  ) {
+    return antigravity;
+  }
+  return held[0] ?? null;
 }
 
 /** Every key this machine holds — what `reset` has to be able to describe

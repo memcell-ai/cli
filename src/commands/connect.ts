@@ -81,7 +81,7 @@ export async function connect(
       }
       exchanged = await call<Exchanged>(instance, "/api/v1/connect", {
         method: "POST",
-        body: { ...identity, space: space || undefined },
+        body: { ...identity, space: space || undefined, preferredSpace: here },
       });
     }
   } catch (error) {
@@ -194,6 +194,12 @@ export async function connect(
       [good("skill")],
       [place(".agents/skills/memcell")],
       [label("teaches any agent the four doors")],
+    ),
+    row(
+      1,
+      [good("workbench")],
+      [place(`${instance}/home?space=${exchanged.space.slug}`)],
+      [label("view your space in the browser")],
     ),
     !onPath &&
       row(

@@ -40,8 +40,16 @@ interface Stats {
    *  zero against nothing judged is the loop not running, zero against
    *  everything judged is the loop running on material that showed neither. */
   judged: Pulse;
-  /** What the three came to, in tokens, and the three it is made of. */
-  saved: Pulse & { from: { stopped: number; followed: number; repeated: number } };
+  /** What the figures came to, in tokens, and what it is made of. */
+  saved: Pulse & {
+    from: {
+      stopped: number;
+      followed: number;
+      repeated: number;
+      recalls?: number;
+      deadEnds?: number;
+    };
+  };
 }
 
 /** Scaled across the series' own range rather than against zero: a week that
@@ -83,8 +91,16 @@ const figure = (name: string, pulse: Pulse, says: (n: number) => string) =>
 /** What the figure is made of, largest first and with the empty ones left
  *  out. A term at nothing still reads as a term, and it goes in front of the
  *  one carrying the number as often as not. */
-function madeOf(from: { stopped: number; followed: number; repeated: number }): string {
+function madeOf(from: {
+  stopped: number;
+  followed: number;
+  repeated: number;
+  recalls?: number;
+  deadEnds?: number;
+}): string {
   const parts = [
+    { n: from.recalls ?? 0, says: "recalls" },
+    { n: from.deadEnds ?? 0, says: "guarded" },
     { n: from.followed, says: "followed" },
     { n: from.stopped, says: "stopped" },
   ]

@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { hostname } from "node:os";
+import { basename } from "node:path";
 
 import { call, type MemcellError } from "./client.js";
 import { saveCredential } from "./instance.js";
@@ -10,7 +12,13 @@ import { bad, cmd, label, place, row, say, value, variant, warn, badge } from ".
 // this machine can spend. `login` is this and a report; bare `connect` is
 // this and then the key.
 
-const CLIENT_ID = "memcell-cli";
+function resolveClientId(): string {
+  try {
+    return `memcell-cli · ${basename(process.cwd())} (${hostname()})`;
+  } catch {
+    return "memcell-cli";
+  }
+}
 
 interface Grant {
   device_code: string;
@@ -90,12 +98,13 @@ export async function deviceGrant(
   instance: string,
   options: { noBrowser?: boolean; retry: string },
 ): Promise<boolean> {
+  const clientId = resolveClientId();
   let grant: Grant;
   try {
     grant = await call<Grant>(instance, "/api/auth/device/code", {
       method: "POST",
       anonymous: true,
-      body: { client_id: CLIENT_ID, scope: "memory" },
+      body: { client_id: clientId, scope: "memory" },
     });
   } catch (error) {
     say(
@@ -150,7 +159,7 @@ export async function deviceGrant(
         body: {
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
           device_code: grant.device_code,
-          client_id: CLIENT_ID,
+          client_id: clientId,
         },
       });
 

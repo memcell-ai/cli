@@ -293,12 +293,39 @@ export const antigravity: Adapter = {
 
       if (!role) return;
       const text = typeof rec.content === "string" ? rec.content : "";
-      if (text.trim()) said.push(`${role}: ${text.trim()}`);
+      if (!text.trim()) return;
+
+      if (role === "assistant") {
+        const sanitized = sanitizeAssistantText(text);
+        if (sanitized) said.push(`assistant: ${sanitized}`);
+      } else {
+        said.push(`user: ${text.trim()}`);
+      }
     });
 
     return { text: said.join("\n\n"), touched: touched.slice(0, TOUCHED_CAP), read };
   },
 };
+
+/**
+ * Sanitizes assistant text to prevent AST/code-block dumps and huge internal monologues
+ * from overwhelming the distillation stage.
+ */
+function sanitizeAssistantText(raw: string): string {
+  // Replace large code blocks (>200 chars) with a brief placeholder so code syntax isn't mined as memory
+  const strippedCode = raw.replace(/```[\s\S]*?```/g, (match) => {
+    if (match.length > 200) {
+      return "[code snippet omitted]";
+    }
+    return match;
+  });
+
+  const trimmed = strippedCode.trim();
+  if (trimmed.length > 3000) {
+    return trimmed.slice(0, 1500) + "\n\n[...]\n\n" + trimmed.slice(-1500);
+  }
+  return trimmed;
+}
 
 export const SURFACE: Surface = {
   moments: {
