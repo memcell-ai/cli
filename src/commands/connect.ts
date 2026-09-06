@@ -10,7 +10,7 @@ import { currentAgent, detected } from "../agents.js";
 import { call, MemcellError, whoami } from "../client.js";
 import { deviceGrant } from "../grant.js";
 import { credentialFor } from "../instance.js";
-import { saveAgentKey } from "../keyring.js";
+import { pruneProjectKeys, saveAgentKey } from "../keyring.js";
 import { machineFile } from "../machine.js";
 import { saveProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, value, viaNpx, warn } from "../ui.js";
@@ -112,6 +112,7 @@ export async function connect(
     space: exchanged.space.slug,
     spaceId: exchanged.space.id,
   });
+  await pruneProjectKeys(instance, process.cwd());
   await saveAgentKey({
     instance,
     keyId: exchanged.keyId,

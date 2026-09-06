@@ -15,7 +15,7 @@ vi.mock("node:os", async (original) => ({
   homedir: () => home,
 }));
 
-const { agentKeyForProject, saveAgentKey } = await import("../src/keyring.js");
+const { agentKeyForProject, agentKeys, pruneProjectKeys, saveAgentKey } = await import("../src/keyring.js");
 
 describe("finding the pairing by directory", () => {
   it("matches instance + project, and the newest pairing wins", async () => {
@@ -44,6 +44,125 @@ describe("finding the pairing by directory", () => {
     const held = await agentKeyForProject("http://a.test", proj);
     expect(held?.keyId).toBe("k_new");
     expect(held?.agentId).toBe("agent-new");
+  });
+
+  it("supersedes previous key for the same agent in the same project", async () => {
+    const proj = await mkdtemp(join(tmpdir(), "memcell-keyring-supersede-"));
+    await saveAgentKey({
+      instance: "http://c.test",
+      keyId: "k_v1",
+      key: "mc_v1",
+      project: proj,
+      agent: "claude",
+    });
+    await saveAgentKey({
+      instance: "http://c.test",
+      keyId: "k_v2",
+      key: "mc_v2",
+      project: proj,
+      agent: "claude",
+    });
+
+    const all = await agentKeys();
+    const claudeKeys = all.filter(
+      (k) => k.instance === "http://c.test" && k.agent === "claude",
+    );
+    expect(claudeKeys).toHaveLength(1);
+    expect(claudeKeys[0]?.keyId).toBe("k_v2");
+  });
+
+  it("prunes all keys for a project on a given instance", async () => {
+    const proj = await mkdtemp(join(tmpdir(), "memcell-keyring-prune-"));
+    await saveAgentKey({
+      instance: "http://d.test",
+      keyId: "k_claude",
+      key: "mc_1",
+      project: proj,
+      agent: "claude",
+    });
+    await saveAgentKey({
+      instance: "http://d.test",
+      keyId: "k_antigravity",
+      key: "mc_2",
+      project: proj,
+      agent: "antigravity",
+    });
+
+    const prunedCount = await pruneProjectKeys("http://d.test", proj);
+    expect(prunedCount).toBe(2);
+
+    expect(await agentKeyForProject("http://d.test", proj, "claude")).toBeNull();
+    expect(await agentKeyForProject("http://d.test", proj, "antigravity")).toBeNull();
+  });
+
+  it("supersedes keys case-insensitively for the same agent name", async () => {
+    const proj = await mkdtemp(join(tmpdir(), "memcell-keyring-case-"));
+    await saveAgentKey({
+      instance: "http://case.test",
+      keyId: "k_upper",
+      key: "mc_upper",
+      project: proj,
+      agent: "Claude",
+    });
+    await saveAgentKey({
+      instance: "http://case.test",
+      keyId: "k_lower",
+      key: "mc_lower",
+      project: proj,
+      agent: "claude",
+    });
+
+    const all = await agentKeys();
+    const matches = all.filter(
+      (k) => k.instance === "http://case.test" && k.agent?.toLowerCase() === "claude",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.keyId).toBe("k_lower");
+  });
+
+  it("pruneProjectKeys strictly isolates the target project without touching others", async () => {
+    const projA = await mkdtemp(join(tmpdir(), "memcell-keyring-isoA-"));
+    const projB = await mkdtemp(join(tmpdir(), "memcell-keyring-isoB-"));
+
+    await saveAgentKey({
+      instance: "http://iso.test",
+      keyId: "k_projA",
+      key: "mc_A",
+      project: projA,
+      agent: "claude",
+    });
+    await saveAgentKey({
+      instance: "http://iso.test",
+      keyId: "k_projB",
+      key: "mc_B",
+      project: projB,
+      agent: "claude",
+    });
+
+    await pruneProjectKeys("http://iso.test", projA);
+
+    // projA must be gone
+    expect(await agentKeyForProject("http://iso.test", projA, "claude")).toBeNull();
+    // projB must remain intact
+    expect((await agentKeyForProject("http://iso.test", projB, "claude"))?.keyId).toBe("k_projB");
+  });
+
+  it("agentKeyForProject does not leak another agent's key when a specific agent is requested", async () => {
+    const proj = await mkdtemp(join(tmpdir(), "memcell-keyring-specific-"));
+    await saveAgentKey({
+      instance: "http://spec.test",
+      keyId: "k_antigravity",
+      key: "mc_ag",
+      project: proj,
+      agent: "antigravity",
+    });
+
+    // Requesting claude when only antigravity is paired must return null, not antigravity's key
+    expect(await agentKeyForProject("http://spec.test", proj, "claude")).toBeNull();
+    // Requesting antigravity returns antigravity
+    expect((await agentKeyForProject("http://spec.test", proj, "antigravity"))?.keyId).toBe(
+      "k_antigravity",
+    );
   });
 
   it("a trailing slash is the same instance", async () => {
