@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0](https://github.com/memcell-ai/cli/compare/memcell-v0.5.0...memcell-v0.6.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **commands:** `--instance` is removed. Use `--url`.
+
+### Features
+
+* **adapters:** wire antigravity, cline, goose and windsurf ([a017d25](https://github.com/memcell-ai/cli/commit/a017d2588370476d3c10779706f18c47029dba41))
+
+
+### Code Refactoring
+
+* **commands:** every command that reaches an instance takes --url ([#17](https://github.com/memcell-ai/cli/issues/17)) ([9b184e0](https://github.com/memcell-ai/cli/commit/9b184e04a68e33a85414cff8bbca2f9183296e9a))
+
 ## [0.5.0](https://github.com/memcell-ai/cli/compare/memcell-v0.4.0...memcell-v0.5.0) (2026-08-24)
 
 
