@@ -59,14 +59,72 @@ async function write(store: Store): Promise<void> {
   await chmod(file(), 0o600);
 }
 
+/**
+ * Prunes prior keys for a specific project directory and instance.
+ *
+ * When reconnecting, the server revokes/supersedes prior keys for that machine/agent.
+ * Pruning matching entries ensures the keyring does not hold dead keys that cause
+ * random 401s or agent disconnections.
+ */
+export async function pruneProjectKeys(
+  instance: string,
+  projectDir: string,
+  agentName?: string,
+): Promise<number> {
+  const store = await read();
+  if (!store.keys) return 0;
+
+  const real = (p: string) => realpath(resolve(p)).catch(() => resolve(p));
+  const at = await real(projectDir);
+  const wanted = instance.replace(/\/+$/, "");
+
+  const remaining: Record<string, AgentKey> = {};
+  let pruned = 0;
+
+  for (const [h, keyEntry] of Object.entries(store.keys)) {
+    const isSameInstance = keyEntry.instance.replace(/\/+$/, "") === wanted;
+    const isSameProject = (await real(keyEntry.project)) === at;
+    const isSameAgent = agentName
+      ? keyEntry.agent?.toLowerCase() === agentName.toLowerCase()
+      : true;
+
+    if (isSameInstance && isSameProject && isSameAgent) {
+      pruned++;
+    } else {
+      remaining[h] = keyEntry;
+    }
+  }
+
+  if (pruned > 0) {
+    await write({ keys: remaining });
+  }
+  return pruned;
+}
+
 export async function saveAgentKey(entry: AgentKey): Promise<void> {
   const store = await read();
-  await write({
-    keys: {
-      ...store.keys,
-      [handle(entry.instance, entry.keyId)]: { ...entry, project: resolve(entry.project) },
-    },
-  });
+  const real = (p: string) => realpath(resolve(p)).catch(() => resolve(p));
+  const targetProject = await real(entry.project);
+  const targetInstance = entry.instance.replace(/\/+$/, "");
+  const targetAgent = entry.agent?.toLowerCase();
+
+  const cleaned: Record<string, AgentKey> = {};
+
+  for (const [h, k] of Object.entries(store.keys ?? {})) {
+    const isSameInstance = k.instance.replace(/\/+$/, "") === targetInstance;
+    const isSameProject = (await real(k.project)) === targetProject;
+    const isSameAgent =
+      targetAgent !== undefined ? k.agent?.toLowerCase() === targetAgent : k.agent === undefined;
+
+    if (isSameInstance && isSameProject && isSameAgent) {
+      // Supersede prior key for this exact agent in this project
+      continue;
+    }
+    cleaned[h] = k;
+  }
+
+  cleaned[handle(entry.instance, entry.keyId)] = { ...entry, project: resolve(entry.project) };
+  await write({ keys: cleaned });
 }
 
 export async function agentKeyFor(instance: string, keyId: string): Promise<AgentKey | null> {
@@ -97,6 +155,9 @@ export async function agentKeyForProject(
   if (agentName) {
     const forAgent = held.filter((k) => k.agent?.toLowerCase() === agentName.toLowerCase());
     if (forAgent.length > 0) return forAgent[forAgent.length - 1]!;
+    const generic = held.filter((k) => !k.agent);
+    if (generic.length > 0) return generic[generic.length - 1]!;
+    return null;
   }
   return held[held.length - 1] ?? null;
 }
