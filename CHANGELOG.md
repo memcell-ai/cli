@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/memcell-ai/cli/compare/memcell-v0.6.1...memcell-v0.6.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* **keyring:** prune stale keys on connect and isolate agent resolution ([#21](https://github.com/memcell-ai/cli/issues/21)) ([c10c707](https://github.com/memcell-ai/cli/commit/c10c707050cd8c14ca9e58636075a5fbfc79396f))
+
 ## [0.6.1](https://github.com/memcell-ai/cli/compare/memcell-v0.6.0...memcell-v0.6.1) (2026-09-06)
 
 
