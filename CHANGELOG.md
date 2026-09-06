@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/memcell-ai/cli/compare/memcell-v0.6.2...memcell-v0.7.0) (2026-09-06)
+
+
+### Features
+
+* **keyring:** harden ambient agent resolution and sanitize assistant prompts ([72248e4](https://github.com/memcell-ai/cli/commit/72248e4d3546a73c8eb82b61b5eb190703075d22))
+
 ## [0.6.2](https://github.com/memcell-ai/cli/compare/memcell-v0.6.1...memcell-v0.6.2) (2026-09-06)
 
 
