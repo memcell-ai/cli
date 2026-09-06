@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/memcell-ai/cli/compare/memcell-v0.6.0...memcell-v0.6.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* **stats:** describe what the command now prints ([#19](https://github.com/memcell-ai/cli/issues/19)) ([d0c96be](https://github.com/memcell-ai/cli/commit/d0c96be358dacaec119a014a972866dd6b927b33))
+
 ## [0.6.0](https://github.com/memcell-ai/cli/compare/memcell-v0.5.0...memcell-v0.6.0) (2026-09-06)
 
 
