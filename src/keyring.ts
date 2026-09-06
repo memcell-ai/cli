@@ -165,7 +165,9 @@ export async function agentKeyForProject(
   const antigravity = held.find((k) => k.agent?.toLowerCase() === "antigravity");
   if (
     antigravity &&
-    (process.env.GEMINI_CLI || process.env.ANTIGRAVITY_AGENT || process.env.AGENT_NAME === "antigravity")
+    (process.env.GEMINI_CLI ||
+      process.env.ANTIGRAVITY_AGENT ||
+      process.env.AGENT_NAME === "antigravity")
   ) {
     return antigravity;
   }
