@@ -169,7 +169,7 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["stats"],
-    what: "what the window did — recalls, dead ends, the commons",
+    what: "what your agents did, and what it saved in tokens not spent",
     takes: ["url"],
     run: ({ instance }) => stats(instance),
   },
