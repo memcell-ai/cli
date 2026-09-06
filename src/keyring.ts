@@ -114,9 +114,7 @@ export async function saveAgentKey(entry: AgentKey): Promise<void> {
     const isSameInstance = k.instance.replace(/\/+$/, "") === targetInstance;
     const isSameProject = (await real(k.project)) === targetProject;
     const isSameAgent =
-      targetAgent !== undefined
-        ? k.agent?.toLowerCase() === targetAgent
-        : k.agent === undefined;
+      targetAgent !== undefined ? k.agent?.toLowerCase() === targetAgent : k.agent === undefined;
 
     if (isSameInstance && isSameProject && isSameAgent) {
       // Supersede prior key for this exact agent in this project

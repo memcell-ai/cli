@@ -15,7 +15,8 @@ vi.mock("node:os", async (original) => ({
   homedir: () => home,
 }));
 
-const { agentKeyForProject, agentKeys, pruneProjectKeys, saveAgentKey } = await import("../src/keyring.js");
+const { agentKeyForProject, agentKeys, pruneProjectKeys, saveAgentKey } =
+  await import("../src/keyring.js");
 
 describe("finding the pairing by directory", () => {
   it("matches instance + project, and the newest pairing wins", async () => {
@@ -64,9 +65,7 @@ describe("finding the pairing by directory", () => {
     });
 
     const all = await agentKeys();
-    const claudeKeys = all.filter(
-      (k) => k.instance === "http://c.test" && k.agent === "claude",
-    );
+    const claudeKeys = all.filter((k) => k.instance === "http://c.test" && k.agent === "claude");
     expect(claudeKeys).toHaveLength(1);
     expect(claudeKeys[0]?.keyId).toBe("k_v2");
   });
