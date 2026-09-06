@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { MemcellError, agentStanding, whoami } from "../client.js";
 import { agentKeyForProject } from "../keyring.js";
-import { credentialFor, DEFAULT_INSTANCE, knownInstances, whereInstance } from "../instance.js";
+import { credentialFor, DEFAULT_INSTANCE, knownInstances } from "../instance.js";
 import { findProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, time, value, variant, warn } from "../ui.js";
 
@@ -15,14 +15,10 @@ import { badge, cmd, good, label, place, row, say, time, value, variant, warn } 
 // after `login`, and a status that showed only the first would leave
 // somebody wondering why their agents file nowhere.
 
-export async function status(instance: string): Promise<number> {
+export async function status(instance: string, from: string): Promise<number> {
   const credential = await credentialFor(instance);
   const hosted = instance === DEFAULT_INSTANCE;
   const found = await findProject();
-  // Where this points is a setting now, so status says what decided it —
-  // "why am I talking to that one" should never need a support question.
-  const { from } = await whereInstance();
-
   // Where the directory points wins over where the flags do: standing in a
   // linked project and being told about a different memcell is the reading
   // that sends somebody debugging the wrong instance.

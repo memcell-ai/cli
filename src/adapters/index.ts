@@ -1,4 +1,5 @@
 import { claude } from "./claude.js";
+import { antigravity } from "./antigravity.js";
 import { removeSkill } from "./skill.js";
 import { codex } from "./codex.js";
 import { copilot } from "./copilot.js";
@@ -12,6 +13,9 @@ import { muse } from "./muse.js";
 import { kilo, opencode } from "./opencode.js";
 import { openclaw } from "./openclaw.js";
 import { qwen } from "./qwen.js";
+import { windsurf } from "./windsurf.js";
+import { goose } from "./goose.js";
+import { cline } from "./cline.js";
 import type { Adapter } from "./shared.js";
 
 /** Every agent whose hooks memcell can write. An agent in the catalogue
@@ -19,6 +23,7 @@ import type { Adapter } from "./shared.js";
  *  which `connect` says rather than pretending otherwise. */
 const BY_NAME: Record<string, Adapter> = {
   claude: claude,
+  antigravity: antigravity,
   gemini: gemini,
   codex: codex,
   copilot: copilot,
@@ -32,6 +37,9 @@ const BY_NAME: Record<string, Adapter> = {
   devin: devin,
   openclaw: openclaw,
   kiro: kiro,
+  windsurf: windsurf,
+  goose: goose,
+  cline: cline,
 };
 
 export const adapterFor = (name: string): Adapter | undefined => BY_NAME[name];

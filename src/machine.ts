@@ -50,4 +50,5 @@ export const MACHINE_STATE: readonly { path: string; what: string; then?: string
   },
   { path: "sessions", what: "what the hooks have seen this session" },
   { path: "hook.log", what: "the log of every hook firing" },
+  { path: "last-project", what: "the most recently connected project path" },
 ] as const;

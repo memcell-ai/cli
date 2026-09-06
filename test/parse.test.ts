@@ -16,14 +16,14 @@ import type { Command } from "../src/model.js";
 const noop = async () => 0;
 
 const COMMANDS: Command[] = [
-  { path: ["login"], what: "sign in", takes: ["instance", "force"], run: noop },
-  { path: ["wire"], what: "wire", takes: ["instance", "reason"], run: noop },
-  { path: ["spaces", "ls"], what: "list", takes: ["instance"], run: noop },
+  { path: ["login"], what: "sign in", takes: ["url", "force"], run: noop },
+  { path: ["wire"], what: "wire", takes: ["url", "reason"], run: noop },
+  { path: ["spaces", "ls"], what: "list", takes: ["url"], run: noop },
   {
     path: ["spaces", "use"],
     what: "switch",
     args: [{ name: "slug", required: true, what: "from the list" }],
-    takes: ["instance"],
+    takes: ["url"],
     run: noop,
   },
   {

@@ -20,6 +20,7 @@ export interface Agent {
 
 export const AGENTS: Agent[] = [
   { name: "claude", label: "claude code", home: ".claude" },
+  { name: "antigravity", label: "google antigravity", home: join(".gemini", "antigravity") },
   { name: "gemini", label: "gemini", home: ".gemini" },
   { name: "codex", label: "codex", home: ".codex" },
   { name: "copilot", label: "copilot", home: ".copilot" },
@@ -33,6 +34,9 @@ export const AGENTS: Agent[] = [
   { name: "devin", label: "devin", home: join(".config", "devin") },
   { name: "openclaw", label: "openclaw", home: ".openclaw" },
   { name: "kiro", label: "kiro", home: ".kiro" },
+  { name: "windsurf", label: "windsurf cascade", home: join(".codeium", "windsurf") },
+  { name: "goose", label: "goose", home: join(".config", "goose") },
+  { name: "cline", label: "cline", home: ".cline" },
 ];
 
 export const agentNamed = (name: string): Agent | undefined =>
@@ -49,5 +53,67 @@ export async function detected(): Promise<Set<string>> {
     );
     if (there) found.add(agent.name);
   }
+  if (!found.has("antigravity")) {
+    const cliThere = await access(join(homedir(), ".gemini", "antigravity-cli")).then(
+      () => true,
+      () => false,
+    );
+    if (cliThere) found.add("antigravity");
+  }
+  if (!found.has("windsurf")) {
+    const wsThere = await access(join(homedir(), ".windsurf")).then(
+      () => true,
+      () => false,
+    );
+    if (wsThere) found.add("windsurf");
+  }
+  if (found.has("antigravity") && found.has("gemini")) {
+    const hasGeminiSettings = await access(join(homedir(), ".gemini", "settings.json")).then(
+      () => true,
+      () => false,
+    );
+    if (!hasGeminiSettings) {
+      found.delete("gemini");
+    }
+  }
   return found;
+}
+
+/**
+ * Which agent environment this process is currently running inside, if any.
+ *
+ * Detected via environment variables set by the agent harnesses or IDEs.
+ */
+export function currentAgent(): string | undefined {
+  const env = process.env;
+  if (
+    env.ANTIGRAVITY_AGENT === "true" ||
+    env.ANTIGRAVITY_CONVERSATION_ID ||
+    env.ANTIGRAVITY_PROJECT_ID ||
+    env.ANTIGRAVITY_AGENTAPI_EXE
+  ) {
+    return "antigravity";
+  }
+  if (env.CLAUDE_PROJECT_DIR || env.CLAUDECODE || env.CLAUDE_AGENT) {
+    return "claude";
+  }
+  if (env.CURSOR_AGENT || env.CURSOR_TRACE_ID) {
+    return "cursor";
+  }
+  if (env.WINDSURF_AGENT) {
+    return "windsurf";
+  }
+  if (env.GOOSE_AGENT) {
+    return "goose";
+  }
+  if (env.CLINE_AGENT) {
+    return "cline";
+  }
+  if (env.COPILOT_AGENT || env.GITHUB_COPILOT) {
+    return "copilot";
+  }
+  if (env.GEMINI_CLI || env.GEMINI_AGENT) {
+    return "gemini";
+  }
+  return undefined;
 }

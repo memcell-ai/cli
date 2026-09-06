@@ -8,7 +8,12 @@ import { wired } from "./wired.js";
 
 const OUTCOMES = ["worked", "failed", "avoided"] as const;
 
-export async function report(statementId: string, outcome: string, note?: string): Promise<number> {
+export async function report(
+  statementId: string,
+  outcome: string,
+  note?: string,
+  url?: string,
+): Promise<number> {
   if (!(OUTCOMES as readonly string[]).includes(outcome)) {
     say(
       row(0, [badge("memcell"), label("report")]),
@@ -17,7 +22,7 @@ export async function report(statementId: string, outcome: string, note?: string
     return 1;
   }
 
-  const here = await wired("report");
+  const here = await wired("report", url);
   if (!here) return 1;
 
   try {

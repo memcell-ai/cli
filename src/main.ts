@@ -1,7 +1,7 @@
 import { migrateWiring } from "./adapters/index.js";
 import { COMMANDS } from "./commands/index.js";
 import { detail, overview, refusal } from "./help.js";
-import { badInstance, resolveInstance } from "./instance.js";
+import { badInstance, whereInstance } from "./instance.js";
 import { parse } from "./parse.js";
 import { findProject } from "./project.js";
 import { dirname } from "node:path";
@@ -33,10 +33,10 @@ export async function main(argv: string[], version: string): Promise<number> {
       return 1;
 
     case "run": {
-      const flag = parsed.flags.instance;
-      const instance = await resolveInstance(typeof flag === "string" ? flag : undefined);
+      const flag = parsed.flags.url;
+      const { instance, from } = await whereInstance(typeof flag === "string" ? flag : undefined);
 
-      // Refused here rather than carried down. A typo in `--instance` used to
+      // Refused here rather than carried down. A typo in `--url` used to
       // reach the sign-in check and come back as "not signed in", sending
       // somebody to log in to something that cannot exist. The hook is the
       // exception: it runs inside a session and never fails closed, whatever
@@ -58,6 +58,7 @@ export async function main(argv: string[], version: string): Promise<number> {
 
       return parsed.command.run({
         instance,
+        from,
         args: parsed.args,
         flags: parsed.flags,
         many: parsed.many,

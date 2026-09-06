@@ -1,8 +1,10 @@
 import { dirname } from "node:path";
 
-import { agentKeyForProject } from "../keyring.js";
+import { agentStanding } from "../client.js";
+import { agentKeyForProject, saveAgentKey } from "../keyring.js";
+import { normalize } from "../instance.js";
 import { findProject } from "../project.js";
-import { badge, cmd, label, row, say, warn } from "../ui.js";
+import { badge, cmd, label, place, row, say, warn } from "../ui.js";
 
 // What every command that acts on a space needs: the directory's wiring and
 // the key minted for it. The connection IS the credential — a wired
@@ -19,8 +21,15 @@ export interface Wired {
 }
 
 /** The wiring, or null with the refusal already printed in the command's own
- *  name. Both refusals name the one command that fixes them. */
-export async function wired(what: string): Promise<Wired | null> {
+ *  name. Every refusal names the one command that fixes it.
+ *
+ *  `url` picks WHICH of this directory's keys to act with. The store holds
+ *  one per instance, so a directory connected to a laptop's memcell and to
+ *  the hosted one holds two — and without this only the one `.memcell` names
+ *  could ever be reached. It selects among what this directory already has;
+ *  it never reaches an instance nothing here is wired to, which is what
+ *  keeps "where the directory points" the answer rather than a flag. */
+export async function wired(what: string, url?: string): Promise<Wired | null> {
   const found = await findProject(process.cwd());
   if (!found) {
     say(
@@ -30,19 +39,44 @@ export async function wired(what: string): Promise<Wired | null> {
     return null;
   }
   const root = dirname(found.at);
-  const held = await agentKeyForProject(found.project.instance, root);
+  const instance = url ? normalize(url) : found.project.instance;
+  const elsewhere = instance !== normalize(found.project.instance);
+  const held = await agentKeyForProject(instance, root);
   if (!held) {
     say(
       row(0, [badge("memcell"), label(what)]),
-      row(1, [warn(`no key for ${found.project.space}`)], [label("run"), cmd("memcell connect")]),
+      elsewhere
+        ? row(
+            1,
+            [warn(`no key here for ${instance}`)],
+            [label("wired to"), place(found.project.instance)],
+          )
+        : row(1, [warn(`no key for ${found.project.space}`)]),
+      row(1, [label("run"), cmd(`memcell connect${elsewhere ? ` --url ${instance}` : ""}`)]),
     );
     return null;
   }
-  return {
-    instance: found.project.instance,
-    space: found.project.space,
-    key: held.key,
-    agentId: held.agentId,
-    root,
-  };
+  // The key's own space, not the project file's: pointed at another
+  // instance, `.memcell` names a slug that lives somewhere else, and it goes
+  // straight into the request path.
+  let space = held.space ?? (elsewhere ? null : found.project.space);
+  if (!space) {
+    // A key minted before the store recorded a space. The instance knows —
+    // a key answers for exactly one — so ask once and keep the answer,
+    // rather than making somebody re-run connect for something already true.
+    const standing = await agentStanding(instance, held.key).catch(() => null);
+    if (standing?.space) {
+      space = standing.space;
+      await saveAgentKey({ ...held, space });
+    }
+  }
+  if (!space) {
+    say(
+      row(0, [badge("memcell"), label(what)]),
+      row(1, [warn(`the key for ${instance} does not answer for a space`)]),
+      row(1, [label("mint one that does with"), cmd(`memcell connect --url ${instance}`)]),
+    );
+    return null;
+  }
+  return { instance, space, key: held.key, agentId: held.agentId, root };
 }

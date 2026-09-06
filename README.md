@@ -34,6 +34,7 @@ memcell connect` works and will say so if the command will not survive.
 | `memcell remember`    | file one thing this project has established (`--at` when it applies) |
 | `memcell report`      | what happened when something memory served was acted on              |
 | `memcell status`      | who this machine is, and what this directory is linked to            |
+| `memcell stats`       | what your agents did, and what it saved in tokens not spent          |
 | `memcell ingest <f>`  | hand a document to this directory's memory                           |
 | `memcell import`      | bring existing instruction files into memory — bare, it finds them   |
 | `memcell export`      | carry this space out — one document, no account needed               |
@@ -75,7 +76,7 @@ Revoking a credential never forgets what the agents filed.
 
 | option         | what it does                                                          |
 | -------------- | --------------------------------------------------------------------- |
-| `--instance`   | target a self-hosted memcell; credentials are stored per instance     |
+| `--url`        | which memcell to act on, of the ones this directory is wired to       |
 | `--space`      | name which of your spaces to wire, by slug                            |
 | `--pair <id>`  | claim a pairing from the connect page instead of the in-terminal flow |
 | `--no-browser` | print the approval link instead of opening it                         |

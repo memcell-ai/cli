@@ -79,6 +79,26 @@ export type OpenSlice = (path: string, start: number) => NodeJS.ReadableStream;
 
 const openFile: OpenSlice = (path, start) => createReadStream(path, { start, encoding: "utf8" });
 
+/**
+ * The most of a record one turn will read.
+ *
+ * A backlog has to be BOUNDED, and the bound has to be here rather than at
+ * the door. A delivery the instance refuses for size rolls the offset back
+ * so the turn can be retried — correct for an outage, and a trap for a
+ * refusal the same bytes will always earn: the next read starts at the same
+ * place, reaches a now-larger end, and is refused again. Nothing recovers.
+ *
+ * Measured on 2026-08-26: one session's record reached 879 MB against a
+ * door that takes 600k characters, and capture had been wedged for two days
+ * — reading the whole file into memory each turn to be refused each turn.
+ *
+ * Generous against any real turn, and small enough that reading it costs
+ * nothing. Past it the read starts near the END: recent work is what a
+ * session is worth capturing for, and the alternative on a backlog this
+ * size is to capture nothing at all, forever.
+ */
+export const READ_CEILING = 4_000_000;
+
 export async function readJsonlSlice(
   path: string,
   from: number,
@@ -101,7 +121,16 @@ export async function readJsonlSlice(
   // Unreadable, or the file was replaced by a shorter one — start over
   // rather than seek past its end and report silence.
   if (size < 0) return from;
-  const start = from > size ? 0 : from;
+  const behind = from > size ? 0 : from;
+  // Skipping lands mid-line, which drops one entry: the parse below already
+  // tolerates that — it is the same shape as the half-written tail of a live
+  // file — and one lost line beside a skipped backlog is not the problem.
+  const start = size - behind > READ_CEILING ? size - READ_CEILING : behind;
+  if (start !== behind) {
+    await log(
+      `record is ${Math.round((size - behind) / 1e6)}MB behind — reading the last ${Math.round(READ_CEILING / 1e6)}MB and skipping the rest`,
+    );
+  }
 
   let read = start;
   await new Promise<void>((resolve, reject) => {
@@ -181,4 +210,89 @@ export function pathOf(input: Record<string, unknown> | undefined): string | und
     if (typeof value === "string" && value.length > 0) return value;
   }
   return undefined;
+}
+
+/**
+ * Extract clean prompt text from a user message content string.
+ * Unwraps <USER_REQUEST>...</USER_REQUEST> tags if present, and removes <ADDITIONAL_METADATA>.
+ */
+export function cleanUserPrompt(raw: string): string {
+  const requestMatch = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
+  if (requestMatch && requestMatch[1] && requestMatch[1].trim()) {
+    return requestMatch[1].trim();
+  }
+  return raw
+    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/gi, "")
+    .replace(/<USER_REQUEST>[\s\S]*?<\/USER_REQUEST>/gi, "")
+    .trim();
+}
+
+/**
+ * Read the most recent user prompt from a session transcript (e.g. JSONL transcript).
+ * Looks backward from the end of the file to quickly locate the latest user input.
+ */
+export async function readLatestUserPrompt(transcriptPath: string): Promise<string | null> {
+  try {
+    const info = await stat(transcriptPath).catch(() => null);
+    if (!info || info.size === 0) return null;
+
+    // Read up to the last 2MB which covers turns with multiple large tool steps
+    const CHUNK_SIZE = 2 * 1024 * 1024;
+    const start = Math.max(0, info.size - CHUNK_SIZE);
+    const stream = createReadStream(transcriptPath, { start, encoding: "utf8" });
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+    const lines: string[] = [];
+    for await (const line of rl) {
+      if (line.trim()) lines.push(line.trim());
+    }
+
+    // Inspect from newest to oldest
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line) continue;
+      if (
+        !line.includes("USER_INPUT") &&
+        !line.includes("USER_EXPLICIT") &&
+        !line.includes('"user"')
+      ) {
+        continue;
+      }
+      try {
+        const rec = JSON.parse(line) as {
+          type?: string;
+          source?: string;
+          role?: string;
+          content?: unknown;
+        };
+        const isUser =
+          rec.type === "USER_INPUT" || rec.source === "USER_EXPLICIT" || rec.role === "user";
+
+        if (isUser && rec.content) {
+          let text = "";
+          if (typeof rec.content === "string") {
+            text = rec.content;
+          } else if (Array.isArray(rec.content)) {
+            text = rec.content
+              .map((c: unknown) => {
+                if (typeof c === "string") return c;
+                if (typeof c === "object" && c !== null && "text" in c) {
+                  return String((c as { text: unknown }).text);
+                }
+                return "";
+              })
+              .join(" ");
+          }
+
+          const cleaned = cleanUserPrompt(text);
+          if (cleaned) return cleaned;
+        }
+      } catch {
+        // Skip malformed/truncated lines near chunk boundary
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

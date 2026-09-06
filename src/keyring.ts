@@ -17,9 +17,20 @@ export interface AgentKey {
   keyId: string;
   key: string;
   project: string;
+  /** The space this key answers for.
+   *
+   *  `.memcell` names ONE instance and space, so for a long time the space
+   *  could be read from there. A directory can hold keys for several
+   *  instances, though — the store is keyed by both — and the moment a
+   *  command may be pointed at one of the others, the project file names
+   *  the wrong space. Absent on keys minted before this. */
+  space?: string;
   /** The wired agent's own id — personal, like the key, so it lives here
    *  rather than in the committed project file. */
   agentId?: string;
+  /** The specific agent program name (e.g. 'antigravity', 'claude', 'cursor')
+   *  this key authenticates for. */
+  agent?: string;
 }
 
 interface Store {
@@ -70,6 +81,7 @@ export async function agentKeyFor(instance: string, keyId: string): Promise<Agen
 export async function agentKeyForProject(
   instance: string,
   projectDir: string,
+  agentName?: string,
 ): Promise<AgentKey | null> {
   // Real paths on both sides: a project under a symlinked parent (macOS's
   // /var → /private/var, a linked workspace) is one directory spelled two
@@ -82,6 +94,10 @@ export async function agentKeyForProject(
   );
   const held: AgentKey[] = [];
   for (const k of entries) if ((await real(k.project)) === at) held.push(k);
+  if (agentName) {
+    const forAgent = held.filter((k) => k.agent?.toLowerCase() === agentName.toLowerCase());
+    if (forAgent.length > 0) return forAgent[forAgent.length - 1]!;
+  }
   return held[held.length - 1] ?? null;
 }
 

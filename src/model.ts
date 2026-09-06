@@ -53,9 +53,9 @@ export interface FlagSpec {
  *  it accepts, so `--reason` on a command that ignores it is an error rather
  *  than silence. */
 export const FLAGS: Record<string, FlagSpec> = {
-  instance: {
-    name: "instance",
-    short: "i",
+  url: {
+    name: "url",
+    short: "u",
     takes: "url",
     what: "which memcell to talk to",
     env: "MEMCELL_INSTANCE",
@@ -90,10 +90,16 @@ export const FLAGS: Record<string, FlagSpec> = {
     what: "decision · convention · gotcha · dead_end · preference · fact",
   },
   note: { name: "note", takes: "text", what: "what happened, in a sentence" },
+  dir: { name: "dir", takes: "path", what: "which directory to act on" },
 };
 
 export interface Invocation {
   instance: string;
+  /** What decided `instance` — flag · env · project · global · last
+   *  connected · default. Resolved once, at the entry point: a command that
+   *  re-derives it without the flag reports the wrong reason beside the
+   *  right host. */
+  from: string;
   args: Record<string, string>;
   flags: Record<string, string | true>;
   /** Every value given for a repeatable flag or a rest argument, in order. */

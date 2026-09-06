@@ -120,8 +120,8 @@ export async function discover(root: string): Promise<string[]> {
   return found;
 }
 
-export async function importFiles(files: string[]): Promise<number> {
-  const here = await wired("import");
+export async function importFiles(files: string[], url?: string): Promise<number> {
+  const here = await wired("import", url);
   if (!here) return 1;
   const root = here.root;
 

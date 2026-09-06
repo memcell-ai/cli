@@ -18,8 +18,12 @@ import { badge, cmd, good, label, place, row, say, value, variant, warn } from "
 // two differ rather than letting somebody assume it changed both.
 
 interface Me {
-  spaces: { slug: string; name: string }[];
   activeSpace: { slug: string; name: string } | null;
+}
+
+interface SpacePage {
+  items: { slug: string; name: string }[];
+  next_cursor: string | null;
 }
 
 const needsSession = (instance: string) =>
@@ -35,8 +39,27 @@ export async function listSpaces(instance: string): Promise<number> {
   }
 
   try {
-    const me = await call<Me>(instance, "/api/v1/me");
-    if (me.spaces.length === 0) {
+    // The index, not `/me`. A person's spaces were embedded in the account
+    // and there was no collection to walk — so the only way to learn a slug
+    // was to have made it. `/api/v1/spaces` paginates; this walks it whole
+    // because a list a person reads is a list they want all of.
+    const [me, spaces] = await Promise.all([
+      call<Me>(instance, "/api/v1/me"),
+      (async () => {
+        const all: { slug: string; name: string }[] = [];
+        let cursor: string | null = null;
+        do {
+          const page: SpacePage = await call<SpacePage>(
+            instance,
+            `/api/v1/spaces?per_page=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+          );
+          all.push(...page.items);
+          cursor = page.next_cursor;
+        } while (cursor);
+        return all;
+      })(),
+    ]);
+    if (spaces.length === 0) {
       say(
         row(0, [badge("memcell"), place(instance)]),
         row(1, [label("no spaces")], [label("make one with"), cmd("memcell spaces new <name>")]),
@@ -46,8 +69,8 @@ export async function listSpaces(instance: string): Promise<number> {
 
     const here = (await findProject())?.project;
     say(
-      row(0, [badge("memcell"), place(instance)], [variant(`${me.spaces.length}`)]),
-      ...me.spaces.map((s) =>
+      row(0, [badge("memcell"), place(instance)], [variant(`${spaces.length}`)]),
+      ...spaces.map((s) =>
         row(
           1,
           [s.slug === me.activeSpace?.slug ? good(s.slug) : value(s.slug)],

@@ -7,6 +7,7 @@ import { findProject, type Project } from "../project.js";
 import { LEGS, type Moment } from "./moments.js";
 import { keepNote, dropNote, log, noteFor } from "./session.js";
 import { adapterFor } from "../adapters/index.js";
+import { readLatestUserPrompt } from "../adapters/capture.js";
 
 // What an installed hook executes — the loop, fired by the harness rather
 // than chosen by the model.
@@ -60,6 +61,8 @@ interface Incoming {
   toolName?: string;
   tool_input?: Record<string, unknown>;
   toolInput?: Record<string, unknown>;
+  /** Protojson tool call structure sent by Antigravity and Vertex AI agents */
+  toolCall?: { name?: string; args?: Record<string, unknown> };
 }
 
 async function incoming(): Promise<Incoming> {
@@ -68,7 +71,22 @@ async function incoming(): Promise<Incoming> {
     const chunks: Buffer[] = [];
     for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
     const text = Buffer.concat(chunks).toString("utf8").trim();
-    return text ? (JSON.parse(text) as Incoming) : {};
+    if (!text) return {};
+    const raw = JSON.parse(text) as Incoming & {
+      conversationId?: string;
+      conversation_id?: string;
+      workspacePaths?: string[];
+    };
+    raw.sessionId ??= raw.conversationId;
+    raw.session_id ??= raw.conversation_id;
+    if (raw.workspacePaths && raw.workspacePaths.length > 0 && !raw.cwd) {
+      raw.cwd = raw.workspacePaths[0];
+    }
+    if (raw.toolCall) {
+      raw.tool_name ??= raw.toolCall.name;
+      raw.tool_input ??= raw.toolCall.args;
+    }
+    return raw;
   } catch {
     return {};
   }
@@ -83,13 +101,13 @@ async function incoming(): Promise<Incoming> {
 type Standing =
   { ok: true; project: Project; key: string; agentId?: string } | { ok: false; why: string };
 
-async function standing(cwd?: string): Promise<Standing> {
+async function standing(cwd?: string, program?: string): Promise<Standing> {
   const found = await findProject(cwd ?? process.cwd());
   if (!found) return { ok: false, why: "not wired · run memcell connect" };
 
-  // Identity is the keyring's, found by the wired directory — the project
-  // file names the memory, never the person.
-  const held = await agentKeyForProject(found.project.instance, dirname(found.at));
+  // Identity is the keyring's, found by the wired directory and program —
+  // the project file names the memory, never the person.
+  const held = await agentKeyForProject(found.project.instance, dirname(found.at), program);
   if (!held) {
     return { ok: false, why: `no key for ${found.project.space} · run memcell connect` };
   }
@@ -105,7 +123,13 @@ async function standing(cwd?: string): Promise<Standing> {
  *  are different facts. Conflating them made a misconfigured instance read
  *  as an honest zero for a whole working day. */
 type Answered<T> =
-  { at: "answered"; status: number; body: T } | { at: "refused"; status: number } | null;
+  | { at: "answered"; status: number; body: T }
+  /** `said` is the door's own sentence about the refusal, when it sent one.
+   *  A 4xx is the caller's fault and the instance always says what is wrong;
+   *  this used to be dropped here, so nine days of a capture leg refusing
+   *  the same turn logged a bare status and nothing else. */
+  | { at: "refused"; status: number; said?: string }
+  | null;
 
 /** One call to a loop door. Null when the instance was never reached. */
 async function door<T>(
@@ -158,7 +182,20 @@ async function door<T>(
         body: JSON.stringify(body),
         signal: stop.signal,
       });
-      if (!response.ok) return { at: "refused", status: response.status };
+      if (!response.ok) {
+        // Read once, defensively: a refusal that is not JSON must not turn a
+        // refusal into an unreachable instance, which is a different fault
+        // with a different fix.
+        const said = await response
+          .json()
+          .then((b) => (b as { message?: unknown }).message)
+          .catch(() => undefined);
+        return {
+          at: "refused",
+          status: response.status,
+          ...(typeof said === "string" && said.trim() ? { said: said.trim() } : {}),
+        };
+      }
       return { at: "answered", status: response.status, body: (await response.json()) as T };
     } catch {
       if (attempt === 2) return null;
@@ -170,10 +207,38 @@ async function door<T>(
 }
 
 /** The failure, in the log's words. */
+/**
+ * The most one hand-over may carry, mirroring the door's own ceiling.
+ *
+ * Declared here rather than discovered: the door refuses a larger delivery
+ * with a 400, and a client that only learns its limit by being refused
+ * spends a turn's work to find it out. Kept a little under the door's
+ * 600k so a delivery is never refused for a rounding difference.
+ *
+ * The TAIL is what ships. A turn long enough to hit this is one where the
+ * end is the conclusion and the start is the search that got there.
+ */
+const MAX_HANDOVER_CHARS = 560_000;
+
+/** Will the same bytes earn the same refusal? Then holding them is not a
+ *  retry, it is a loop: the next read starts where this one did, reaches a
+ *  larger end, and is refused again. Only a refusal the CONTENT caused
+ *  behaves that way — an outage, a spent budget or a revoked key are all
+ *  worth waiting on. */
+const refusedForGood = (status: number): boolean =>
+  status === 400 || status === 413 || status === 422;
+
 function doorTrouble(answer: Answered<unknown>): string {
-  return answer?.at === "refused"
-    ? `the instance answered ${answer.status}`
-    : "the instance could not be reached";
+  if (answer?.at !== "refused") return "the instance could not be reached";
+  // The REASON, not just the number.
+  //
+  // A 4xx is the caller's fault and the door says exactly what is wrong in
+  // the body — and this threw that away. So a capture leg refusing the same
+  // turn every firing for nine days logged "the instance answered 400" 204
+  // times and nobody could tell from the log what to fix.
+  return answer.said
+    ? `the instance answered ${answer.status} — ${answer.said}`
+    : `the instance answered ${answer.status}`;
 }
 
 interface Recalled {
@@ -233,8 +298,21 @@ export interface HookResult {
 
 export async function runMoment(moment: Moment, program: string): Promise<HookResult> {
   const payload = await incoming();
+  const transcriptPath = payload.transcript_path ?? payload.transcriptPath;
+  if (
+    moment === "prompt-submit" &&
+    !payload.prompt &&
+    !payload.transformedPrompt &&
+    transcriptPath
+  ) {
+    const latest = await readLatestUserPrompt(transcriptPath);
+    if (latest) {
+      payload.prompt = latest;
+    }
+  }
   const heard = { prompt: payload.prompt, transformedPrompt: payload.transformedPrompt };
-  const here = await standing(payload.cwd);
+  const here = await standing(payload.cwd, program);
+
   // Every log line opens with this: moment, program, and the agent id, so a
   // firing can be correlated to one wired agent when reading the log back.
   const agentId = here.ok ? here.agentId : undefined;
@@ -269,6 +347,24 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
   const legs = LEGS[moment];
   const result: HookResult = { heard };
 
+  // Every path out of `before-act` returns from here, and the note is kept at
+  // the BOTTOM of this function — so all six of those returns skipped it.
+  //
+  // The leg wrote `note.servedAt` in memory and the process exited without
+  // saving it, on every act, in every session, since the pairing was
+  // introduced. Which rule was put in front of which act is the one fact
+  // only this leg sees; the instance cannot infer it from the transcript,
+  // and that is the whole reason it is recorded here. Lost on exit, no
+  // `rule_act` row was ever written: a memory whose rules fired every turn
+  // read as one whose rules had never fired at all.
+  //
+  // The note is now kept on the way out. `keepNote` is best-effort and
+  // never throws — a hook that dies takes the user's turn with it.
+  const leaving = async (r: HookResult): Promise<HookResult> => {
+    await keepNote(sessionId, note);
+    return r;
+  };
+
   // ── before an act ─────────────────────────────────────────────────────
   //
   // A rule read at the top of a session and needed forty steps later is a
@@ -283,11 +379,11 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
   if (moment === "before-act") {
     const tool = payload.tool_name ?? payload.toolName ?? "";
     const guard = adapterFor(program)?.surface?.guard;
-    if (!tool || !guard || !can(guard)) return result;
+    if (!tool || !guard || !can(guard)) return leaving(result);
     const act = actOf(tool, payload.tool_input ?? payload.toolInput, guard);
-    if (!act) return result;
+    if (!act) return leaving(result);
     const bears = (note.standing ?? []).filter((r) => r.appliesAt.includes(act));
-    if (bears.length === 0) return result;
+    if (bears.length === 0) return leaving(result);
     // A rule somebody asked to STOP this act. Said every time, never once
     // per session: a wall that only stands the first time is not a wall.
     // What was put in front of what, recorded as a FACT. The judge is asked
@@ -314,21 +410,21 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     if (stops.length > 0) {
       result.refuse = stops.map((r) => r.text).join(" · ");
       await log(`${tag} · before-act · ${tool} is ${act} · refused · ${result.refuse}`);
-      return result;
+      return leaving(result);
     }
 
     // Said once per act-class per session. The same rule in front of every
     // one of forty shell commands is noise, and noise is what gets a hook
     // uninstalled.
     const said = `said:${act}`;
-    if (note.fired[said]) return result;
+    if (note.fired[said]) return leaving(result);
     note.fired[said] = Date.now();
     result.context = [
       `memcell — standing here, for what you are about to do:`,
       ...bears.map((r) => `· ${r.text}`),
     ].join("\n");
     await log(`${tag} · before-act · ${tool} is ${act} · ${bears.length} said`);
-    return result;
+    return leaving(result);
   }
 
   // ── recall ────────────────────────────────────────────────────────────
@@ -425,9 +521,18 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     // down as already handed over. The session then never captures again.
     // A reader is not trusted to keep that invariant on its own; it is
     // checked here, where the name is made.
-    if (material.text.length >= 20 && !advanced) {
+    // TRIMMED, because that is what the door measures.
+    //
+    // This read the raw length and the instance reads `raw.trim().length`,
+    // so a turn whose delta is mostly whitespace passed here and was refused
+    // there — and a refused turn is HELD and retried, so the same material
+    // came back every firing and nothing behind it could land either. 204
+    // refusals across nine days, all of them this.
+    const enough = material.text.trim().length >= 20;
+
+    if (enough && !advanced) {
       await log(`${tag} · remember · read returned material without advancing — held back`);
-    } else if (material.text.length >= 20) {
+    } else if (enough) {
       const handed = await door<{
         created: { statementId: string }[];
         reinforced: { statementId: string }[];
@@ -440,7 +545,10 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         key,
         `spaces/${encodeURIComponent(project.space)}/ingest`,
         {
-          raw: material.text,
+          raw:
+            material.text.length > MAX_HANDOVER_CHARS
+              ? material.text.slice(-MAX_HANDOVER_CHARS)
+              : material.text,
           origin: { title: `${program} session` },
           // What was put in front of what, and before which act. The record
           // knows the pairing already; this is the half only the client saw.
@@ -485,11 +593,20 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         // this material rather than skipping it. Safe to re-deliver, because
         // the turn's name is derived from this very offset — an instance
         // that DID land it sees the same name and stands the repeat down.
-        note.read = startedAt;
+        // Held for a retry — unless retrying is what wedges it. A refusal
+        // the content earned will be earned again by the same content, and
+        // the offset going back means the next read is BIGGER: the delivery
+        // that was too large becomes larger still, forever. That ran for two
+        // days on a real machine before anyone could see it, because the log
+        // said "holding for the next firing" every single time.
+        const forGood = handed?.at === "refused" && refusedForGood(handed.status);
+        if (!forGood) note.read = startedAt;
         await log(
-          handed?.at === "refused"
-            ? `${tag} · remember · ${doorTrouble(handed)} — not captured, holding this turn for the next firing`
-            : `${tag} · remember · ${doorTrouble(handed)} — no answer, holding this turn for the next firing`,
+          forGood
+            ? `${tag} · remember · ${doorTrouble(handed as Answered<unknown>)} — this turn was refused and is not worth re-sending; moving past it`
+            : handed?.at === "refused"
+              ? `${tag} · remember · ${doorTrouble(handed)} — not captured, holding this turn for the next firing`
+              : `${tag} · remember · ${doorTrouble(handed)} — no answer, holding this turn for the next firing`,
         );
       }
 
