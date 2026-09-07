@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/memcell-ai/cli/compare/memcell-v0.7.0...memcell-v0.8.0) (2026-09-07)
+
+
+### Features
+
+* **loop:** structure pre-turn memory into tiered guards and enforce syntactic triggers ([256b866](https://github.com/memcell-ai/cli/commit/256b86682b0791d51f56442ea7902a84adfcaa01))
+
 ## [0.7.0](https://github.com/memcell-ai/cli/compare/memcell-v0.6.2...memcell-v0.7.0) (2026-09-06)
 
 
