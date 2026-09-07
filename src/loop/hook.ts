@@ -246,6 +246,7 @@ interface Recalled {
   text: string;
   confidence: number;
   layer: string;
+  kind?: string;
   /** The moments this bears on — read, change, record, send, answer. Empty
    *  for knowledge, which is most of a memory. */
   appliesAt?: string[];
@@ -256,35 +257,125 @@ interface Recalled {
   refuses?: boolean;
 }
 
+/** A statement is treated as an operational guard if the memory flagged it as
+ *  refusing the act, if its kind is an explicit trap/dead-end/gotcha, or if its
+ *  text specifies a hard prohibition or mandatory trigger constraint. */
+function isGuard(r: Recalled): boolean {
+  if (r.refuses || r.kind === "dead_end" || r.kind === "gotcha") return true;
+  return /\b(prohibited|forbidden|must not|never|do not|cannot|only when (?:explicitly )?triggered by)\b/i.test(
+    r.text,
+  );
+}
+
+interface TriggerViolation {
+  rule: Recalled;
+  trigger: string;
+}
+
+function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViolation[] {
+  const violations: TriggerViolation[] = [];
+  const triggerPattern =
+    /(?:only when (?:explicitly )?triggered by|requires (?:explicit )?)\s+(\[[\w-]+\])/i;
+
+  for (const rule of guards) {
+    const match = rule.text.match(triggerPattern);
+    if (!match || !match[1]) continue;
+    const trigger = match[1];
+    const keyword = trigger.slice(1, -1).toLowerCase();
+
+    const promptLower = prompt.toLowerCase();
+    const keywordRegex = new RegExp(`\\b${keyword.replace(/-/g, "[ -]?")}\\b`, "i");
+    if (keywordRegex.test(promptLower) && !prompt.includes(trigger)) {
+      violations.push({ rule, trigger });
+    }
+  }
+
+  return violations;
+}
+
 /** Recalled statements, written for a model's turn: each carries what it is
  *  worth and where it sits, because a statement stripped of its confidence
- *  invites treating a 0.4 guess as a 0.9 fact. */
-function asContext(results: Recalled[], space: string): string {
+ *  invites treating a 0.4 guess as a 0.9 fact.
+ *
+ *  Guards and preconditions are separated from empirical conventions so an agent
+ *  cannot rationalize around a hard gate as if it were a soft suggestion. */
+function asContext(results: Recalled[], space: string, prompt?: string): string {
   // What this session has already gone against leads, and says so. Buried in
   // a list of fifteen it reads as one more fact; the session has already
   // demonstrated that is not enough.
   const against = results.filter((r) => r.diverged);
   const rest = results.filter((r) => !r.diverged);
-  return [
-    ...(against.length > 0
-      ? [
-          "You have already gone against these this session — re-read them before continuing:",
-          ...against.map((r) => `- ${r.text}  [${r.confidence.toFixed(2)} · ${r.layer}]`),
+  const guards = rest.filter(isGuard);
+  const conventions = rest.filter((r) => !isGuard(r));
+
+  const sections: string[] = [];
+
+  // If a prompt requests an action governed by an explicit syntactic trigger
+  // but omits the trigger token, warn loudly at the very top of context.
+  if (prompt && guards.length > 0) {
+    const triggerViolations = findTriggerViolations(guards, prompt);
+    for (const v of triggerViolations) {
+      sections.push(
+        [
+          `🚨 OPERATIONAL GUARD TRIGGER REQUIRED:`,
+          `Rule [${v.rule.statementId.slice(0, 8)}] requires the explicit trigger '${v.trigger}' to execute this flow:`,
+          `"${v.rule.text}"`,
+          `The current prompt does NOT contain '${v.trigger}'.`,
+          `You MUST HALT and refuse to proceed with this operation until the user explicitly provides the '${v.trigger}' trigger token.`,
           "",
-          "If you believe one no longer applies, say so plainly rather than",
-          "working around it again.",
-          "",
-        ]
-      : []),
-    `From this project's memory (${space}) — already learned here:`,
-    ...rest.map(
-      (r) =>
-        `- ${r.text}  [${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
-    ),
-    "",
-    "These carry earned confidence, not certainty. If one proves wrong or out",
-    "of date, say so rather than working around it.",
-  ].join("\n");
+        ].join("\n"),
+      );
+    }
+  }
+
+  if (against.length > 0) {
+    sections.push(
+      [
+        "You have already gone against these this session — re-read them before continuing:",
+        ...against.map(
+          (r) =>
+            `- ${r.text}  [id: ${r.statementId.slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}]`,
+        ),
+        "",
+        "If you believe one no longer applies, say so plainly rather than",
+        "working around it again (or report with 'memcell report <id> failed').",
+        "",
+      ].join("\n"),
+    );
+  }
+
+  if (guards.length > 0) {
+    sections.push(
+      [
+        "OPERATIONAL GUARDS & INVARIANTS (Enforce strictly — halt or refuse if required triggers/conditions are missing):",
+        ...guards.map(
+          (r) =>
+            `- [GUARD] ${r.text}  [id: ${r.statementId.slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
+        ),
+        "",
+        "Do NOT bypass, rationalize around, or treat these guards as optional.",
+        "If a required trigger syntax or precondition is absent, you must stop and request it.",
+        "",
+      ].join("\n"),
+    );
+  }
+
+  if (conventions.length > 0) {
+    sections.push(
+      [
+        `From this project's memory (${space}) — already learned here:`,
+        ...conventions.map(
+          (r) =>
+            `- ${r.text}  [id: ${r.statementId.slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
+        ),
+        "",
+        "These carry earned confidence, not certainty. If one proves wrong or out",
+        "of date, say so rather than working around it.",
+      ].join("\n"),
+    );
+  }
+
+  return sections.join("\n");
 }
 
 export interface HookResult {
@@ -468,7 +559,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         }));
       }
       if (results.length > 0) {
-        result.context = asContext(results, project.space);
+        result.context = asContext(results, project.space, heard.prompt ?? heard.transformedPrompt);
         // No served-set is tracked here any more: recall already writes the
         // moment with this session's id, and the engine reads what the session
         // recalled from there when it assigns credit. The hook does not carry

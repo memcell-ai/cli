@@ -188,6 +188,87 @@ describe("recall", () => {
     expect(out.context).not.toContain("gone against");
   });
 
+  it("separates operational guards from conventions into their own prominent section", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m4",
+      results: [
+        {
+          statementId: "s1",
+          text: "Amounts are cents.",
+          confidence: 0.8,
+          layer: "team",
+          kind: "convention",
+        },
+        {
+          statementId: "s2",
+          text: "Manual database mocks are prohibited — use seedSubjects().",
+          confidence: 0.95,
+          layer: "team",
+          kind: "gotcha",
+        },
+      ],
+    });
+    fed({ session_id: "r11", cwd: project, prompt: "write test" });
+
+    const out = await runMoment("prompt-submit", "claude");
+    const context = out.context ?? "";
+    expect(context).toContain("OPERATIONAL GUARDS & INVARIANTS");
+    expect(context).toContain("[GUARD] Manual database mocks are prohibited");
+    expect(context.indexOf("OPERATIONAL GUARDS & INVARIANTS")).toBeLessThan(
+      context.indexOf("From this project's memory"),
+    );
+    expect(context).toContain("Amounts are cents.");
+  });
+
+  it("warns loudly when prompt mentions a guarded flow without its required trigger syntax", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m5",
+      results: [
+        {
+          statementId: "s-rel",
+          text: "Release flow is executed only when explicitly triggered by [release] in a message; no automatic or standing release cadence.",
+          confidence: 0.64,
+          layer: "team",
+          kind: "convention",
+        },
+      ],
+    });
+    fed({ session_id: "r12", cwd: project, prompt: "time for release pipeline" });
+
+    const out = await runMoment("prompt-submit", "claude");
+    const context = out.context ?? "";
+    expect(context).toContain("🚨 OPERATIONAL GUARD TRIGGER REQUIRED:");
+    expect(context).toContain("Rule [s-rel] requires the explicit trigger '[release]'");
+    expect(context).toContain("You MUST HALT and refuse to proceed");
+  });
+
+  it("permits the operation when the prompt includes the required trigger token", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m6",
+      results: [
+        {
+          statementId: "s-rel",
+          text: "Release flow is executed only when explicitly triggered by [release] in a message; no automatic or standing release cadence.",
+          confidence: 0.64,
+          layer: "team",
+          kind: "convention",
+        },
+      ],
+    });
+    fed({ session_id: "r13", cwd: project, prompt: "time for release pipeline [release]" });
+
+    const out = await runMoment("prompt-submit", "claude");
+    const context = out.context ?? "";
+    expect(context).not.toContain("🚨 OPERATIONAL GUARD TRIGGER REQUIRED:");
+    expect(context).toContain("OPERATIONAL GUARDS & INVARIANTS");
+    expect(context).toContain(
+      "Release flow is executed only when explicitly triggered by [release]",
+    );
+  });
+
   it("asks about the work itself at session start, where there is no prompt yet", async () => {
     reset();
     answer = () => ({ momentId: "m2", results: [] });
