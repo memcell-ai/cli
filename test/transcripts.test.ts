@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const { adapterFor } = await import("../src/adapters/index.js");
 const { cleanUserPrompt, readIntentEnvelope } = await import("../src/adapters/capture.js");
+const { isGuard, asContext } = await import("../src/loop/hook.js");
 
 const readSession = (program: string, payload: Record<string, unknown>, from: number) => {
   const adapter = adapterFor(program);
@@ -811,5 +812,43 @@ describe("intent envelope rollup & prompt cleaning", () => {
 
     const intent = await readIntentEnvelope(transcriptPath, longPrompt);
     expect(intent).toBe(longPrompt);
+  });
+
+  it("isGuard classifies standing invariants, action rules, and pinned rules as guards", () => {
+    expect(isGuard({ statementId: "s1", text: "Any rule", confidence: 0.8, layer: "org", standing: true })).toBe(true);
+    expect(isGuard({ statementId: "s2", text: "Any rule", confidence: 0.8, layer: "org", pinned: true })).toBe(true);
+    expect(isGuard({ statementId: "s3", text: "Any rule", confidence: 0.8, layer: "org", appliesAt: ["send"] })).toBe(true);
+    expect(isGuard({ statementId: "s4", text: "Any rule", confidence: 0.8, layer: "org", refuses: true })).toBe(true);
+    expect(isGuard({ statementId: "s5", text: "Any rule", confidence: 0.8, layer: "org", kind: "gotcha" })).toBe(true);
+    expect(isGuard({ statementId: "s6", text: "Some observation about weather", confidence: 0.8, layer: "org" })).toBe(false);
+  });
+
+  it("asContext places standing invariants in operational guards section ahead of soft conventions", () => {
+    const results = [
+      {
+        statementId: "s-guard-1",
+        text: "Releases must go through release-please.",
+        confidence: 0.9,
+        layer: "org",
+        standing: true,
+        appliesAt: ["send"],
+      },
+      {
+        statementId: "s-conv-1",
+        text: "Buttons use the centralized Button component.",
+        confidence: 0.6,
+        layer: "team",
+      },
+    ];
+
+    const ctx = asContext(results, "test-space", "deploy release");
+    expect(ctx).toContain("OPERATIONAL GUARDS & INVARIANTS");
+    expect(ctx).toContain("Releases must go through release-please.");
+    expect(ctx).toContain("From this project's memory (test-space) — already learned here:");
+    expect(ctx).toContain("Buttons use the centralized Button component.");
+    // Guard must appear before soft conventions in context string
+    expect(ctx.indexOf("OPERATIONAL GUARDS & INVARIANTS")).toBeLessThan(
+      ctx.indexOf("From this project's memory"),
+    );
   });
 });
