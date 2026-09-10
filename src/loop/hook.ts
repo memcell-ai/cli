@@ -7,7 +7,7 @@ import { findProject, type Project } from "../project.js";
 import { LEGS, type Moment } from "./moments.js";
 import { keepNote, dropNote, log, noteFor } from "./session.js";
 import { adapterFor } from "../adapters/index.js";
-import { readLatestUserPrompt } from "../adapters/capture.js";
+import { readIntentEnvelope, readLatestUserPrompt } from "../adapters/capture.js";
 
 // What an installed hook executes — the loop, fired by the harness rather
 // than chosen by the model.
@@ -241,7 +241,7 @@ function doorTrouble(answer: Answered<unknown>): string {
     : `the instance answered ${answer.status}`;
 }
 
-interface Recalled {
+export interface Recalled {
   statementId: string;
   text: string;
   confidence: number;
@@ -255,13 +255,17 @@ interface Recalled {
   diverged?: boolean;
   /** Somebody asked this rule to STOP the act it bears on. */
   refuses?: boolean;
+  pinned?: boolean;
+  standing?: boolean;
 }
 
 /** A statement is treated as an operational guard if the memory flagged it as
- *  refusing the act, if its kind is an explicit trap/dead-end/gotcha, or if its
- *  text specifies a hard prohibition or mandatory trigger constraint. */
-function isGuard(r: Recalled): boolean {
+ *  refusing the act, if its kind is an explicit trap/dead-end/gotcha, if it is
+ *  a standing invariant or action rule, or if its text specifies a hard
+ *  prohibition or mandatory trigger constraint. */
+export function isGuard(r: Recalled): boolean {
   if (r.refuses || r.kind === "dead_end" || r.kind === "gotcha") return true;
+  if (r.standing || r.pinned || (r.appliesAt && r.appliesAt.length > 0)) return true;
   return /\b(prohibited|forbidden|must not|never|do not|cannot|only when (?:explicitly )?triggered by)\b/i.test(
     r.text,
   );
@@ -299,7 +303,7 @@ function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViola
  *
  *  Guards and preconditions are separated from empirical conventions so an agent
  *  cannot rationalize around a hard gate as if it were a soft suggestion. */
-function asContext(results: Recalled[], space: string, prompt?: string): string {
+export function asContext(results: Recalled[], space: string, prompt?: string): string {
   // What this session has already gone against leads, and says so. Buried in
   // a list of fifteen it reads as one more fact; the session has already
   // demonstrated that is not enough.
@@ -523,9 +527,11 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     // Prompt-submit asks the prompt. Session start has no prompt yet, so it
     // asks about the work itself — what anyone opening this project should
     // be carrying before they type anything.
+    const rawPrompt =
+      moment === "prompt-submit" ? (payload.prompt ?? payload.transformedPrompt ?? "").trim() : "";
     const intent =
       moment === "prompt-submit"
-        ? (payload.prompt ?? payload.transformedPrompt ?? "").trim()
+        ? await readIntentEnvelope(transcriptPath, rawPrompt)
         : `starting work in ${project.space}: the standing decisions, conventions and gotchas here`;
 
     if (intent) {
