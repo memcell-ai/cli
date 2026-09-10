@@ -817,12 +817,53 @@ describe("intent envelope rollup & prompt cleaning", () => {
   });
 
   it("isGuard classifies standing invariants, action rules, and pinned rules as guards", () => {
-    expect(isGuard({ statementId: "s1", text: "Any rule", confidence: 0.8, layer: "org", standing: true })).toBe(true);
-    expect(isGuard({ statementId: "s2", text: "Any rule", confidence: 0.8, layer: "org", pinned: true })).toBe(true);
-    expect(isGuard({ statementId: "s3", text: "Any rule", confidence: 0.8, layer: "org", appliesAt: ["send"] })).toBe(true);
-    expect(isGuard({ statementId: "s4", text: "Any rule", confidence: 0.8, layer: "org", refuses: true })).toBe(true);
-    expect(isGuard({ statementId: "s5", text: "Any rule", confidence: 0.8, layer: "org", kind: "gotcha" })).toBe(true);
-    expect(isGuard({ statementId: "s6", text: "Some observation about weather", confidence: 0.8, layer: "org" })).toBe(false);
+    expect(
+      isGuard({
+        statementId: "s1",
+        text: "Any rule",
+        confidence: 0.8,
+        layer: "org",
+        standing: true,
+      }),
+    ).toBe(true);
+    expect(
+      isGuard({ statementId: "s2", text: "Any rule", confidence: 0.8, layer: "org", pinned: true }),
+    ).toBe(true);
+    expect(
+      isGuard({
+        statementId: "s3",
+        text: "Any rule",
+        confidence: 0.8,
+        layer: "org",
+        appliesAt: ["send"],
+      }),
+    ).toBe(true);
+    expect(
+      isGuard({
+        statementId: "s4",
+        text: "Any rule",
+        confidence: 0.8,
+        layer: "org",
+        refuses: true,
+      }),
+    ).toBe(true);
+    expect(
+      isGuard({
+        statementId: "s5",
+        text: "Any rule",
+        confidence: 0.8,
+        layer: "org",
+        kind: "gotcha",
+      }),
+    ).toBe(true);
+    expect(
+      isGuard({
+        statementId: "s6",
+        text: "Some observation about weather",
+        confidence: 0.8,
+        layer: "org",
+      }),
+    ).toBe(false);
   });
 
   it("asContext places standing invariants in operational guards section ahead of soft conventions", () => {

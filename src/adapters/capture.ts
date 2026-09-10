@@ -396,4 +396,3 @@ export async function readIntentEnvelope(
     return current;
   }
 }
-

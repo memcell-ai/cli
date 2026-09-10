@@ -528,9 +528,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     // asks about the work itself — what anyone opening this project should
     // be carrying before they type anything.
     const rawPrompt =
-      moment === "prompt-submit"
-        ? (payload.prompt ?? payload.transformedPrompt ?? "").trim()
-        : "";
+      moment === "prompt-submit" ? (payload.prompt ?? payload.transformedPrompt ?? "").trim() : "";
     const intent =
       moment === "prompt-submit"
         ? await readIntentEnvelope(transcriptPath, rawPrompt)
