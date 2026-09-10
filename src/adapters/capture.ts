@@ -214,14 +214,17 @@ export function pathOf(input: Record<string, unknown> | undefined): string | und
 
 /**
  * Extract clean prompt text from a user message content string.
- * Unwraps <USER_REQUEST>...</USER_REQUEST> tags if present, and removes <ADDITIONAL_METADATA>.
+ * Unwraps <USER_REQUEST>...</USER_REQUEST> tags if present, and removes <ADDITIONAL_METADATA>,
+ * <CONTEXT_SUMMARY>, and <SYSTEM_MESSAGE> wrappers.
  */
 export function cleanUserPrompt(raw: string): string {
   const requestMatch = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
   if (requestMatch && requestMatch[1] && requestMatch[1].trim()) {
-    return requestMatch[1].trim();
+    return cleanUserPrompt(requestMatch[1].trim());
   }
   return raw
+    .replace(/<CONTEXT_SUMMARY>[\s\S]*?<\/CONTEXT_SUMMARY>/gi, "")
+    .replace(/<SYSTEM_MESSAGE>[\s\S]*?<\/SYSTEM_MESSAGE>/gi, "")
     .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/gi, "")
     .replace(/<USER_REQUEST>[\s\S]*?<\/USER_REQUEST>/gi, "")
     .trim();
@@ -296,3 +299,101 @@ export async function readLatestUserPrompt(transcriptPath: string): Promise<stri
     return null;
   }
 }
+
+/**
+ * Resolves the intent envelope for recall via a cumulative hierarchical fallback chain (Card 046).
+ * If the current prompt is empty or a continuation, it combines the latest turn delta
+ * with the most recent substantive user request from the transcript.
+ */
+export async function readIntentEnvelope(
+  transcriptPath?: string,
+  currentPrompt?: string,
+): Promise<string> {
+  const current = cleanUserPrompt(currentPrompt ?? "");
+  if (!transcriptPath) return current;
+
+  try {
+    const info = await stat(transcriptPath).catch(() => null);
+    if (!info || info.size === 0) return current;
+
+    const CHUNK_SIZE = 2 * 1024 * 1024;
+    const start = Math.max(0, info.size - CHUNK_SIZE);
+    const stream = createReadStream(transcriptPath, { start, encoding: "utf8" });
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+    const lines: string[] = [];
+    for await (const line of rl) {
+      if (line.trim()) lines.push(line.trim());
+    }
+
+    let latestPrompt: string | null = current || null;
+    let priorSubstantive: string | null = null;
+
+    // Scan backwards from newest to oldest
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (!line) continue;
+      if (
+        !line.includes("USER_INPUT") &&
+        !line.includes("USER_EXPLICIT") &&
+        !line.includes('"user"')
+      ) {
+        continue;
+      }
+      try {
+        const rec = JSON.parse(line) as {
+          type?: string;
+          source?: string;
+          role?: string;
+          content?: unknown;
+        };
+        const isUser =
+          rec.type === "USER_INPUT" || rec.source === "USER_EXPLICIT" || rec.role === "user";
+
+        if (isUser && rec.content) {
+          let text = "";
+          if (typeof rec.content === "string") {
+            text = rec.content;
+          } else if (Array.isArray(rec.content)) {
+            text = rec.content
+              .map((c: unknown) => {
+                if (typeof c === "string") return c;
+                if (typeof c === "object" && c !== null && "text" in c) {
+                  return String((c as { text: unknown }).text);
+                }
+                return "";
+              })
+              .join(" ");
+          }
+
+          const cleaned = cleanUserPrompt(text);
+          if (!cleaned) continue;
+
+          if (!latestPrompt) {
+            latestPrompt = cleaned;
+          } else if (cleaned !== latestPrompt) {
+            // Found a previous distinct prompt — check if it is substantive
+            if (cleaned.length >= 25) {
+              priorSubstantive = cleaned;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Skip unparseable line
+      }
+    }
+
+    if (priorSubstantive && latestPrompt && latestPrompt !== priorSubstantive) {
+      // If current prompt is relatively short (< 120 chars), preserve active substantive context
+      if (latestPrompt.length < 120) {
+        return `${priorSubstantive}\n\nUser instruction: ${latestPrompt}`;
+      }
+    }
+
+    return latestPrompt || current;
+  } catch {
+    return current;
+  }
+}
+

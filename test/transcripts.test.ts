@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const { adapterFor } = await import("../src/adapters/index.js");
+const { cleanUserPrompt, readIntentEnvelope } = await import("../src/adapters/capture.js");
 
 const readSession = (program: string, payload: Record<string, unknown>, from: number) => {
   const adapter = adapterFor(program);
@@ -730,6 +731,9 @@ describe("reading a session in each agent's dialect", () => {
     expect(JSON.parse(adapterFor("grok")!.speak("prompt-submit", "ctx", {})!)).toEqual({
       additional_context: "ctx",
     });
+    expect(JSON.parse(adapterFor("antigravity")!.speak("before-act", "ctx", {})!)).toEqual({
+      injectSteps: [{ ephemeralMessage: "ctx" }],
+    });
     // No context: every dialect is silent.
     expect(adapterFor("claude")!.speak("turn-end", null, {})).toBeNull();
   });
@@ -748,5 +752,64 @@ describe("reading a session in each agent's dialect", () => {
     const b = await readSession("claude", { transcript_path: path, cwd: proj }, a.read);
     expect(b.text).toContain("second turn");
     expect(b.text).not.toContain("first turn");
+  });
+});
+
+describe("intent envelope rollup & prompt cleaning", () => {
+  it("cleanUserPrompt unwraps user request tags and context summaries", () => {
+    const raw = `<CONTEXT_SUMMARY>\n# Previous conversation summary\n</CONTEXT_SUMMARY>\n<USER_REQUEST>deploy the release to production</USER_REQUEST>`;
+    expect(cleanUserPrompt(raw)).toBe("deploy the release to production");
+
+    const simple = "  run unit tests  ";
+    expect(cleanUserPrompt(simple)).toBe("run unit tests");
+  });
+
+  it("readIntentEnvelope falls back to clean raw prompt if no transcript path is provided", async () => {
+    const result = await readIntentEnvelope(undefined, "  hello world  ");
+    expect(result).toBe("hello world");
+  });
+
+  it("readIntentEnvelope rolls up prior substantive prompt with short continuation", async () => {
+    const transcriptPath = join(root, "multi-turn.jsonl");
+    const lines = [
+      JSON.stringify({
+        type: "USER_INPUT",
+        content: "Please run the full release flow and verify fly.io deployment passes",
+      }),
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        content: "I will check the release status.",
+      }),
+      JSON.stringify({
+        type: "USER_INPUT",
+        content: "yes please",
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join("\n") + "\n");
+
+    const intent = await readIntentEnvelope(transcriptPath, "yes please");
+    expect(intent).toBe(
+      "Please run the full release flow and verify fly.io deployment passes\n\nUser instruction: yes please",
+    );
+  });
+
+  it("readIntentEnvelope does not rollup if current prompt is already substantive", async () => {
+    const transcriptPath = join(root, "substantive.jsonl");
+    const longPrompt =
+      "Here is a completely new substantive task description that exceeds 120 characters in total length so it should not roll up with any prior conversation context.";
+    const lines = [
+      JSON.stringify({
+        type: "USER_INPUT",
+        content: "Previous task that was also very substantive and completed earlier",
+      }),
+      JSON.stringify({
+        type: "USER_INPUT",
+        content: longPrompt,
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join("\n") + "\n");
+
+    const intent = await readIntentEnvelope(transcriptPath, longPrompt);
+    expect(intent).toBe(longPrompt);
   });
 });

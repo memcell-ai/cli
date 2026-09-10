@@ -240,7 +240,6 @@ export const antigravity: Adapter = {
   // ── speak — injectSteps with ephemeralMessage ─────────────────────────────
   speak(moment: Moment, context: string | null): string | null {
     if (!context) return null;
-    if (moment === "before-act") return null;
     return JSON.stringify({
       injectSteps: [{ ephemeralMessage: context }],
     });

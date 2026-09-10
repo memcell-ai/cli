@@ -7,7 +7,7 @@ import { findProject, type Project } from "../project.js";
 import { LEGS, type Moment } from "./moments.js";
 import { keepNote, dropNote, log, noteFor } from "./session.js";
 import { adapterFor } from "../adapters/index.js";
-import { readLatestUserPrompt } from "../adapters/capture.js";
+import { readIntentEnvelope, readLatestUserPrompt } from "../adapters/capture.js";
 
 // What an installed hook executes — the loop, fired by the harness rather
 // than chosen by the model.
@@ -523,9 +523,13 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     // Prompt-submit asks the prompt. Session start has no prompt yet, so it
     // asks about the work itself — what anyone opening this project should
     // be carrying before they type anything.
-    const intent =
+    const rawPrompt =
       moment === "prompt-submit"
         ? (payload.prompt ?? payload.transformedPrompt ?? "").trim()
+        : "";
+    const intent =
+      moment === "prompt-submit"
+        ? await readIntentEnvelope(transcriptPath, rawPrompt)
         : `starting work in ${project.space}: the standing decisions, conventions and gotchas here`;
 
     if (intent) {
