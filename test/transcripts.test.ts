@@ -732,9 +732,11 @@ describe("reading a session in each agent's dialect", () => {
     expect(JSON.parse(adapterFor("grok")!.speak("prompt-submit", "ctx", {})!)).toEqual({
       additional_context: "ctx",
     });
-    expect(JSON.parse(adapterFor("antigravity")!.speak("before-act", "ctx", {})!)).toEqual({
+    expect(JSON.parse(adapterFor("antigravity")!.speak("prompt-submit", "ctx", {})!)).toEqual({
       injectSteps: [{ ephemeralMessage: "ctx" }],
     });
+    // Antigravity's PreToolUse proto does not support injectSteps (only refuse)
+    expect(adapterFor("antigravity")!.speak("before-act", "ctx", {})).toBeNull();
     // No context: every dialect is silent.
     expect(adapterFor("claude")!.speak("turn-end", null, {})).toBeNull();
   });

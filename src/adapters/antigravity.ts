@@ -240,6 +240,8 @@ export const antigravity: Adapter = {
   // ── speak — injectSteps with ephemeralMessage ─────────────────────────────
   speak(moment: Moment, context: string | null): string | null {
     if (!context) return null;
+    // Antigravity PreToolUse hook proto only accepts decision (deny/allow), not injectSteps.
+    if (moment === "before-act") return null;
     return JSON.stringify({
       injectSteps: [{ ephemeralMessage: context }],
     });
