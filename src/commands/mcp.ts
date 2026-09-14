@@ -7,10 +7,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { agentKeyForProject } from "../keyring.js";
+import { detectActiveRuntimeModel } from "../model-detect.js";
 import { findProject } from "../project.js";
 import { aside, badge, cmd, label, row, warn } from "../ui.js";
 
-// `memcell mcp` — the stdio face of the paired instance's /mcp door.
+// `memcell mcp` — the stdio face of the paired instance's /mcp endpoint.
 //
 // The config entry an agent client holds is just this command, and that is
 // the point: the same law the hooks live by. A committed entry carries no
@@ -118,6 +119,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
     return 0;
   }
 
+  const runtimeModel = detectActiveRuntimeModel(agentName);
   const upstream = new Client({ name: "memcell-cli", version: "0.1.0" });
   await upstream.connect(
     new StreamableHTTPClientTransport(new URL(`${project.instance}/mcp`), {
@@ -125,6 +127,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
         headers: {
           authorization: `Bearer ${held.key}`,
           ...(held.agentId ? { "x-memcell-agent": held.agentId } : {}),
+          ...(runtimeModel ? { "x-memcell-model": runtimeModel } : {}),
         },
       },
     }),

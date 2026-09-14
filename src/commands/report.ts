@@ -4,7 +4,7 @@ import { wired } from "./wired.js";
 
 // `memcell report <statement> <outcome>` — what happened when somebody acted
 // on a served statement. The only thing that moves confidence, which is why
-// a statement's standing is earned rather than asserted.
+// a statement's confidence is earned rather than asserted.
 
 const OUTCOMES = ["worked", "failed", "avoided"] as const;
 
@@ -26,11 +26,11 @@ export async function report(
   if (!here) return 1;
 
   try {
-    const moved = await call<{ from: number; to: number }>(
-      here.instance,
-      `/api/v1/spaces/${encodeURIComponent(here.space)}/statements/${encodeURIComponent(statementId)}/outcomes`,
-      { method: "POST", bearer: here.key, body: { outcome, ...(note ? { note } : {}) } },
-    );
+    const moved = await call<{ from: number; to: number }>(here.instance, "/api/v1/feedback", {
+      method: "POST",
+      bearer: here.key,
+      body: { statementId, outcome, ...(note ? { note } : {}) },
+    });
     say(
       row(0, [badge("memcell"), label("report"), place(here.space)]),
       row(

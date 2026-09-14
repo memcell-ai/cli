@@ -3,7 +3,7 @@ import { badge, bad, id, label, place, row, say, value, variant } from "../ui.js
 import { wired } from "./wired.js";
 
 // `memcell recall <intent>` — what memory serves before acting, from a
-// shell. The same door the hooks and the MCP tool call, so an agent with no
+// shell. The same API endpoint the hooks and the MCP tool call, so an agent with no
 // MCP support reaches the identical answer.
 
 interface Served {
@@ -12,7 +12,8 @@ interface Served {
   kind: string | null;
   confidence: number;
   layer: string;
-  vouched: boolean;
+  vouched?: boolean;
+  verified?: boolean;
   /** Here because the space pins it, not because it matched. Marked, so
    *  presence is never read as an answer to what was asked. */
   pinned?: boolean;
@@ -55,7 +56,7 @@ export async function recall(intent: string, limit?: string, url?: string): Prom
           [value(s.confidence.toFixed(2))],
           s.kind ? [variant(s.kind)] : null,
           s.pinned ? [variant("pinned")] : null,
-          !s.vouched ? [variant("unvouched")] : null,
+          !(s.verified ?? s.vouched) ? [variant("unvouched")] : null,
           [label(s.text)],
         ),
         // The id, because reporting an outcome on this needs it.

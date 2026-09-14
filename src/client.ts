@@ -1,4 +1,5 @@
 import { credentialFor } from "./instance.js";
+import { detectActiveRuntimeModel } from "./model-detect.js";
 
 // The one way this package talks to a memcell. Every request carries the
 // instance's own session as a bearer token, because a terminal has no
@@ -28,6 +29,8 @@ interface CallOptions {
   /** Milliseconds before the call gives up. A caller with its own deadline
    *  passes `signal` instead. */
   timeoutMs?: number;
+  /** Extra headers to send with the request. */
+  headers?: Record<string, string>;
 }
 
 /** How long a person waits before an unanswered instance is a failure
@@ -38,7 +41,15 @@ const CALL_TIMEOUT_MS = 30_000;
 export async function call<T>(
   instance: string,
   path: string,
-  { method = "GET", body, anonymous, bearer, signal, timeoutMs }: CallOptions = {},
+  {
+    method = "GET",
+    body,
+    anonymous,
+    bearer,
+    signal,
+    timeoutMs,
+    headers: customHeaders,
+  }: CallOptions = {},
 ): Promise<T> {
   // An instance that accepts the connection and never answers would
   // otherwise hang the terminal forever, with nothing printed. Every call
@@ -50,10 +61,15 @@ export async function call<T>(
     // for an origin it trusts before it will act on a state change.
     origin: instance,
     accept: "application/json",
+    ...(customHeaders ?? {}),
   };
 
   if (bearer) {
     headers.authorization = `Bearer ${bearer}`;
+    if (!headers["x-memcell-model"] && !headers["x-agent-model"]) {
+      const runtimeModel = detectActiveRuntimeModel();
+      if (runtimeModel) headers["x-memcell-model"] = runtimeModel;
+    }
   } else if (!anonymous) {
     const credential = await credentialFor(instance);
     if (credential) headers.authorization = `Bearer ${credential.token}`;

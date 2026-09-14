@@ -70,24 +70,31 @@ export const gemini: Adapter = {
     for (const moment of MOMENTS) {
       const entries = (settings.hooks[EVENT[moment]] ??= []);
       const command = hookCommand(moment, "gemini");
-      // Merge never clobbers OTHER entries; our own is refreshed in place. A
-      // re-connect mints a new agent identity, and a hook left carrying the
-      // old one reports a dead agent on every firing.
       let held = false;
       for (const entry of entries) {
-        for (const h of entry.hooks ?? []) {
+        if (!Array.isArray(entry.hooks)) continue;
+        const kept: { name?: string; type: string; command: string; timeout?: number }[] = [];
+        for (const h of entry.hooks) {
           if (hookMatches(h.command, moment, "gemini")) {
-            h.command = command;
-            held = true;
+            if (!held) {
+              h.command = command;
+              kept.push(h);
+              held = true;
+            }
+          } else {
+            kept.push(h);
           }
         }
+        entry.hooks = kept;
       }
+      const prunedEntries = entries.filter((e) => (e.hooks?.length ?? 0) > 0);
       if (!held) {
-        entries.push({
+        prunedEntries.push({
           matcher: "*",
           hooks: [{ name: "memcell", type: "command", command, timeout: 30000 }],
         });
       }
+      settings.hooks[EVENT[moment]] = prunedEntries;
     }
     settings.mcpServers ??= {};
     settings.mcpServers.memcell = { command: MCP_COMMAND, args: MCP_ARGS };

@@ -25,7 +25,7 @@ import { wired } from "./wired.js";
 // instructions — so a project that has been keeping notes starts remembering
 // them without retyping anything.
 //
-// Every file goes through the real ingest door and gets distilled there:
+// Every file goes through the real ingest endpoint and gets distilled there:
 // atomic statements with provenance, not a transcription. A JSON file is
 // read for its text first — a top-level array, or one under a plainly named
 // key, of strings or of objects that carry their text in a string field.
@@ -163,11 +163,11 @@ export async function importFiles(files: string[], url?: string): Promise<number
       120,
     );
     try {
-      const kept = await call<Kept>(
-        here.instance,
-        `/api/v1/spaces/${encodeURIComponent(here.space)}/ingest`,
-        { method: "POST", bearer: here.key, body: { raw: delivery, origin: { title: shown } } },
-      );
+      const kept = await call<Kept>(here.instance, "/api/v1/ingest", {
+        method: "POST",
+        bearer: here.key,
+        body: { raw: delivery, origin: { title: shown } },
+      });
       landed += 1;
       created += kept.created.length;
       reinforced += kept.reinforced.length;

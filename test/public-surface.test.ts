@@ -22,7 +22,13 @@ const BANNED = [
 
 async function* files(at: string): AsyncGenerator<string> {
   for (const entry of await readdir(at, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
+    if (
+      entry.name === "node_modules" ||
+      entry.name === "dist" ||
+      entry.name === ".git" ||
+      entry.name === ".memcell"
+    )
+      continue;
     if (entry.name === "public-surface.test.ts") continue; // the patterns would match themselves
     const full = join(at, entry.name);
     if (entry.isDirectory()) yield* files(full);

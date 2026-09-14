@@ -4,7 +4,7 @@ import { wired } from "./wired.js";
 
 // `memcell remember <text>` — file one finished statement from a shell.
 //
-// One claim, already distilled: this door does no distilling, so a wall of
+// One claim, already distilled: this endpoint does no distilling, so a wall of
 // prose lands as a wall. Hand documents to `memcell ingest` instead, which
 // exists to break them into claims.
 
@@ -53,19 +53,15 @@ async function file(
   if (!here) return 1;
 
   try {
-    const written = await call<Written>(
-      here.instance,
-      `/api/v1/spaces/${encodeURIComponent(here.space)}/statements`,
-      {
-        method: "POST",
-        bearer: here.key,
-        body: {
-          text,
-          ...(kind ? { kind } : {}),
-          ...(appliesAt.length > 0 ? { applies_at: appliesAt } : {}),
-        },
+    const written = await call<Written>(here.instance, "/api/v1/remember", {
+      method: "POST",
+      bearer: here.key,
+      body: {
+        text,
+        ...(kind ? { kind } : {}),
+        ...(appliesAt.length > 0 ? { applies_at: appliesAt } : {}),
       },
-    );
+    });
     say(
       row(0, [badge("memcell"), label("remember"), place(here.space)]),
       row(

@@ -137,16 +137,29 @@ export function ccHookOps(
         // Merge never clobbers OTHER entries; our own is refreshed in
         // place. A re-connect mints a new agent identity, and a hook left
         // carrying the old one reports a dead agent on every firing.
+        // Self-healing: if duplicates exist, collapse to one refreshed entry.
         let held = false;
         for (const entry of entries) {
-          for (const h of entry.hooks ?? []) {
+          if (!Array.isArray(entry.hooks)) continue;
+          const kept: { type: string; command: string; timeout?: number }[] = [];
+          for (const h of entry.hooks) {
             if (hookMatches(h.command, moment, program)) {
-              h.command = command;
-              held = true;
+              if (!held) {
+                h.command = command;
+                kept.push(h);
+                held = true;
+              }
+            } else {
+              kept.push(h);
             }
           }
+          entry.hooks = kept;
         }
-        if (!held) entries.push({ hooks: [{ type: "command", command, timeout: 30 }] });
+        const prunedEntries = entries.filter((e) => (e.hooks?.length ?? 0) > 0);
+        if (!held) {
+          prunedEntries.push({ hooks: [{ type: "command", command, timeout: 30 }] });
+        }
+        settings.hooks[EVENT[moment]] = prunedEntries;
       }
       await writeJson(at, bare ? settings.hooks : doc);
       // An older release wired somewhere else. Take ours out of there in

@@ -61,6 +61,7 @@ export const FLAGS: Record<string, FlagSpec> = {
     env: "MEMCELL_INSTANCE",
   },
   agent: { name: "agent", takes: "id", what: "the wired agent's id" },
+  project: { name: "project", takes: "slug", what: "which project to connect to, by slug" },
   space: { name: "space", takes: "slug", what: "which space to connect to, by slug" },
   force: { name: "force", short: "f", what: "do it again even if it is already done" },
   "no-browser": {

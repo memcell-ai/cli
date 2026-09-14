@@ -161,4 +161,32 @@ describe("a directory wearing the project file's name", () => {
     expect(at.endsWith("/.memcell")).toBe(true);
     expect((await findProject(dir))?.project.space).toBe("one");
   });
+
+  it("writes and reads modern project table alongside space", async () => {
+    const dir = await scratch();
+    const at = await saveProject(
+      { instance: "http://localhost:3100", project: "omega", space: "omega" },
+      dir,
+    );
+    const text = await readFile(at, "utf8");
+    expect(text).toContain("[project]");
+    expect(text).toContain('slug = "omega"');
+    expect(text).toContain("[space]");
+
+    const found = await findProject(dir);
+    expect(found?.project.project).toBe("omega");
+    expect(found?.project.space).toBe("omega");
+  });
+
+  it("reads a project file that only has [project] and no [space]", async () => {
+    const dir = await scratch();
+    await writeFile(
+      join(dir, PROJECT_FILE),
+      '[instance]\nurl = "https://memcell.ai"\n\n[project]\nslug = "modern-only"\n',
+      "utf8",
+    );
+    const found = await findProject(dir);
+    expect(found?.project.project).toBe("modern-only");
+    expect(found?.project.space).toBe("modern-only");
+  });
 });

@@ -1,10 +1,10 @@
-import { call, MemcellError } from "../client.js";
+import { agentStanding, call, MemcellError } from "../client.js";
 import { credentialFor } from "../instance.js";
 import { dirname } from "node:path";
 
 import { agentKeyForProject } from "../keyring.js";
 import { findProject } from "../project.js";
-import { badge, cmd, good, id, label, place, row, say, value, variant, warn } from "../ui.js";
+import { badge, cmd, good, id, label, place, row, say, time, value, variant, warn } from "../ui.js";
 
 // The agents wired to this account, and the way to take one back.
 //
@@ -94,6 +94,59 @@ export async function revokeAgent(instance: string, keyId: string): Promise<numb
       // the agent stops on its next call, and nothing it filed is touched.
       row(1, [good("revoked")], [id(keyId)]),
       row(2, [label("stops at its next call · what it filed stays")]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as MemcellError);
+  }
+}
+
+export async function whoamiAgent(instance: string): Promise<number> {
+  const found = await findProject();
+  if (!found) {
+    say(
+      row(0, [badge("memcell"), label("agents whoami")]),
+      row(1, [warn("not wired")], [label("run"), cmd("memcell connect")]),
+    );
+    return 1;
+  }
+
+  const root = dirname(found.at);
+  const held = await agentKeyForProject(found.project.instance, root);
+  if (!held) {
+    say(
+      row(0, [badge("memcell"), label("agents whoami")]),
+      row(1, [warn("no agent key found here")]),
+      row(2, [label("run"), cmd("memcell connect")]),
+    );
+    return 1;
+  }
+
+  try {
+    const standing = await agentStanding(instance, held.key);
+    const proj = standing.space || found.project.project || found.project.space;
+    say(
+      row(0, [badge("memcell"), label("agent standing"), place(instance)]),
+      row(
+        1,
+        [
+          standing.standing === "ok"
+            ? good(standing.agent || held.agent || "agent")
+            : warn(standing.agent || held.agent || "agent"),
+        ],
+        [label("standing:"), value(standing.standing)],
+        proj ? [label("on"), value(proj)] : null,
+      ),
+      standing.calls
+        ? row(
+            2,
+            [label("quota:"), value(`${standing.calls.used} / ${standing.calls.ceiling}`)],
+            standing.calls.resetsAt
+              ? [label("resets"), time(standing.calls.resetsAt.slice(0, 16).replace("T", " "))]
+              : null,
+          )
+        : null,
+      row(2, [label("key:"), id(held.keyId)]),
     );
     return 0;
   } catch (error) {

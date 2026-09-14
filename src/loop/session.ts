@@ -5,20 +5,32 @@ import { machineDir, machineFile } from "../machine.js";
 // What one working session has done so far, kept between hook firings.
 //
 // Each hook is a separate process: prompt-submit exits long before turn-end
-// starts. So anything one leg needs to know about another has to be written
-// down — which statements a recall served, which moment served them, and how
+// starts. So anything one pipeline phase needs to know about another has to be written
+// down — which statements a recall served, which hook served them, and how
 // far through the transcript the last remember got.
 //
 // It lives on the machine beside the keys, not in the project: it is about
 // one person's session on one computer, and it is deleted when the session
-// ends. A stale note is only ever the tail of a session that crashed.
+// ends. A stale session cache is only ever the tail of a session that crashed.
 
-export interface Note {
+export interface ActiveRule {
+  statementId: string;
+  text: string;
+  appliesAt: string[];
+  refuses?: boolean;
+  title?: string;
+  tags?: string[];
+}
+export type StandingRule = ActiveRule;
+
+export interface SessionCache {
   space: string;
-  /** The standing rules this session has been served that bear on an act,
-   *  kept so `before-act` costs no call of its own. Refreshed by every
-   *  recall; a session that has not recalled yet simply guards nothing. */
-  standing?: { statementId: string; text: string; appliesAt: string[]; refuses?: boolean }[];
+  guardMode?: "strict" | "advisory";
+  /** Active rules staged for in-memory pre-act evaluation. Refreshed by every
+   *  recall; a session that has not recalled yet guards nothing. */
+  activeRules?: ActiveRule[];
+  /** Legacy alias for activeRules kept for compatibility. */
+  standing?: ActiveRule[];
   /**
    * Rules SERVED immediately before an act, and which act.
    *
@@ -27,45 +39,62 @@ export interface Note {
    * a transcript has to work out both halves from prose, and measurably does
    * not — it is what catches a rule broken in the open and calls it nothing.
    *
-   * Kept here and handed over with the turn, so the judging costs one call
-   * on material already being sent rather than a call per act.
+   * Kept here and handed over with the turn payload, so judging costs one call
+   * on transcript data already being sent rather than a call per act.
    */
   servedAt?: { statementId: string; act: string; tool: string; became: string }[];
-  /** Characters of the transcript already handed over, so a turn ships what
+  /** Characters of the transcript already processed, so a turn ships what
    *  is new rather than the whole conversation again. */
   read: number;
   fired: Record<string, number>;
+  /** Model detected for this session, persisted across hooks. */
+  model?: string;
 }
+
+export type Note = SessionCache;
 
 const dir = () => machineFile("sessions");
 const file = (id: string) => join(dir(), `${id.replace(/[^\w-]/g, "")}.json`);
 
-const EMPTY: Note = { space: "", read: 0, fired: {}, standing: [], servedAt: [] };
+const EMPTY: SessionCache = {
+  space: "",
+  read: 0,
+  fired: {},
+  activeRules: [],
+  standing: [],
+  servedAt: [],
+};
 
-export async function noteFor(id: string): Promise<Note> {
+export async function sessionCacheFor(id: string): Promise<SessionCache> {
   try {
-    return { ...EMPTY, ...(JSON.parse(await readFile(file(id), "utf8")) as Note) };
+    const raw = JSON.parse(await readFile(file(id), "utf8")) as SessionCache;
+    const rules = raw.activeRules ?? raw.standing ?? [];
+    return { ...EMPTY, ...raw, activeRules: rules, standing: rules };
   } catch {
     return { ...EMPTY };
   }
 }
+export const noteFor = sessionCacheFor;
 
-// Best-effort, both of them, like `log` below. A session note is how the
+// Best-effort, both of them, like `log` below. A session cache is how the
 // next firing knows where it got to — losing one costs a re-read, and a
 // re-read is harmless because the turn carries its own name. Throwing here
 // would take the hook down with it, and a hook that dies takes the user's
 // agent turn with it. A full disk is not a reason to break somebody's
 // editor.
-export async function keepNote(id: string, note: Note): Promise<void> {
+export async function keepSessionCache(id: string, cache: SessionCache): Promise<void> {
   try {
     await mkdir(dir(), { recursive: true });
-    await writeFile(file(id), `${JSON.stringify(note)}\n`, { mode: 0o600 });
+    cache.standing ??= cache.activeRules;
+    cache.activeRules ??= cache.standing;
+    await writeFile(file(id), `${JSON.stringify(cache)}\n`, { mode: 0o600 });
   } catch {
     // Nothing to say to anyone: the log lives on the same disk.
   }
 }
+export const keepNote = keepSessionCache;
 
-export async function dropNote(id: string): Promise<void> {
+export async function dropSessionCache(id: string): Promise<void> {
   try {
     const { rm } = await import("node:fs/promises");
     await rm(file(id), { force: true });
@@ -73,6 +102,7 @@ export async function dropNote(id: string): Promise<void> {
     // As above.
   }
 }
+export const dropNote = dropSessionCache;
 
 /**
  * What happened, in one line, appended as it happens.

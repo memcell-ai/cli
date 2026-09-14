@@ -1,5 +1,5 @@
 import type { Command, Resource } from "../model.js";
-import { listAgents, revokeAgent } from "./agents.js";
+import { listAgents, revokeAgent, whoamiAgent } from "./agents.js";
 import { configGet, configSet } from "./config.js";
 import { hook, hookRemove } from "./hook.js";
 import { exportSpace } from "./export.js";
@@ -14,7 +14,7 @@ import { connect } from "./connect.js";
 import { logout } from "./logout.js";
 import { reset } from "./reset.js";
 import { seed } from "./seed.js";
-import { listSpaces, newSpace, useSpace } from "./spaces.js";
+import { listProjects, newProject, useProject } from "./projects.js";
 import { stats } from "./stats.js";
 import { status } from "./status.js";
 
@@ -30,7 +30,7 @@ import { status } from "./status.js";
 /** The nouns, so help groups by resource instead of listing every verb. */
 export const RESOURCES: Resource[] = [
   { name: "config", what: "settings, per project or per machine" },
-  { name: "spaces", what: "what you work on, and which one is active" },
+  { name: "projects", what: "what you work on, and which one is active" },
   { name: "agents", what: "the agents wired to this account" },
   { name: "memories", what: "the commons" },
 ];
@@ -53,11 +53,12 @@ export const COMMANDS: Command[] = [
   {
     path: ["connect"],
     what: "wire this directory — approves in your browser the first time",
-    takes: ["url", "pair", "space", "agent", "no-browser"],
+    takes: ["url", "pair", "project", "space", "agent", "no-browser"],
     landing: true,
     run: ({ instance, from, flags }) =>
       connect(instance, {
         pair: typeof flags.pair === "string" ? flags.pair : undefined,
+        project: typeof flags.project === "string" ? flags.project : undefined,
         space: typeof flags.space === "string" ? flags.space : undefined,
         agent: typeof flags.agent === "string" ? flags.agent : undefined,
         noBrowser: flags["no-browser"] === true,
@@ -207,24 +208,24 @@ export const COMMANDS: Command[] = [
   },
 
   {
-    path: ["spaces", "ls"],
+    path: ["projects", "ls"],
     what: "list them",
     takes: ["url"],
-    run: ({ instance }) => listSpaces(instance),
+    run: ({ instance }) => listProjects(instance),
   },
   {
-    path: ["spaces", "new"],
+    path: ["projects", "new"],
     what: "make one",
     args: [{ name: "name", required: true, what: "what it holds the truth about" }],
     takes: ["url"],
-    run: ({ instance, args }) => newSpace(instance, args.name!),
+    run: ({ instance, args }) => newProject(instance, args.name!),
   },
   {
-    path: ["spaces", "use"],
+    path: ["projects", "use"],
     what: "work on this one from now on, everywhere",
     args: [{ name: "slug", required: true, what: "from the list" }],
     takes: ["url"],
-    run: ({ instance, args }) => useSpace(instance, args.slug!),
+    run: ({ instance, args }) => useProject(instance, args.slug!),
   },
 
   {
@@ -232,6 +233,12 @@ export const COMMANDS: Command[] = [
     what: "list them",
     takes: ["url"],
     run: ({ instance }) => listAgents(instance),
+  },
+  {
+    path: ["agents", "whoami"],
+    what: "inspect current active agent key standing and quotas",
+    takes: ["url"],
+    run: ({ instance }) => whoamiAgent(instance),
   },
   {
     path: ["agents", "revoke"],
