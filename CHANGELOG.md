@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/memcell-ai/cli/compare/memcell-v0.8.0...memcell-v0.9.0) (2026-09-10)
+
+
+### Features
+
+* **recall:** hierarchical intent rollup, unmuted before-act, and elevated guards ([#25](https://github.com/memcell-ai/cli/issues/25)) ([7e23e4b](https://github.com/memcell-ai/cli/commit/7e23e4b6791f4c0496f19b67b3fc8c9f304ff241))
+
 ## [0.8.0](https://github.com/memcell-ai/cli/compare/memcell-v0.7.0...memcell-v0.8.0) (2026-09-07)
 
 
