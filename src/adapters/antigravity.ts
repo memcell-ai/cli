@@ -133,56 +133,48 @@ export const antigravity: Adapter = {
 
     // PreInvocation (prompt-submit & session-start)
     const promptCmd = hookCommand("prompt-submit", "antigravity");
-    spec.PreInvocation ??= [];
-    const heldPrompt = spec.PreInvocation.find((h) =>
-      hookMatches(h.command, "prompt-submit", "antigravity"),
+    const nonMatchingPreInv = (spec.PreInvocation ?? []).filter(
+      (h) => !hookMatches(h.command, "prompt-submit", "antigravity"),
     );
-    if (heldPrompt) {
-      heldPrompt.command = promptCmd;
-    } else {
-      spec.PreInvocation.push({ type: "command", command: promptCmd, timeout: 30 });
-    }
+    spec.PreInvocation = [
+      ...nonMatchingPreInv,
+      { type: "command", command: promptCmd, timeout: 30 },
+    ];
 
     // PreToolUse (before-act)
     const beforeCmd = hookCommand("before-act", "antigravity");
-    spec.PreToolUse ??= [];
-    let heldBefore = false;
-    for (const entry of spec.PreToolUse) {
-      for (const h of entry.hooks ?? []) {
-        if (hookMatches(h.command, "before-act", "antigravity")) {
-          h.command = beforeCmd;
-          heldBefore = true;
-        }
-      }
-    }
-    if (!heldBefore) {
-      spec.PreToolUse.push({
+    const cleanedPreTool = (spec.PreToolUse ?? [])
+      .map((entry) => ({
+        ...entry,
+        hooks: (entry.hooks ?? []).filter(
+          (h) => !hookMatches(h.command, "before-act", "antigravity"),
+        ),
+      }))
+      .filter((entry) => (entry.hooks?.length ?? 0) > 0);
+    spec.PreToolUse = [
+      ...cleanedPreTool,
+      {
         matcher: "*",
         hooks: [{ type: "command", command: beforeCmd, timeout: 30 }],
-      });
-    }
+      },
+    ];
 
     // PostInvocation (turn-end)
     const turnCmd = hookCommand("turn-end", "antigravity");
-    spec.PostInvocation ??= [];
-    const heldTurn = spec.PostInvocation.find((h) =>
-      hookMatches(h.command, "turn-end", "antigravity"),
+    const nonMatchingPostInv = (spec.PostInvocation ?? []).filter(
+      (h) => !hookMatches(h.command, "turn-end", "antigravity"),
     );
-    if (heldTurn) {
-      heldTurn.command = turnCmd;
-    } else {
-      spec.PostInvocation.push({ type: "command", command: turnCmd, timeout: 30 });
-    }
+    spec.PostInvocation = [
+      ...nonMatchingPostInv,
+      { type: "command", command: turnCmd, timeout: 30 },
+    ];
 
     // Stop (session-end)
     const endCmd = hookCommand("session-end", "antigravity");
-    spec.Stop ??= [];
-    const heldEnd = spec.Stop.find((h) => hookMatches(h.command, "session-end", "antigravity"));
-    if (heldEnd) {
-      heldEnd.command = endCmd;
-    } else {
-      spec.Stop.push({ type: "command", command: endCmd, timeout: 30 });
-    }
+    const nonMatchingStop = (spec.Stop ?? []).filter(
+      (h) => !hookMatches(h.command, "session-end", "antigravity"),
+    );
+    spec.Stop = [...nonMatchingStop, { type: "command", command: endCmd, timeout: 30 }];
 
     await writeJson(at, config);
     await installMcp().catch(() => undefined);

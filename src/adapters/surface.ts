@@ -79,6 +79,8 @@ export interface Guard extends At {
    *  adapter does not name is simply not guarded — silence, never a guess. */
   tools: Partial<Record<ActClass, string[]>>;
 }
+export type ToolGuard = Guard;
+export type PreActPolicy = Guard;
 
 /** The five moments a standing rule can bear on. Mirrors the record's own
  *  vocabulary; the mapping from a tool name to one of these is per-agent and

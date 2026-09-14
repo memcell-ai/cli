@@ -12,7 +12,8 @@ import { deviceGrant } from "../grant.js";
 import { credentialFor } from "../instance.js";
 import { pruneProjectKeys, saveAgentKey } from "../keyring.js";
 import { machineFile } from "../machine.js";
-import { saveProject } from "../project.js";
+import { resolveModelForAgent } from "../model-detect.js";
+import { findProject, saveProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, value, viaNpx, warn } from "../ui.js";
 
 // `memcell connect` — a cold terminal to a wired project, one command.
@@ -28,17 +29,31 @@ interface Exchanged {
   key: string;
   keyId: string;
   agentId: string;
-  space: { id: string; slug: string; name: string };
+  project?: { id: string; slug: string; name: string; ownerSlug?: string };
+  space: { id: string; slug: string; name: string; ownerSlug?: string };
   instance: string;
   agents?: Record<string, { key: string; keyId: string; agentId: string; agentName: string }>;
 }
 
 export async function connect(
   instance: string,
-  options: { pair?: string; space?: string; agent?: string; noBrowser?: boolean; from: string },
+  options: {
+    pair?: string;
+    project?: string;
+    space?: string;
+    agent?: string;
+    noBrowser?: boolean;
+    from: string;
+  },
 ): Promise<number> {
   const pair = options.pair?.trim();
-  const space = options.space?.trim();
+  let targetProject = (options.project || options.space)?.trim();
+  if (!targetProject) {
+    const existing = await findProject(process.cwd()).catch(() => null);
+    if (existing?.project?.project || existing?.project?.space) {
+      targetProject = existing.project.project || existing.project.space;
+    }
+  }
 
   // WHERE this is about to authenticate, said out loud when the directory
   // chose it. `.memcell` is committed and outranks this machine's own
@@ -55,16 +70,34 @@ export async function connect(
   const here = basename(process.cwd());
   const present = [...(await detected())];
   const activeAgent = options.agent?.trim() || currentAgent() || present[0] || here;
-  const identity = { agent: activeAgent, agents: present, machine: hostname() };
+
+  const models: Record<string, string> = {};
+  for (const ag of present) {
+    models[ag] = await resolveModelForAgent(ag, process.cwd());
+  }
+  const activeModel = await resolveModelForAgent(activeAgent, process.cwd());
+  models[activeAgent] = activeModel;
+
+  const identity = {
+    agent: activeAgent,
+    model: activeModel,
+    agents: present,
+    models,
+    machine: hostname(),
+  };
 
   let exchanged: Exchanged;
   try {
     if (pair) {
       exchanged = await call<Exchanged>(instance, "/api/v1/pair/claim", {
         method: "POST",
-        // `space` names which of the caller's spaces to reach, by slug;
-        // without it the pairing's own space (the active or a fresh one).
-        body: { pair, ...identity, space: space || undefined },
+        // names which project/space of the caller's to reach, by slug
+        body: {
+          pair,
+          ...identity,
+          project: targetProject || undefined,
+          space: targetProject || undefined,
+        },
       });
     } else {
       // Terminal-first: a session, then the key. A held credential that
@@ -81,11 +114,37 @@ export async function connect(
       }
       exchanged = await call<Exchanged>(instance, "/api/v1/connect", {
         method: "POST",
-        body: { ...identity, space: space || undefined, preferredSpace: here },
+        body: {
+          ...identity,
+          project: targetProject || undefined,
+          preferredProject: here,
+          space: targetProject || undefined,
+          preferredSpace: here,
+        },
       });
     }
   } catch (error) {
     const failure = error as MemcellError;
+    const body = failure.body as {
+      error?: string;
+      message?: string;
+      projects?: { id: string; slug: string; name: string }[];
+    } | null;
+
+    if (
+      failure.status === 409 &&
+      body?.error === "multiple_projects" &&
+      Array.isArray(body.projects)
+    ) {
+      say(
+        row(0, [badge("memcell"), place(instance)]),
+        row(1, [warn("multiple projects found")], [label("choose which one to connect:")]),
+        ...body.projects.map((p) => row(2, [good(p.slug)], [label(p.name)])),
+        row(2, [label("run"), cmd("memcell connect --project <slug>")]),
+      );
+      return 1;
+    }
+
     say(
       row(0, [badge("memcell"), place(instance)]),
       row(1, [warn("could not connect")], [label(failure.message)]),
@@ -107,10 +166,13 @@ export async function connect(
     );
     return 1;
   }
+  const linked = exchanged.project || exchanged.space;
   const at = await saveProject({
     instance,
-    space: exchanged.space.slug,
-    spaceId: exchanged.space.id,
+    project: linked.slug,
+    projectId: linked.id,
+    space: linked.slug,
+    spaceId: linked.id,
   });
   await pruneProjectKeys(instance, process.cwd());
   await saveAgentKey({
@@ -118,7 +180,7 @@ export async function connect(
     keyId: exchanged.keyId,
     key: exchanged.key,
     project: process.cwd(),
-    space: exchanged.space.slug,
+    space: linked.slug,
     agentId: exchanged.agentId,
     agent: activeAgent,
   });
@@ -131,7 +193,7 @@ export async function connect(
         keyId: sub.keyId,
         key: sub.key,
         project: process.cwd(),
-        space: exchanged.space.slug,
+        space: linked.slug,
         agentId: sub.agentId,
         agent: name,
       });
@@ -172,8 +234,13 @@ export async function connect(
   // arrives later; the hooks above stay the enforcement.
   installSkill(process.cwd());
 
+  const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
+  const projectUrl = ownerSlug
+    ? `${instance}/${ownerSlug}/${linked.slug}`
+    : `${instance}/home?space=${linked.slug}`;
+
   say(
-    row(0, [badge("memcell"), value(exchanged.space.name)]),
+    row(0, [badge("memcell"), value(linked.name)]),
     row(1, [good("connected")], [place(dirname(at))]),
     wired.length > 0
       ? row(
@@ -195,12 +262,7 @@ export async function connect(
       [place(".agents/skills/memcell")],
       [label("teaches any agent the four doors")],
     ),
-    row(
-      1,
-      [good("workbench")],
-      [place(`${instance}/home?space=${exchanged.space.slug}`)],
-      [label("view your space in the browser")],
-    ),
+    row(1, [good("workbench")], [place(projectUrl)], [label("view your project in the browser")]),
     !onPath &&
       row(
         1,
@@ -210,9 +272,10 @@ export async function connect(
       ),
     row(2, [label("check it")], [cmd("memcell status")]),
     row(2, [label("undo it")], [cmd("memcell hook remove")]),
-    // The space above was the instance's pick, not the caller's — say how
+    // The project above was the instance's pick, not the caller's — say how
     // to choose, right where the pick just became visible.
-    !space && row(2, [label("a different space")], [cmd(`memcell connect --space <slug>`)]),
+    !targetProject &&
+      row(2, [label("a different project")], [cmd(`memcell connect --project <slug>`)]),
     // An npx run leaves no binary behind: `memcell` alone stays "command
     // not found" until the package is actually installed. Say so here,
     // where the habit of typing the short name begins.

@@ -1,13 +1,26 @@
 import { actOf } from "./act.js";
 import { can } from "../adapters/surface.js";
 import { dirname } from "node:path";
+import { evaluatePreAct, stageRulesFromRecall, type RawStatementInput } from "./pre-act.js";
 
 import { agentKeyForProject } from "../keyring.js";
 import { findProject, type Project } from "../project.js";
-import { LEGS, type Moment } from "./moments.js";
-import { keepNote, dropNote, log, noteFor } from "./session.js";
+import { PIPELINE_PHASES, LEGS, type LifecycleHook, type Moment } from "./moments.js";
+import {
+  keepSessionCache,
+  dropSessionCache,
+  log,
+  sessionCacheFor,
+  type SessionCache,
+  type Note,
+} from "./session.js";
 import { adapterFor } from "../adapters/index.js";
-import { readIntentEnvelope, readLatestUserPrompt } from "../adapters/capture.js";
+import {
+  readIntentEnvelope,
+  readLatestUserPrompt,
+  type TranscriptDelta,
+} from "../adapters/capture.js";
+import { detectActiveRuntimeModel } from "../model-detect.js";
 
 // What an installed hook executes — the loop, fired by the harness rather
 // than chosen by the model.
@@ -20,8 +33,8 @@ import { readIntentEnvelope, readLatestUserPrompt } from "../adapters/capture.js
 // to happen once for the hooks to come out. Every path here exits 0.
 //
 // THE SECOND RULE: the hook ships and connects, it never judges. It hands
-// the turn's material to `ingest` and the memory decides what was durable;
-// it reports an outcome only where the memory itself said the material
+// the turn's transcript delta to `ingest` and the memory engine distills what was durable;
+// it reports an outcome only where the memory itself said the turn
 // corroborated a statement. Deciding "was that worth keeping" or "did that
 // help" on the client would be guessing with somebody's record.
 
@@ -35,13 +48,14 @@ import { readIntentEnvelope, readLatestUserPrompt } from "../adapters/capture.js
  *  open-ended work, because none runs under a watched deadline any more. */
 const WATCHED_MS = 8_000;
 const UNWATCHED_MS = 20_000;
-/** The hand-over's own budget. The instance takes a named turn and QUEUES
- *  it, so what this covers is shipping the material and getting the claim
+/** The turn payload delivery budget. The instance takes a named turn and QUEUES
+ *  it, so what this covers is shipping the transcript delta and getting the claim
  *  written — not the reading, which is several model passes and was never
  *  something a hook could wait out. Roomier than the rest because a turn's
- *  material can be large and the link can be slow; nothing here waits on a
+ *  payload can be large and the link can be slow; nothing here waits on a
  *  model. */
-const HANDOVER_MS = 60_000;
+const PAYLOAD_TIMEOUT_MS = 60_000;
+const HANDOVER_MS = PAYLOAD_TIMEOUT_MS; // Backwards-compatible alias
 /** How many rule-and-act pairings one turn hands over. A turn with forty
  *  acts must not cost forty judgements, and the same rule against the same
  *  kind of act twice says nothing the first one did not. */
@@ -63,6 +77,7 @@ interface Incoming {
   toolInput?: Record<string, unknown>;
   /** Protojson tool call structure sent by Antigravity and Vertex AI agents */
   toolCall?: { name?: string; args?: Record<string, unknown> };
+  model?: string;
 }
 
 async function incoming(): Promise<Incoming> {
@@ -76,6 +91,7 @@ async function incoming(): Promise<Incoming> {
       conversationId?: string;
       conversation_id?: string;
       workspacePaths?: string[];
+      model?: string;
     };
     raw.sessionId ??= raw.conversationId;
     raw.session_id ??= raw.conversation_id;
@@ -98,10 +114,11 @@ async function incoming(): Promise<Incoming> {
  * key for. One line used to cover both and named the wrong one, sending
  * somebody to check the link file that was sitting right in front of them.
  */
-type Standing =
+export type ProjectWiring =
   { ok: true; project: Project; key: string; agentId?: string } | { ok: false; why: string };
+export type Standing = ProjectWiring; // Backwards-compatible alias
 
-async function standing(cwd?: string, program?: string): Promise<Standing> {
+export async function resolveProjectWiring(cwd?: string, program?: string): Promise<ProjectWiring> {
   const found = await findProject(cwd ?? process.cwd());
   if (!found) return { ok: false, why: "not wired · run memcell connect" };
 
@@ -116,23 +133,24 @@ async function standing(cwd?: string, program?: string): Promise<Standing> {
   // with long after a re-connect minted another one.
   return { ok: true, project: found.project, key: held.key, agentId: held.agentId };
 }
+export const standing = resolveProjectWiring; // Backwards-compatible alias
 
-/** What a loop door said. Fail-open is the AGENT's contract — a door that
+/** What a loop API endpoint returned. Fail-open is the AGENT's contract — an endpoint that
  *  errors never blocks a turn — but the log is where an operator reads why
  *  nothing landed, and there "the instance refused" and "nothing durable"
  *  are different facts. Conflating them made a misconfigured instance read
  *  as an honest zero for a whole working day. */
 type Answered<T> =
   | { at: "answered"; status: number; body: T }
-  /** `said` is the door's own sentence about the refusal, when it sent one.
+  /** `said` is the API's own sentence about the refusal, when it sent one.
    *  A 4xx is the caller's fault and the instance always says what is wrong;
    *  this used to be dropped here, so nine days of a capture leg refusing
    *  the same turn logged a bare status and nothing else. */
   | { at: "refused"; status: number; said?: string }
   | null;
 
-/** One call to a loop door. Null when the instance was never reached. */
-async function door<T>(
+/** One call to a loop API endpoint. Null when the instance was never reached. */
+export async function apiCall<T>(
   instance: string,
   key: string,
   path: string,
@@ -141,9 +159,10 @@ async function door<T>(
   session?: string,
   agentId?: string,
   turn?: string,
+  model?: string,
 ): Promise<Answered<T>> {
   // One retry, on network failure only. A refusal is an answer — the
-  // instance spoke — and retrying it would just ask twice. A hand-over
+  // instance spoke — and retrying it would just ask twice. A delivery
   // names its turn, so a delivery whose response was lost lands once: the
   // second arrival finds the first's moment.
   //
@@ -176,8 +195,10 @@ async function door<T>(
           ...(agentId ? { "x-memcell-agent": agentId } : {}),
           // How long this caller can wait — the instance works TO it.
           "x-memcell-budget": String(deadlineMs),
-          // The turn's name, on hand-overs — one turn, one landing.
+          // The turn's name, on deliveries — one turn, one landing.
           ...(turn ? { "x-memcell-turn": turn } : {}),
+          // Active runtime model if detected
+          ...(model ? { "x-memcell-model": model } : {}),
         },
         body: JSON.stringify(body),
         signal: stop.signal,
@@ -205,20 +226,21 @@ async function door<T>(
   }
   return null;
 }
+export const door = apiCall; // Backwards-compatible alias
 
-/** The failure, in the log's words. */
 /**
- * The most one hand-over may carry, mirroring the door's own ceiling.
+ * The most one turn payload may carry, mirroring the backend endpoint's own ceiling.
  *
- * Declared here rather than discovered: the door refuses a larger delivery
+ * Declared here rather than discovered: the endpoint refuses a larger delivery
  * with a 400, and a client that only learns its limit by being refused
- * spends a turn's work to find it out. Kept a little under the door's
+ * spends a turn's work to find it out. Kept a little under the endpoint's
  * 600k so a delivery is never refused for a rounding difference.
  *
  * The TAIL is what ships. A turn long enough to hit this is one where the
  * end is the conclusion and the start is the search that got there.
  */
-const MAX_HANDOVER_CHARS = 560_000;
+export const MAX_PAYLOAD_CHARS = 560_000;
+export const MAX_HANDOVER_CHARS = MAX_PAYLOAD_CHARS; // Backwards-compatible alias
 
 /** Will the same bytes earn the same refusal? Then holding them is not a
  *  retry, it is a loop: the next read starts where this one did, reaches a
@@ -228,11 +250,11 @@ const MAX_HANDOVER_CHARS = 560_000;
 const refusedForGood = (status: number): boolean =>
   status === 400 || status === 413 || status === 422;
 
-function doorTrouble(answer: Answered<unknown>): string {
+export function formatApiError(answer: Answered<unknown>): string {
   if (answer?.at !== "refused") return "the instance could not be reached";
   // The REASON, not just the number.
   //
-  // A 4xx is the caller's fault and the door says exactly what is wrong in
+  // A 4xx is the caller's fault and the API says exactly what is wrong in
   // the body — and this threw that away. So a capture leg refusing the same
   // turn every firing for nine days logged "the instance answered 400" 204
   // times and nobody could tell from the log what to fix.
@@ -240,6 +262,7 @@ function doorTrouble(answer: Answered<unknown>): string {
     ? `the instance answered ${answer.status} — ${answer.said}`
     : `the instance answered ${answer.status}`;
 }
+export const doorTrouble = formatApiError; // Backwards-compatible alias
 
 export interface Recalled {
   statementId: string;
@@ -253,10 +276,13 @@ export interface Recalled {
   contested?: boolean;
   /** Served because this session already went against it. */
   diverged?: boolean;
+  violated?: boolean;
   /** Somebody asked this rule to STOP the act it bears on. */
   refuses?: boolean;
   pinned?: boolean;
   standing?: boolean;
+  vouched?: boolean;
+  verified?: boolean;
 }
 
 /** A statement is treated as an operational guard if the memory flagged it as
@@ -391,7 +417,7 @@ export interface HookResult {
   heard: { prompt?: string; transformedPrompt?: string };
 }
 
-export async function runMoment(moment: Moment, program: string): Promise<HookResult> {
+export async function runMoment(moment: LifecycleHook, program: string): Promise<HookResult> {
   const payload = await incoming();
   const transcriptPath = payload.transcript_path ?? payload.transcriptPath;
   if (
@@ -406,7 +432,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     }
   }
   const heard = { prompt: payload.prompt, transformedPrompt: payload.transformedPrompt };
-  const here = await standing(payload.cwd, program);
+  const here = await resolveProjectWiring(payload.cwd, program);
 
   // Every log line opens with this: moment, program, and the agent id, so a
   // firing can be correlated to one wired agent when reading the log back.
@@ -431,32 +457,41 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
 
   const { project, key } = here;
   // Two different things that happen to look alike. The first names the
-  // note file on this machine and may fall back to a placeholder; the second
+  // session cache file on this machine and may fall back to a placeholder; the second
   // is an IDENTITY that goes on somebody's record, so a harness that told us
   // nothing has to produce no session rather than a shared fiction — every
   // unidentified firing would otherwise read back as one long session.
   const session = payload.session_id ?? payload.sessionId;
   const sessionId = session ?? "unknown";
-  const note = await noteFor(sessionId);
+  const note = await sessionCacheFor(sessionId);
   note.space = project.space;
-  const legs = LEGS[moment];
+
+  const runtimeModel =
+    detectActiveRuntimeModel(program) ||
+    (typeof payload.model === "string" && payload.model.trim()
+      ? payload.model.trim()
+      : undefined) ||
+    note.model;
+  if (runtimeModel) note.model = runtimeModel;
+
+  const phases = PIPELINE_PHASES[moment];
   const result: HookResult = { heard };
 
-  // Every path out of `before-act` returns from here, and the note is kept at
+  // Every path out of `before-act` returns from here, and the session cache is kept at
   // the BOTTOM of this function — so all six of those returns skipped it.
   //
-  // The leg wrote `note.servedAt` in memory and the process exited without
+  // The hook wrote `note.servedAt` in memory and the process exited without
   // saving it, on every act, in every session, since the pairing was
   // introduced. Which rule was put in front of which act is the one fact
-  // only this leg sees; the instance cannot infer it from the transcript,
+  // only this hook sees; the instance cannot infer it from the transcript,
   // and that is the whole reason it is recorded here. Lost on exit, no
   // `rule_act` row was ever written: a memory whose rules fired every turn
   // read as one whose rules had never fired at all.
   //
-  // The note is now kept on the way out. `keepNote` is best-effort and
+  // The cache is now kept on the way out. `keepSessionCache` is best-effort and
   // never throws — a hook that dies takes the user's turn with it.
   const leaving = async (r: HookResult): Promise<HookResult> => {
-    await keepNote(sessionId, note);
+    await keepSessionCache(sessionId, note);
     return r;
   };
 
@@ -475,55 +510,47 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     const tool = payload.tool_name ?? payload.toolName ?? "";
     const guard = adapterFor(program)?.surface?.guard;
     if (!tool || !guard || !can(guard)) return leaving(result);
-    const act = actOf(tool, payload.tool_input ?? payload.toolInput, guard);
-    if (!act) return leaving(result);
-    const bears = (note.standing ?? []).filter((r) => r.appliesAt.includes(act));
-    if (bears.length === 0) return leaving(result);
-    // A rule somebody asked to STOP this act. Said every time, never once
-    // per session: a wall that only stands the first time is not a wall.
-    // What was put in front of what, recorded as a FACT. The judge is asked
-    // afterwards whether the act complied — a narrow question with the act
-    // in hand — instead of being asked to find both halves in prose.
-    // Bounded: a long turn must not hand over a list that grows with it.
-    const pairs = note.servedAt ?? (note.servedAt = []);
-    const stops = bears.filter((r) => r.refuses);
-    for (const r of bears) {
-      if (pairs.length >= SERVED_AT_LIMIT) break;
-      if (pairs.some((p) => p.statementId === r.statementId && p.act === act)) continue;
-      // What became of it, said by the only thing that saw it. A refusal is
-      // known here and nowhere else — the act never happened, so no later
-      // reading of the turn could tell it apart from a rule that was simply
-      // followed.
-      pairs.push({
-        statementId: r.statementId,
-        act,
-        tool,
-        became: r.refuses ? "refused" : "served",
-      });
-    }
 
-    if (stops.length > 0) {
-      result.refuse = stops.map((r) => r.text).join(" · ");
-      await log(`${tag} · before-act · ${tool} is ${act} · refused · ${result.refuse}`);
+    const evalResult = evaluatePreAct({
+      tool,
+      input: (payload.tool_input ?? payload.toolInput) as Record<string, unknown> | undefined,
+      guard,
+      activeRules: note.activeRules ?? note.standing ?? [],
+      firedMap: note.fired,
+    });
+
+    if (evalResult.verdict === "pass") {
       return leaving(result);
     }
 
-    // Said once per act-class per session. The same rule in front of every
-    // one of forty shell commands is noise, and noise is what gets a hook
-    // uninstalled.
-    const said = `said:${act}`;
-    if (note.fired[said]) return leaving(result);
-    note.fired[said] = Date.now();
-    result.context = [
-      `memcell — standing here, for what you are about to do:`,
-      ...bears.map((r) => `· ${r.text}`),
-    ].join("\n");
-    await log(`${tag} · before-act · ${tool} is ${act} · ${bears.length} said`);
+    const pairs = note.servedAt ?? (note.servedAt = []);
+    for (const p of evalResult.pairs) {
+      if (pairs.length >= SERVED_AT_LIMIT) break;
+      if (pairs.some((x) => x.statementId === p.statementId && x.act === p.act)) continue;
+      pairs.push(p);
+    }
+
+    if (evalResult.verdict === "refuse") {
+      result.refuse = evalResult.reason;
+      await log(`${tag} · before-act · ${tool} is ${evalResult.act} · refused · ${result.refuse}`);
+      return leaving(result);
+    }
+
+    if (evalResult.verdict === "advise") {
+      const saidKey = `said:${evalResult.act}`;
+      note.fired[saidKey] = Date.now();
+      result.context = evalResult.guidance;
+      await log(
+        `${tag} · before-act · ${tool} is ${evalResult.act} · ${evalResult.bears.length} said`,
+      );
+      return leaving(result);
+    }
+
     return leaving(result);
   }
 
   // ── recall ────────────────────────────────────────────────────────────
-  if (legs.includes("recall")) {
+  if (phases.includes("recall")) {
     // Prompt-submit asks the prompt. Session start has no prompt yet, so it
     // asks about the work itself — what anyone opening this project should
     // be carrying before they type anything.
@@ -535,7 +562,15 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         : `starting work in ${project.space}: the standing decisions, conventions and gotchas here`;
 
     if (intent) {
-      const asked = await door<{ momentId: string; results: Recalled[]; note?: string }>(
+      const asked = await apiCall<{
+        momentId?: string;
+        recallId?: string;
+        results?: Recalled[];
+        statements?: RawStatementInput[];
+        guardMode?: "strict" | "advisory";
+        profile?: string | null;
+        note?: string;
+      }>(
         project.instance,
         key,
         "recall",
@@ -543,39 +578,54 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         moment === "prompt-submit" ? WATCHED_MS : UNWATCHED_MS,
         session,
         agentId,
+        undefined,
+        runtimeModel,
       );
       const answer = asked?.at === "answered" ? asked.body : null;
       if (!answer) {
         // The turn goes on without memory — fail open — but the log says
         // what actually happened, not "0 served".
-        await log(`${tag} · recall · ${doorTrouble(asked)}`);
+        await log(`${tag} · recall · ${formatApiError(asked)}`);
       }
-      const results = answer?.results ?? [];
-      // Kept for `before-act`, which fires many times a turn and must cost
-      // nothing: what bears on an act is chosen from here, not asked for.
-      // Only the rules that name a moment are kept — knowledge is most of a
-      // memory and none of it belongs in front of somebody mid-act.
-      const bearing = results.filter((r) => (r.appliesAt ?? []).length > 0);
-      if (bearing.length > 0) {
-        note.standing = bearing.map((r) => ({
-          statementId: r.statementId,
-          text: r.text,
-          appliesAt: r.appliesAt ?? [],
-          ...(r.refuses ? { refuses: true } : {}),
-        }));
+      const rawStatements = (answer?.statements ?? answer?.results ?? []) as RawStatementInput[];
+      const guardMode = (answer?.guardMode ?? note.guardMode ?? "strict") as "strict" | "advisory";
+      note.guardMode = guardMode;
+
+      const staged = stageRulesFromRecall(rawStatements, guardMode);
+      if (staged.length > 0) {
+        note.activeRules = staged;
+        note.standing = staged;
       }
+
+      const results: Recalled[] = rawStatements.map((r) => {
+        const statementId = (r.id ?? r.statementId ?? "") as string;
+        const text = r.title ? (r.context ? `${r.title}: ${r.context}` : r.title) : (r.text ?? "");
+        return {
+          statementId,
+          text,
+          confidence: r.confidence ?? 0.8,
+          layer: r.layer ?? (r.tags?.join(", ") || "project"),
+          kind:
+            r.kind ??
+            (r.tags?.includes("guard")
+              ? "guard"
+              : r.tags?.includes("convention")
+                ? "convention"
+                : undefined),
+          tags: r.tags,
+          appliesAt: r.appliesAt,
+          refuses: guardMode === "strict" ? r.tags?.includes("guard") || r.refuses : false,
+          contested: Boolean(r.contested),
+          diverged: Boolean(r.diverged || r.violated),
+          violated: Boolean(r.diverged || r.violated),
+          vouched: Boolean(r.vouched || r.verified),
+          verified: Boolean(r.vouched || r.verified),
+        };
+      });
+
       if (results.length > 0) {
         result.context = asContext(results, project.space, heard.prompt ?? heard.transformedPrompt);
-        // No served-set is tracked here any more: recall already writes the
-        // moment with this session's id, and the engine reads what the session
-        // recalled from there when it assigns credit. The hook does not carry
-        // the correlation it no longer performs.
       } else if (moment === "session-start" && answer?.note) {
-        // Nothing was found, and the memory said why. Passing that on once,
-        // at the start, is the difference between an agent concluding memcell
-        // is broken and an agent knowing there is a memory here to fill.
-        // Not at prompt-submit: somebody is watching the cursor there, and
-        // the same sentence on every prompt is noise, not help.
         result.context = answer.note;
       }
       if (answer) {
@@ -589,7 +639,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
   }
 
   // ── remember, and the report the memory's own answer justifies ─────────
-  if (legs.includes("remember")) {
+  if (phases.includes("remember")) {
     // Read in the agent's own dialect — the adapter that speaks for this
     // program also reads its record; an agent this build does not know
     // reads as empty. Claude and Gemini hand a transcript path; Codex and
@@ -598,39 +648,42 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     // plus where in the transcript this delta starts identifies the
     // delivery, and stays identical across a retry of it.
     const turn = session ? `${session}:${JSON.stringify(note.read ?? 0)}` : undefined;
-    const material = (await adapterFor(program)?.read(payload, note.read)) ?? {
+    const transcriptDelta: TranscriptDelta = (await adapterFor(program)?.read(
+      payload,
+      note.read,
+    )) ?? {
       text: "",
       touched: [],
       read: note.read,
     };
-    const advanced = material.read !== note.read;
+    const advanced = transcriptDelta.read !== note.read;
     // Where this turn started, kept so a delivery that did NOT land can be
-    // read again. Advancing past material the instance never took is how a
+    // read again. Advancing past transcript delta the instance never took is how a
     // turn's work disappears silently, which is the same shape as the offset
     // bug that wedged capture for two days — the other direction.
     const startedAt = note.read;
-    note.read = material.read;
+    note.read = transcriptDelta.read;
 
-    // Material without an advance is never handed over. The turn's name is
+    // Transcript delta without an advance is never delivered. The turn's name is
     // the session plus this offset, so an offset that stands still names the
     // next turn identically to this one — and the instance, doing exactly
     // what it should with a name it has already seen, stands the delivery
     // down as already handed over. The session then never captures again.
     // A reader is not trusted to keep that invariant on its own; it is
     // checked here, where the name is made.
-    // TRIMMED, because that is what the door measures.
+    // TRIMMED, because that is what the endpoint measures.
     //
     // This read the raw length and the instance reads `raw.trim().length`,
     // so a turn whose delta is mostly whitespace passed here and was refused
-    // there — and a refused turn is HELD and retried, so the same material
+    // there — and a refused turn is HELD and retried, so the same transcript delta
     // came back every firing and nothing behind it could land either. 204
     // refusals across nine days, all of them this.
-    const enough = material.text.trim().length >= 20;
+    const enough = transcriptDelta.text.trim().length >= 20;
 
     if (enough && !advanced) {
-      await log(`${tag} · remember · read returned material without advancing — held back`);
+      await log(`${tag} · remember · read returned transcript delta without advancing — held back`);
     } else if (enough) {
-      const handed = await door<{
+      const handed = await apiCall<{
         created: { statementId: string }[];
         reinforced: { statementId: string }[];
         attributed: { statementId: string; outcome: "worked" | "failed" }[];
@@ -640,12 +693,12 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
       }>(
         project.instance,
         key,
-        `spaces/${encodeURIComponent(project.space)}/ingest`,
+        "ingest",
         {
           raw:
-            material.text.length > MAX_HANDOVER_CHARS
-              ? material.text.slice(-MAX_HANDOVER_CHARS)
-              : material.text,
+            transcriptDelta.text.length > MAX_PAYLOAD_CHARS
+              ? transcriptDelta.text.slice(-MAX_PAYLOAD_CHARS)
+              : transcriptDelta.text,
           origin: { title: `${program} session` },
           // What was put in front of what, and before which act. The record
           // knows the pairing already; this is the half only the client saw.
@@ -653,12 +706,13 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
           // The names of the files this turn wrote — names only, never
           // contents — so the session can be read back as work, not just
           // as prose. Absent when the transcript named none.
-          ...(material.touched.length > 0 ? { touched: material.touched } : {}),
+          ...(transcriptDelta.touched.length > 0 ? { touched: transcriptDelta.touched } : {}),
         },
-        HANDOVER_MS,
+        PAYLOAD_TIMEOUT_MS,
         session,
         agentId,
         turn,
+        runtimeModel,
       );
       const kept = handed?.at === "answered" ? handed.body : null;
       // Judged once. Cleared only on a delivery that landed — a held turn
@@ -687,7 +741,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         // safety net before distilling, and the turn is named, so the next
         // delivery of it is a no-op either way. Say which case this is.
         // Nothing landed, so the offset goes back: the next firing re-reads
-        // this material rather than skipping it. Safe to re-deliver, because
+        // this transcript delta rather than skipping it. Safe to re-deliver, because
         // the turn's name is derived from this very offset — an instance
         // that DID land it sees the same name and stands the repeat down.
         // Held for a retry — unless retrying is what wedges it. A refusal
@@ -700,22 +754,22 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
         if (!forGood) note.read = startedAt;
         await log(
           forGood
-            ? `${tag} · remember · ${doorTrouble(handed as Answered<unknown>)} — this turn was refused and is not worth re-sending; moving past it`
+            ? `${tag} · remember · ${formatApiError(handed as Answered<unknown>)} — this turn was refused and is not worth re-sending; moving past it`
             : handed?.at === "refused"
-              ? `${tag} · remember · ${doorTrouble(handed)} — not captured, holding this turn for the next firing`
-              : `${tag} · remember · ${doorTrouble(handed)} — no answer, holding this turn for the next firing`,
+              ? `${tag} · remember · ${formatApiError(handed)} — not captured, holding this turn for the next firing`
+              : `${tag} · remember · ${formatApiError(handed)} — no answer, holding this turn for the next firing`,
         );
       }
 
       // ── report ───────────────────────────────────────────────────────
       // Not judged here — the engine judged. The one ingest above shipped the
-      // turn's material AND the session it belongs to; the engine read what
+      // turn's transcript delta AND the session it belongs to; the engine read what
       // that session recalled and assigned credit, worked or failed. THE HOOK
       // IS A PIPE: it only reports what came back. This is why the correlation
       // that used to live here — match a reinforced statement to a recall and
       // call it worked — is gone: it was a judgment, and it never once said
       // failed.
-      if (legs.includes("report")) {
+      if (phases.includes("report")) {
         if (queued) {
           // The judge runs where the reading runs. Nothing to say yet, and
           // "nothing the session bore on" would be a verdict nobody reached.
@@ -736,7 +790,7 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
             await log(`${tag} · report · went against ${against.length}, re-asserting next turn`);
           }
         } else {
-          await log(`${tag} · report · not asked — the hand-over did not land`);
+          await log(`${tag} · report · not asked — the payload delivery did not land`);
         }
       }
     } else {
@@ -744,8 +798,8 @@ export async function runMoment(moment: Moment, program: string): Promise<HookRe
     }
   }
 
-  if (moment === "session-end") await dropNote(sessionId);
-  else await keepNote(sessionId, note);
+  if (moment === "session-end") await dropSessionCache(sessionId);
+  else await keepSessionCache(sessionId, note);
 
   return result;
 }

@@ -1,42 +1,49 @@
-// The lifecycle moments a hook can fire at, and which leg of the loop runs
-// at each. One list, so five adapters cannot drift five ways.
+// The lifecycle hooks an agent harness can fire at, and which pipeline phase
+// of the loop runs at each. One list, so adapters cannot drift.
 //
 //   session start · prompt submit → recall.   What is already known has to
 //     reach the agent BEFORE it acts, or it acts without it.
 //   turn end                      → remember. What the turn produced is
-//     handed over as raw material; the memory decides what was durable.
+//     handed over as transcript delta; the memory engine distills what was durable.
 //   turn end · session end        → report.   A statement the turn's own
 //     work corroborated is one the recall got right, and saying so is the
 //     only thing that moves confidence.
-//   before act                    → recall, again, and differently. A rule
+//   before act                    → pre-act guard evaluation. A rule
 //     read at the top of a session and needed forty steps later is a rule
 //     nobody is holding by the time it applies. This fires before an
-//     individual act and serves only what bears on THAT act. It fires many
-//     times a turn, so it costs no call: the standing rules come down once
-//     and the matching happens here.
+//     individual act and evaluates active rules bearing on THAT act. It fires many
+//     times a turn, so it costs no call: active rules come down once
+//     and the in-memory matching happens locally.
 
-export const MOMENTS = [
+export const LIFECYCLE_HOOKS = [
   "session-start",
   "prompt-submit",
   "before-act",
   "turn-end",
   "session-end",
 ] as const;
-export type Moment = (typeof MOMENTS)[number];
+export type LifecycleHook = (typeof LIFECYCLE_HOOKS)[number];
 
-export const isMoment = (word: string): word is Moment =>
-  (MOMENTS as readonly string[]).includes(word);
+export const isLifecycleHook = (word: string): word is LifecycleHook =>
+  (LIFECYCLE_HOOKS as readonly string[]).includes(word);
 
-export type Leg = "recall" | "remember" | "report";
+export type PipelinePhase = "recall" | "remember" | "report";
 
-export const LEGS: Record<Moment, Leg[]> = {
+export const PIPELINE_PHASES: Record<LifecycleHook, PipelinePhase[]> = {
   "session-start": ["recall"],
   "prompt-submit": ["recall"],
-  // Served from what the session already holds — see `guard`. No leg runs.
+  // Evaluated in-memory from active rules held in session cache. No remote phase runs.
   "before-act": [],
   "turn-end": ["remember", "report"],
   "session-end": ["remember", "report"],
 };
+
+// Backwards-compatible aliases for legacy terminology
+export const MOMENTS = LIFECYCLE_HOOKS;
+export type Moment = LifecycleHook;
+export const isMoment = isLifecycleHook;
+export type Leg = PipelinePhase;
+export const LEGS = PIPELINE_PHASES;
 
 /** A path, as every shell reads it — forward slashes (bash on Windows
  *  reads backslashes as escapes) and quoted against spaces. */

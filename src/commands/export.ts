@@ -91,11 +91,10 @@ export async function exportSpace(format: string, out?: string, url?: string): P
 
   let doc: ExportDoc;
   try {
-    doc = await call<ExportDoc>(
-      here.instance,
-      `/api/v1/spaces/${encodeURIComponent(here.space)}/export`,
-      { method: "GET", bearer: here.key },
-    );
+    doc = await call<ExportDoc>(here.instance, "/api/v1/export", {
+      method: "GET",
+      bearer: here.key,
+    });
   } catch (error) {
     if (error instanceof MemcellError) {
       say(

@@ -346,7 +346,7 @@ describe("remember, and the report it justifies", () => {
     stuck.mockRestore();
 
     // Nothing was handed over, so nothing can be named twice.
-    expect(calls.find((c) => c.path.endsWith("/ingest"))).toBeUndefined();
+    expect(calls.find((c) => c.path.endsWith("ingest"))).toBeUndefined();
     const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
     expect(log).toContain("without advancing");
   });
@@ -359,7 +359,7 @@ describe("remember, and the report it justifies", () => {
             momentId: "m9",
             results: [{ statementId: "s9", text: "Cents.", confidence: 0.5, layer: "me" }],
           }
-        : path.endsWith("/ingest")
+        : path.endsWith("ingest")
           ? {
               created: [],
               reinforced: [{ statementId: "s9" }],
@@ -372,7 +372,7 @@ describe("remember, and the report it justifies", () => {
 
     reset();
     answer = (path) =>
-      path.endsWith("/ingest")
+      path.endsWith("ingest")
         ? {
             created: [],
             reinforced: [{ statementId: "s9" }],
@@ -382,7 +382,7 @@ describe("remember, and the report it justifies", () => {
     fed({ session_id: "loop", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
 
-    const ingest = calls.find((c) => c.path.endsWith("/ingest"));
+    const ingest = calls.find((c) => c.path.endsWith("ingest"));
     expect(String(ingest!.body.raw)).toContain("integer cents");
     // The files the turn wrote ride the hand-over by NAME, relative to the
     // project — and only the writes: the Read of README.md does not travel.
@@ -400,7 +400,7 @@ describe("remember, and the report it justifies", () => {
   it("posts no outcome of its own — attribution is the engine's, not the hook's", async () => {
     reset();
     answer = (path) =>
-      path.endsWith("/ingest")
+      path.endsWith("ingest")
         ? { created: [], reinforced: [{ statementId: "stranger" }], attributed: [] }
         : {};
     fed({ session_id: "solo", cwd: project, transcript_path: transcript });
@@ -416,14 +416,14 @@ describe("remember, and the report it justifies", () => {
     answer = () => ({ created: [], reinforced: [] });
     fed({ session_id: "again", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
-    const first = calls.filter((c) => c.path.endsWith("/ingest")).length;
+    const first = calls.filter((c) => c.path.endsWith("ingest")).length;
 
     reset();
     fed({ session_id: "again", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
     // The second firing has nothing new: a turn ships what is new, never the
     // whole conversation again.
-    expect(calls.filter((c) => c.path.endsWith("/ingest"))).toHaveLength(0);
+    expect(calls.filter((c) => c.path.endsWith("ingest"))).toHaveLength(0);
     expect(first).toBe(1);
   });
 });
@@ -490,7 +490,7 @@ describe("failing open", () => {
 
     const recall = calls.find((c) => c.path === "recall");
     expect(Number(recall!.headers["x-memcell-budget"])).toBeGreaterThanOrEqual(8_000);
-    const ingest = calls.find((c) => c.path.endsWith("/ingest"));
+    const ingest = calls.find((c) => c.path.endsWith("ingest"));
     expect(Number(ingest!.headers["x-memcell-budget"])).toBeGreaterThan(0);
     expect(ingest!.headers["x-memcell-turn"]).toMatch(/^s-budget:/);
   });
@@ -503,7 +503,7 @@ describe("failing open", () => {
     let drops = 1;
     const real = globalThis.fetch;
     globalThis.fetch = (async (url: unknown, init: unknown) => {
-      if (String(url).endsWith("/ingest") && drops-- > 0) throw new TypeError("socket hangup");
+      if (String(url).endsWith("ingest") && drops-- > 0) throw new TypeError("socket hangup");
       return (real as (u: unknown, i: unknown) => unknown)(url, init);
     }) as typeof fetch;
     try {
@@ -517,7 +517,7 @@ describe("failing open", () => {
       globalThis.fetch = real;
     }
 
-    const deliveries = calls.filter((c) => c.path.endsWith("/ingest"));
+    const deliveries = calls.filter((c) => c.path.endsWith("ingest"));
     expect(deliveries).toHaveLength(1); // the drop never reached the recorder
     // The tag carries the agent, not the session, so anchor on the last
     // remember line — the one this turn wrote after its retry.
@@ -652,7 +652,7 @@ describe("the wired invocation is portable", () => {
 describe("a hand-over the instance will never take", () => {
   /** Everything the ingest door was actually sent, in order. */
   const handedOver = () =>
-    calls.filter((c) => c.path.includes("/ingest")).map((c) => String(c.body.raw ?? ""));
+    calls.filter((c) => c.path.includes("ingest")).map((c) => String(c.body.raw ?? ""));
 
   /** Add a turn to the record, so the next firing has something new. */
   const grow = async (path: string, what: string) => {
@@ -671,7 +671,7 @@ describe("a hand-over the instance will never take", () => {
     await writeFile(record, "");
     await grow(record, "the first turn, which the door will refuse");
 
-    answer = (path) => (path.includes("/ingest") ? 400 : {});
+    answer = (path) => (path.includes("ingest") ? 400 : {});
     fed({ session_id: "wedged", cwd: project, transcript_path: record });
     await runMoment("turn-end", "claude");
 
@@ -699,7 +699,7 @@ describe("a hand-over the instance will never take", () => {
     await writeFile(record, "");
     await grow(record, "the first turn, during an outage");
 
-    answer = (path) => (path.includes("/ingest") ? 503 : {});
+    answer = (path) => (path.includes("ingest") ? 503 : {});
     fed({ session_id: "waiting", cwd: project, transcript_path: record });
     await runMoment("turn-end", "claude");
 

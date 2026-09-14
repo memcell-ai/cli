@@ -84,13 +84,20 @@ export const cursor: Adapter = {
       const entries = (held.hooks[EVENT[moment]] ??= []);
       const command = hookCommand(moment, "cursor");
       let refreshed = false;
+      const kept: { command: string }[] = [];
       for (const entry of entries) {
         if (hookMatches(entry.command, moment, "cursor")) {
-          entry.command = command;
-          refreshed = true;
+          if (!refreshed) {
+            entry.command = command;
+            kept.push(entry);
+            refreshed = true;
+          }
+        } else {
+          kept.push(entry);
         }
       }
-      if (!refreshed) entries.push({ command });
+      if (!refreshed) kept.push({ command });
+      held.hooks[EVENT[moment]] = kept;
     }
     await writeJson(at, held);
 

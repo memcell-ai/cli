@@ -87,4 +87,9 @@ describe("what status actually verifies", () => {
     // project with no agent key is wired to nothing.
     expect(source).toContain("no agent key");
   });
+
+  it("exposes agents whoami for terminal inspection", async () => {
+    const { whoamiAgent } = await import("../src/commands/agents.js");
+    expect(typeof whoamiAgent).toBe("function");
+  });
 });

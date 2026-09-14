@@ -29,15 +29,11 @@ export async function ingest(file: string, url?: string): Promise<number> {
   }
 
   try {
-    const kept = await call<Kept>(
-      here.instance,
-      `/api/v1/spaces/${encodeURIComponent(here.space)}/ingest`,
-      {
-        method: "POST",
-        bearer: here.key,
-        body: { raw, origin: { title: basename(file) } },
-      },
-    );
+    const kept = await call<Kept>(here.instance, "/api/v1/ingest", {
+      method: "POST",
+      bearer: here.key,
+      body: { raw, origin: { title: basename(file) } },
+    });
     const created = kept.created.length;
     const reinforced = kept.reinforced.length;
     say(

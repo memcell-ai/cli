@@ -71,7 +71,7 @@ describe("in a wired directory", () => {
 
     expect(await ingest(doc)).toBe(0);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/spaces/api/ingest");
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/ingest");
     expect(calls[0]!.headers.authorization).toBe("Bearer mc_pairkey");
     expect(calls[0]!.body.raw).toContain("retry budget");
     expect((calls[0]!.body.origin as { title: string }).title).toBe("NOTES.md");

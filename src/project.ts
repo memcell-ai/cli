@@ -27,7 +27,11 @@ export interface Project {
   /** Which memcell — a key minted against a laptop's dev server must never
    *  be presented to the hosted one. `[instance].url`. */
   instance: string;
-  /** The space slug, as the URL paths address it. `[space].slug`. */
+  /** The project slug. `[project].slug`. */
+  project?: string;
+  /** The project id. `[project].id`. */
+  projectId?: string;
+  /** The legacy space slug. `[space].slug`. */
   space: string;
   /** The space id. `[space].id`. */
   spaceId?: string;
@@ -35,21 +39,32 @@ export interface Project {
 
 interface Doc {
   instance?: { url?: string };
+  project?: { id?: string; slug?: string };
   space?: { id?: string; slug?: string };
 }
 
 function fromToml(text: string): Project | null {
   const doc = parse(text) as Doc;
   const instance = doc.instance?.url;
-  const space = doc.space?.slug;
-  if (!instance || !space) return null;
-  return { instance, space, spaceId: doc.space?.id };
+  const slug = doc.project?.slug ?? doc.space?.slug;
+  if (!instance || !slug) return null;
+  const id = doc.project?.id ?? doc.space?.id;
+  return {
+    instance,
+    project: slug,
+    projectId: id,
+    space: slug,
+    spaceId: id,
+  };
 }
 
 function toToml(project: Project): string {
+  const slug = project.project || project.space;
+  const id = project.projectId || project.spaceId;
   const doc: Doc = {
     instance: { url: project.instance },
-    space: { ...(project.spaceId ? { id: project.spaceId } : {}), slug: project.space },
+    project: { ...(id ? { id } : {}), slug },
+    space: { ...(id ? { id } : {}), slug },
   };
   return stringify(doc);
 }

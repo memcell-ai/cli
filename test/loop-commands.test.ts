@@ -146,7 +146,7 @@ describe("remember", () => {
     answer = () => ({ id: "s9", scope: "team", confidence: 0.55, note: "Filed at 0.55." });
 
     expect(await remember("Retries cap at five attempts.")).toBe(0);
-    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/spaces/api/statements");
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/remember");
     expect(calls[0]!.headers.authorization).toBe("Bearer mc_pairkey");
     expect(calls[0]!.body.text).toBe("Retries cap at five attempts.");
     expect(calls[0]!.body).not.toHaveProperty("kind");
@@ -164,7 +164,8 @@ describe("report", () => {
     answer = () => ({ from: 0.55, to: 0.62 });
 
     expect(await report("s1", "worked")).toBe(0);
-    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/spaces/api/statements/s1/outcomes");
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/feedback");
+    expect(calls[0]!.body.statementId).toBe("s1");
     expect(calls[0]!.body.outcome).toBe("worked");
     expect(calls[0]!.body).not.toHaveProperty("note");
   });
@@ -185,7 +186,8 @@ describe("report", () => {
   it("takes the id recall prints, unencoded on the way out", async () => {
     answer = () => ({ from: 0.5, to: 0.6 });
     await report("7f3e-with/slash", "worked");
-    expect(calls[0]!.url).toContain("statements/7f3e-with%2Fslash/outcomes");
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/feedback");
+    expect(calls[0]!.body.statementId).toBe("7f3e-with/slash");
   });
 });
 

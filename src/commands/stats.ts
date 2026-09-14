@@ -28,7 +28,7 @@ interface Pulse {
 
 interface Stats {
   window: { days: number; buckets: number; since: string };
-  /** Which reading this is, said by the door rather than inferred from
+  /** Which reading this is, said by the API rather than inferred from
    *  which fields came back. */
   scope: { kind: "instance" | "space"; space: { slug: string; name: string } | null };
   /** Absent on the public reading — nobody's spaces were counted. */
@@ -38,7 +38,7 @@ interface Stats {
   repeated: Pulse;
   /** How many firings were LOOKED at. `followed` cannot be read without it:
    *  zero against nothing judged is the loop not running, zero against
-   *  everything judged is the loop running on material that showed neither. */
+   *  everything judged is the loop running on transcripts that showed neither. */
   judged: Pulse;
   /** What the figures came to, in tokens, and what it is made of. */
   saved: Pulse & {
@@ -113,8 +113,8 @@ function madeOf(from: {
 
 export async function stats(instance: string): Promise<number> {
   const signedIn = Boolean(await credentialFor(instance));
-  // Standing in a linked project, the question is about THIS space. The
-  // door's own default is the space you were last working in, so an
+  // Working in a linked project, the question is about THIS space. The
+  // API's own default is the space you were last working in, so an
   // unlinked directory still gets one space rather than a sum across all
   // of them — `--all-spaces` widened it and was a third way to spell a
   // question that already had two.

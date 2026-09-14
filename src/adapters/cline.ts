@@ -108,15 +108,22 @@ export const cline: Adapter = {
       const entries = (doc.hooks[EVENT[moment]] ??= []);
       const command = hookCommand(moment, "cline");
       let held = false;
+      const kept: { type?: string; command: string; timeout?: number }[] = [];
       for (const entry of entries) {
         if (hookMatches(entry.command, moment, "cline")) {
-          entry.command = command;
-          held = true;
+          if (!held) {
+            entry.command = command;
+            kept.push(entry);
+            held = true;
+          }
+        } else {
+          kept.push(entry);
         }
       }
       if (!held) {
-        entries.push({ type: "command", command, timeout: 30 });
+        kept.push({ type: "command", command, timeout: 30 });
       }
+      doc.hooks[EVENT[moment]] = kept;
     }
 
     await writeJson(at, doc);

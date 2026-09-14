@@ -21,7 +21,7 @@ import { log } from "../loop/session.js";
 const reason = (trouble: unknown): string =>
   trouble instanceof Error ? trouble.message : String(trouble);
 
-export interface Session {
+export interface TranscriptDelta {
   /** The conversation since `from`, as "role: text" blocks. */
   text: string;
   /** The names of the files this slice's turns wrote — relative to the
@@ -32,6 +32,7 @@ export interface Session {
    *  count); it is only ever compared to itself. */
   read: number;
 }
+export type Session = TranscriptDelta;
 
 /** What a harness hands the hook on stdin — the fields the adapters read.
  *  Field spelling varies by agent (snake and camel are both real). */
