@@ -242,9 +242,10 @@ export async function memcellOnPath(): Promise<boolean> {
     // just wrote name `memcell`, so they die with it. That is the silent
     // failure this check exists to prevent, and it was reporting success
     // in exactly the case it was written for.
-    const p = spawn("sh", ["-lc", "command -v memcell"], {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    const isWin = process.platform === "win32";
+    const p = isWin
+      ? spawn("where.exe", ["memcell"], { stdio: ["ignore", "pipe", "ignore"] })
+      : spawn("sh", ["-lc", "command -v memcell"], { stdio: ["ignore", "pipe", "ignore"] });
     let where = "";
     p.stdout?.on("data", (chunk: Buffer) => {
       where += chunk.toString();
