@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/memcell-ai/cli/compare/memcell-v0.9.0...memcell-v0.10.0) (2026-09-17)
+
+
+### Features
+
+* **sdk:** universal data modeling, dynamic workflow loop, M2M OAuth, and async jobs (ADR 055) ([#31](https://github.com/memcell-ai/cli/issues/31)) ([c6db93b](https://github.com/memcell-ai/cli/commit/c6db93b655d1b1e7a5e3c62aaef6fdfc06d016a9))
+* **tenancy:** migrate from spaces to project-scoped tenancy and add model detection ([#28](https://github.com/memcell-ai/cli/issues/28)) ([71e342f](https://github.com/memcell-ai/cli/commit/71e342f947aebbd8b03c95f2d2612ec6114102ae))
+
+
+### Miscellaneous Chores
+
+* **release:** configure pre-major patch bumping ([40d1502](https://github.com/memcell-ai/cli/commit/40d1502de5249db9e13526b411116c5130d31778))
+
 ## [0.9.0](https://github.com/memcell-ai/cli/compare/memcell-v0.8.0...memcell-v0.9.0) (2026-09-10)
 
 
