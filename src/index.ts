@@ -13,3 +13,28 @@ export {
   saveCredential,
   type Credential,
 } from "./instance.js";
+
+// Ergonomic TypeScript SDK for MemCell (ADR 055 Tier 3)
+export {
+  MemCell,
+  ScopedMemCell,
+  AuthManager,
+  type FeedbackParams,
+  type FeedbackResponse,
+  type MemCellAuth,
+  type MemCellConfig,
+  type MemoryKind,
+  type MemoryStatus,
+  type OutcomeVerdict,
+  type RecallParams,
+  type RecallResponse,
+  type RememberParams,
+  type RememberResponse,
+  type ReportParams,
+  type ReportResponse,
+  type ScopeOptions,
+  type ScopedExecutionContext,
+  type ScopedExecutionResult,
+  type StatementItem,
+  type WrapExecutionOptions,
+} from "./sdk/index.js";
