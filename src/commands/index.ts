@@ -15,6 +15,7 @@ import { logout } from "./logout.js";
 import { reset } from "./reset.js";
 import { seed } from "./seed.js";
 import { listProjects, newProject, useProject } from "./projects.js";
+import { listOrganizations, createOrganization, switchOrganization } from "./orgs.js";
 import { stats } from "./stats.js";
 import { status } from "./status.js";
 
@@ -31,6 +32,7 @@ import { status } from "./status.js";
 export const RESOURCES: Resource[] = [
   { name: "config", what: "settings, per project or per machine" },
   { name: "projects", what: "what you work on, and which one is active" },
+  { name: "orgs", what: "organizations you belong to, and which one is active" },
   { name: "agents", what: "the agents wired to this account" },
   { name: "memories", what: "the commons" },
 ];
@@ -226,6 +228,72 @@ export const COMMANDS: Command[] = [
     args: [{ name: "slug", required: true, what: "from the list" }],
     takes: ["url"],
     run: ({ instance, args }) => useProject(instance, args.slug!),
+  },
+  {
+    path: ["projects", "switch"],
+    what: "work on this one from now on, everywhere",
+    args: [{ name: "slug", required: true, what: "from the list" }],
+    takes: ["url"],
+    run: ({ instance, args }) => useProject(instance, args.slug!),
+  },
+  {
+    path: ["projects", "list"],
+    what: "list them",
+    takes: ["url"],
+    run: ({ instance }) => listProjects(instance),
+  },
+
+  {
+    path: ["orgs"],
+    what: "list organizations you belong to",
+    takes: ["url"],
+    run: ({ instance }) => listOrganizations(instance),
+  },
+  {
+    path: ["orgs", "list"],
+    what: "list organizations you belong to",
+    takes: ["url"],
+    run: ({ instance }) => listOrganizations(instance),
+  },
+  {
+    path: ["orgs", "ls"],
+    what: "list organizations you belong to",
+    takes: ["url"],
+    run: ({ instance }) => listOrganizations(instance),
+  },
+  {
+    path: ["orgs", "create"],
+    what: "create a new organization and set active context",
+    args: [{ name: "slug", required: true, what: "unique url handle" }],
+    takes: ["name", "url"],
+    run: ({ instance, args, flags }) =>
+      createOrganization(instance, args.slug!, {
+        name: typeof flags.name === "string" ? flags.name : undefined,
+      }),
+  },
+  {
+    path: ["orgs", "new"],
+    what: "create a new organization and set active context",
+    args: [{ name: "slug", required: true, what: "unique url handle" }],
+    takes: ["name", "url"],
+    run: ({ instance, args, flags }) =>
+      createOrganization(instance, args.slug!, {
+        name: typeof flags.name === "string" ? flags.name : undefined,
+      }),
+  },
+  {
+    path: ["orgs", "switch"],
+    what: "switch active CLI organization context (or 'personal')",
+    args: [{ name: "slug", required: true, what: "from the list, or 'personal'" }],
+    takes: ["url"],
+    run: ({ instance, args }) => switchOrganization(instance, args.slug!),
+  },
+  {
+    path: ["orgs", "use"],
+    what: "switch active CLI organization context (or 'personal')",
+    args: [{ name: "slug", required: true, what: "from the list, or 'personal'" }],
+    takes: ["url"],
+    run: ({ instance, args }) => switchOrganization(instance, args.slug!),
   },
 
   {

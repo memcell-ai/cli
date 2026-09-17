@@ -92,6 +92,7 @@ export const FLAGS: Record<string, FlagSpec> = {
   },
   note: { name: "note", takes: "text", what: "what happened, in a sentence" },
   dir: { name: "dir", takes: "path", what: "which directory to act on" },
+  name: { name: "name", takes: "title", what: "display name for the resource" },
 };
 
 export interface Invocation {

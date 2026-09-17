@@ -90,6 +90,21 @@ describe("projects new", () => {
     expect(calls[0]!.method).toBe("POST");
     expect(calls[0]!.body).toEqual({ name: "Analytics" });
   });
+
+  it("creates a new project under active organization context when configured", async () => {
+    const { set } = await import("../src/config.js");
+    await set("organization", "acme-corp", "global");
+
+    answer = () => ({ id: "p4", slug: "checkout", name: "Checkout Service" });
+
+    expect(await newProject(instance, "Checkout Service")).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/projects");
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.body).toEqual({ name: "Checkout Service", owner: "acme-corp" });
+
+    await set("organization", "", "global");
+  });
 });
 
 describe("projects use", () => {
