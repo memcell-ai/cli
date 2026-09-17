@@ -1,7 +1,9 @@
 export { MemCell } from "./client.js";
 export { ScopedMemCell } from "./scoped.js";
+export { OrganizationMemCell } from "./organization.js";
 export { AuthManager } from "./auth.js";
 export type {
+  CreateOrganizationParams,
   FeedbackParams,
   FeedbackResponse,
   JobEvent,
@@ -9,6 +11,7 @@ export type {
   MemCellConfig,
   MemoryKind,
   MemoryStatus,
+  OrganizationItem,
   OutcomeVerdict,
   RecallParams,
   RecallResponse,

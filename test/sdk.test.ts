@@ -264,5 +264,100 @@ describe("MemCell SDK (cli package export)", () => {
       expect(progressUpdates[1].step).toBe("reconciling");
       expect(progressUpdates[2].step).toBe("completed");
     });
+
+    it("manages organizations via memory.organizations and forOrganization", async () => {
+      const requests: Array<{ url: string; method?: string; body: any }> = [];
+
+      const mockFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        const urlStr = String(url);
+        requests.push({
+          url: urlStr,
+          method: init?.method,
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+        });
+
+        if (urlStr.endsWith("/api/v1/organizations") && init?.method === "GET") {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              organizations: [
+                { id: "o1", slug: "acme-corp", name: "Acme Corporation", role: "owner" },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (urlStr.endsWith("/api/v1/organizations") && init?.method === "POST") {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              organization: { id: "o2", slug: "robotics", name: "Robotics AI Lab", role: "owner" },
+            }),
+            { status: 201, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (urlStr.endsWith("/api/v1/organizations/acme-corp")) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              organization: {
+                id: "o1",
+                slug: "acme-corp",
+                name: "Acme Corporation",
+                role: "owner",
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (urlStr.endsWith("/api/v1/acme-corp/backend/recall")) {
+          return new Response(
+            JSON.stringify({
+              recallId: "rec_123",
+              promptContext: "<xml></xml>",
+              statements: [],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        return new Response("Not found", { status: 404 });
+      });
+
+      const memcell = new MemCell({ auth: { apiKey: "k" }, fetch: mockFetch as any });
+
+      // List
+      const orgs = await memcell.organizations.list();
+      expect(orgs).toHaveLength(1);
+      expect(orgs[0]?.slug).toBe("acme-corp");
+
+      // Create
+      const created = await memcell.organizations.create({
+        name: "Robotics AI Lab",
+        slug: "robotics",
+      });
+      expect(created.slug).toBe("robotics");
+
+      // Get
+      const fetched = await memcell.organizations.get("acme-corp");
+      expect(fetched.name).toBe("Acme Corporation");
+
+      // forOrganization
+      const acmeOrg = memcell.forOrganization("acme-corp");
+      expect(acmeOrg.orgSlug).toBe("acme-corp");
+
+      const scopedBackend = acmeOrg.scope("backend");
+      expect(scopedBackend.namespace).toBe("acme-corp/backend");
+
+      const recallRes = await acmeOrg.recall({
+        namespace: "backend",
+        query: "authentication flow",
+      });
+      expect(recallRes.recallId).toBe("rec_123");
+      expect(requests.some((r) => r.url.endsWith("/api/v1/acme-corp/backend/recall"))).toBe(true);
+    });
   });
 });

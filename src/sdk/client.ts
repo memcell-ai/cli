@@ -1,10 +1,13 @@
 import { AuthManager } from "./auth.js";
 import { ScopedMemCell } from "./scoped.js";
+import { OrganizationMemCell } from "./organization.js";
 import type {
+  CreateOrganizationParams,
   FeedbackParams,
   FeedbackResponse,
   JobEvent,
   MemCellConfig,
+  OrganizationItem,
   RecallParams,
   RecallResponse,
   RememberParams,
@@ -21,6 +24,47 @@ export class MemCell {
   readonly authManager: AuthManager;
   private readonly customFetch?: typeof fetch;
 
+  /**
+   * Organization lifecycle management APIs.
+   */
+  readonly organizations = {
+    /**
+     * Lists organizations the authenticated user belongs to.
+     */
+    list: async (): Promise<OrganizationItem[]> => {
+      const json = await this.request<{ ok: boolean; organizations: OrganizationItem[] }>(
+        "/api/v1/organizations",
+        { method: "GET" },
+      );
+      return json.organizations || [];
+    },
+
+    /**
+     * Creates a new organization with the caller as owner.
+     */
+    create: async (params: CreateOrganizationParams): Promise<OrganizationItem> => {
+      const json = await this.request<{ ok: boolean; organization: OrganizationItem }>(
+        "/api/v1/organizations",
+        {
+          method: "POST",
+          body: JSON.stringify(params),
+        },
+      );
+      return json.organization;
+    },
+
+    /**
+     * Fetches details of an organization by its slug handle.
+     */
+    get: async (slug: string): Promise<OrganizationItem> => {
+      const json = await this.request<{ ok: boolean; organization: OrganizationItem }>(
+        `/api/v1/organizations/${encodeURIComponent(slug)}`,
+        { method: "GET" },
+      );
+      return json.organization;
+    },
+  };
+
   constructor(config: MemCellConfig) {
     let base = config.baseUrl;
     if (!base && typeof process !== "undefined" && process.env?.MEMCELL_BASE_URL) {
@@ -29,6 +73,19 @@ export class MemCell {
     this.baseUrl = (base || "https://api.memcell.io").replace(/\/+$/, "");
     this.customFetch = config.fetch;
     this.authManager = new AuthManager(config.auth, this.baseUrl, this.customFetch);
+  }
+
+  /**
+   * Returns an organization-scoped MemCell handle bound to the specified organization slug.
+   *
+   * @example
+   * ```ts
+   * const acme = memcell.forOrganization("acme-corp");
+   * const devopsMemory = acme.scope("devops");
+   * ```
+   */
+  forOrganization(orgSlug: string): OrganizationMemCell {
+    return new OrganizationMemCell(this, orgSlug);
   }
 
   /**

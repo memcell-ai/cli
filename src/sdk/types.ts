@@ -176,3 +176,24 @@ export interface ScopeOptions {
   format?: "xml" | "markdown" | "none";
   minConfidence?: number;
 }
+
+export interface OrganizationItem {
+  id: string;
+  name: string;
+  slug: string;
+  role?: string;
+  bio?: string | null;
+  website?: string | null;
+  logo?: string | null;
+  joinedAt?: string | Date;
+  memberCount?: number;
+  projectCount?: number;
+}
+
+export interface CreateOrganizationParams {
+  name: string;
+  slug: string;
+  bio?: string | null;
+  website?: string | null;
+  logo?: string | null;
+}

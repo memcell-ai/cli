@@ -38,6 +38,7 @@ const FROM_ENV: Record<string, string> = {
 const ALIASES: Record<string, string> = {
   instance: "instance.url",
   url: "instance.url",
+  org: "organization",
 };
 
 /** The key as the CLI knows it. */

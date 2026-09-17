@@ -1,4 +1,5 @@
 import { call, MemcellError } from "../client.js";
+import { get } from "../config.js";
 import { credentialFor } from "../instance.js";
 import { findProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, value, variant, warn } from "../ui.js";
@@ -85,9 +86,15 @@ export async function newProject(instance: string, name: string): Promise<number
   }
 
   try {
+    const activeOrg = (await get("organization"))?.value as string | undefined;
+    const body: Record<string, unknown> = { name };
+    if (activeOrg) {
+      body.owner = activeOrg;
+    }
+
     const created = await call<{ slug: string; name: string }>(instance, "/api/v1/projects", {
       method: "POST",
-      body: { name },
+      body,
     });
 
     say(
