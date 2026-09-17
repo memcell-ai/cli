@@ -2,6 +2,7 @@ export { MemCell } from "./client.js";
 export { ScopedMemCell } from "./scoped.js";
 export { OrganizationMemCell } from "./organization.js";
 export { AuthManager } from "./auth.js";
+export { MemCellError, RateLimitError } from "./types.js";
 export type {
   CreateOrganizationParams,
   FeedbackParams,

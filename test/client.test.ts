@@ -91,3 +91,64 @@ describe("an instance that accepts the connection and never answers", () => {
     expect((failed as Error).message).toContain("did not answer in time");
   });
 });
+
+describe("rate limiting & 429 backoff retry in call()", () => {
+  it("automatically retries on 429 and returns successful response", async () => {
+    let callCount = 0;
+    vi.stubGlobal("fetch", async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response(
+          JSON.stringify({
+            error: "rate_limited",
+            message: "Rate limit exceeded on door 'recall'. Please retry in 0s.",
+          }),
+          {
+            status: 429,
+            headers: { "content-type": "application/json", "Retry-After": "0" },
+          },
+        );
+      }
+      return new Response(JSON.stringify({ ok: true, memory: "recovered" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    const result = await call<{ ok: boolean; memory: string }>(BASE, "/api/v1/recall", {
+      method: "POST",
+      retries: 2,
+    });
+    expect(callCount).toBe(2);
+    expect(result.memory).toBe("recovered");
+  });
+
+  it("throws MemcellError with rate limit message when 429 retries are exhausted", async () => {
+    let callCount = 0;
+    vi.stubGlobal("fetch", async () => {
+      callCount++;
+      return new Response(
+        JSON.stringify({
+          error: "rate_limited",
+          message: "Rate limit exceeded on door 'remember'. Please retry in 30s.",
+          door: "remember",
+          retryAfter: 30,
+        }),
+        {
+          status: 429,
+          headers: { "content-type": "application/json", "Retry-After": "0" },
+        },
+      );
+    });
+
+    const error = await call(BASE, "/api/v1/remember", {
+      method: "POST",
+      retries: 1,
+    }).catch((e) => e);
+
+    expect(callCount).toBe(2);
+    expect(error).toBeInstanceOf(MemcellError);
+    expect((error as MemcellError).status).toBe(429);
+    expect((error as MemcellError).message).toContain("Rate limit exceeded on door 'remember'");
+  });
+});

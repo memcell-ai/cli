@@ -7,10 +7,59 @@ export type MemCellAuth =
   | { apiKey: string }
   | { accessToken: string };
 
+/**
+ * Base error thrown by the MemCell SDK on API and network failures.
+ */
+export class MemCellError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+
+  constructor(message: string, status: number, code?: string, details?: unknown) {
+    super(message);
+    this.name = "MemCellError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Error thrown when a request is rejected with HTTP 429 Too Many Requests per ADR 057.
+ */
+export class RateLimitError extends MemCellError {
+  readonly door?: string;
+  readonly limit?: number;
+  readonly windowSeconds?: number;
+  readonly retryAfter: number;
+
+  constructor(params: {
+    message: string;
+    door?: string;
+    limit?: number;
+    windowSeconds?: number;
+    retryAfter: number;
+    details?: unknown;
+  }) {
+    super(params.message, 429, "rate_limited", params.details);
+    this.name = "RateLimitError";
+    this.door = params.door;
+    this.limit = params.limit;
+    this.windowSeconds = params.windowSeconds;
+    this.retryAfter = params.retryAfter;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 export interface MemCellConfig {
   auth: MemCellAuth;
   baseUrl?: string;
   fetch?: typeof fetch;
+  maxRetries?: number;
+  initialRetryDelayMs?: number;
+  maxRetryDelayMs?: number;
+  onRateLimitWarning?: (warning: string, response: Response) => void;
 }
 
 export interface StatementItem {

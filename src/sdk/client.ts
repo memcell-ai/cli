@@ -1,27 +1,30 @@
 import { AuthManager } from "./auth.js";
 import { ScopedMemCell } from "./scoped.js";
 import { OrganizationMemCell } from "./organization.js";
-import type {
-  CreateOrganizationParams,
-  FeedbackParams,
-  FeedbackResponse,
-  JobEvent,
-  MemCellConfig,
-  OrganizationItem,
-  RecallParams,
-  RecallResponse,
-  RememberParams,
-  RememberResponse,
-  ReportParams,
-  ReportResponse,
-  ScopeOptions,
-  StatementItem,
-  WaitForJobOptions,
+import {
+  MemCellError,
+  RateLimitError,
+  type CreateOrganizationParams,
+  type FeedbackParams,
+  type FeedbackResponse,
+  type JobEvent,
+  type MemCellConfig,
+  type OrganizationItem,
+  type RecallParams,
+  type RecallResponse,
+  type RememberParams,
+  type RememberResponse,
+  type ReportParams,
+  type ReportResponse,
+  type ScopeOptions,
+  type StatementItem,
+  type WaitForJobOptions,
 } from "./types.js";
 
 export class MemCell {
   readonly baseUrl: string;
   readonly authManager: AuthManager;
+  private readonly config: MemCellConfig;
   private readonly customFetch?: typeof fetch;
 
   /**
@@ -71,6 +74,7 @@ export class MemCell {
       base = process.env.MEMCELL_BASE_URL;
     }
     this.baseUrl = (base || "https://api.memcell.io").replace(/\/+$/, "");
+    this.config = config;
     this.customFetch = config.fetch;
     this.authManager = new AuthManager(config.auth, this.baseUrl, this.customFetch);
   }
@@ -435,36 +439,111 @@ export class MemCell {
   }
 
   /**
-   * Internal HTTP request handler adding authentication and parsing errors.
+   * Internal HTTP request handler adding authentication, rate limit resilience, and error parsing.
    */
   private async request<T>(path: string, init: RequestInit): Promise<T> {
-    const authHeader = await this.authManager.getAuthorizationHeader();
     const fetcher = this.customFetch ?? fetch;
+    const maxRetries = this.config.maxRetries ?? 3;
+    const initialDelay = this.config.initialRetryDelayMs ?? 1000;
+    const maxDelay = this.config.maxRetryDelayMs ?? 15000;
+    let attempt = 0;
 
-    const headers: Record<string, string> = {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(init.headers as Record<string, string>),
-    };
+    while (true) {
+      const authHeader = await this.authManager.getAuthorizationHeader();
+      const headers: Record<string, string> = {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(init.headers as Record<string, string>),
+      };
 
-    const response = await fetcher(`${this.baseUrl}${path}`, {
-      ...init,
-      headers,
-    });
+      const response = await fetcher(`${this.baseUrl}${path}`, {
+        ...init,
+        headers,
+      });
 
-    if (!response.ok) {
-      const errorJson = (await response.json().catch(() => null)) as any;
-      const message =
-        errorJson?.error?.message ||
-        errorJson?.error_description ||
-        errorJson?.error ||
-        response.statusText ||
-        `HTTP ${response.status}`;
-      throw new Error(`MemCell API Error (${response.status}): ${message}`);
+      // Handle soft warning header (299)
+      const warningHeader = response.headers.get("RateLimit-Warning");
+      if (warningHeader && this.config.onRateLimitWarning) {
+        try {
+          this.config.onRateLimitWarning(warningHeader, response);
+        } catch {
+          // Callback exceptions must not break API response execution
+        }
+      }
+
+      // Handle 429 rate limit with automatic exponential backoff or RateLimitError
+      if (response.status === 429) {
+        const retryAfterHeader = response.headers.get("Retry-After");
+        const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+
+        if (attempt < maxRetries) {
+          attempt++;
+          const delayMs =
+            (!isNaN(retryAfterSec) && retryAfterSec > 0
+              ? retryAfterSec * 1000
+              : Math.min(maxDelay, initialDelay * Math.pow(2, attempt - 1))) +
+            Math.floor(Math.random() * 200);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+
+        // Retries exhausted on 429 -> Throw typed RateLimitError per ADR 057
+        const errorJson = (await response.json().catch(() => null)) as {
+          error?: string;
+          message?: string;
+          door?: string;
+          limit?: number;
+          windowSeconds?: number;
+          retryAfter?: number;
+        } | null;
+
+        const effectiveRetryAfter =
+          !isNaN(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec : (errorJson?.retryAfter ?? 1);
+
+        throw new RateLimitError({
+          message:
+            errorJson?.message ||
+            `Rate limit exceeded${errorJson?.door ? ` on door '${errorJson.door}'` : ""}. Please retry in ${effectiveRetryAfter}s.`,
+          door: errorJson?.door,
+          limit: errorJson?.limit,
+          windowSeconds: errorJson?.windowSeconds,
+          retryAfter: effectiveRetryAfter,
+          details: errorJson,
+        });
+      }
+
+      if (!response.ok) {
+        const errorJson = (await response.json().catch(() => null)) as {
+          error?: string | { message?: string };
+          message?: string;
+          error_description?: string;
+        } | null;
+
+        const message =
+          errorJson?.message ||
+          (typeof errorJson?.error === "object" ? errorJson.error.message : errorJson?.error) ||
+          errorJson?.error_description ||
+          response.statusText ||
+          `HTTP ${response.status}`;
+
+        const code =
+          typeof errorJson?.error === "string"
+            ? errorJson.error
+            : typeof errorJson?.error === "object"
+              ? "api_error"
+              : `HTTP_${response.status}`;
+
+        throw new MemCellError(
+          `MemCell API Error (${response.status}): ${message}`,
+          response.status,
+          code,
+          errorJson,
+        );
+      }
+
+      return (await response.json()) as T;
     }
-
-    return (await response.json()) as T;
   }
 
   private resolveEndpoint(

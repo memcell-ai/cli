@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MemCell, ScopedMemCell, AuthManager } from "../src/index.js";
+import { MemCell, ScopedMemCell, AuthManager, MemCellError, RateLimitError } from "../src/index.js";
 
 describe("MemCell SDK (cli package export)", () => {
   describe("AuthManager", () => {
@@ -358,6 +358,142 @@ describe("MemCell SDK (cli package export)", () => {
       });
       expect(recallRes.recallId).toBe("rec_123");
       expect(requests.some((r) => r.url.endsWith("/api/v1/acme-corp/backend/recall"))).toBe(true);
+    });
+
+    it("intercepts RateLimit-Warning header and invokes onRateLimitWarning callback", async () => {
+      const warningHandler = vi.fn();
+      const mockFetch = vi.fn(async () => {
+        return new Response(JSON.stringify({ recallId: "rec_warning", statements: [] }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "RateLimit-Warning":
+              '299 - "Approaching rate limit capacity (85% consumed in active window)"',
+          },
+        });
+      });
+
+      const memcell = new MemCell({
+        auth: { apiKey: "mc_live_test" },
+        fetch: mockFetch as any,
+        onRateLimitWarning: warningHandler,
+      });
+
+      const res = await memcell.recall({ query: "test warning" });
+      expect(res.recallId).toBe("rec_warning");
+      expect(warningHandler).toHaveBeenCalledWith(
+        expect.stringContaining("Approaching rate limit capacity"),
+        expect.anything(),
+      );
+    });
+
+    it("automatically retries on HTTP 429 using Retry-After backoff", async () => {
+      let attempts = 0;
+      const mockFetch = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          return new Response(JSON.stringify({ error: "rate_limited", message: "Retry later" }), {
+            status: 429,
+            headers: {
+              "Content-Type": "application/json",
+              "Retry-After": "0",
+            },
+          });
+        }
+        return new Response(JSON.stringify({ recallId: "rec_recovered", statements: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
+
+      const memcell = new MemCell({
+        auth: { apiKey: "mc_live_test" },
+        fetch: mockFetch as any,
+        maxRetries: 2,
+      });
+
+      const res = await memcell.recall({ query: "test retry" });
+      expect(attempts).toBe(2);
+      expect(res.recallId).toBe("rec_recovered");
+    });
+
+    it("throws typed RateLimitError with door and retryAfter when 429 retries are exhausted", async () => {
+      const mockFetch = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            error: "rate_limited",
+            message: "Rate limit exceeded on door 'remember'. Please retry in 15s.",
+            door: "remember",
+            limit: 60,
+            windowSeconds: 60,
+            retryAfter: 15,
+          }),
+          {
+            status: 429,
+            headers: {
+              "Content-Type": "application/json",
+              "Retry-After": "0",
+            },
+          },
+        );
+      });
+
+      const memcell = new MemCell({
+        auth: { apiKey: "mc_live_test" },
+        fetch: mockFetch as any,
+        maxRetries: 1,
+      });
+
+      let caughtError: unknown = null;
+      try {
+        await memcell.remember({ title: "Exhaust retries" });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(RateLimitError);
+      expect(caughtError).toBeInstanceOf(MemCellError);
+      const rlError = caughtError as RateLimitError;
+      expect(rlError.door).toBe("remember");
+      expect(rlError.limit).toBe(60);
+      expect(rlError.windowSeconds).toBe(60);
+      expect(rlError.retryAfter).toBe(15);
+      expect(rlError.status).toBe(429);
+      expect(rlError.message).toContain("Rate limit exceeded on door 'remember'");
+    });
+
+    it("throws typed MemCellError on non-429 API errors", async () => {
+      const mockFetch = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            error: "unauthorized",
+            message: "Invalid API key provided",
+          }),
+          {
+            status: 401,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      });
+
+      const memcell = new MemCell({
+        auth: { apiKey: "bad_key" },
+        fetch: mockFetch as any,
+      });
+
+      let caughtError: unknown = null;
+      try {
+        await memcell.recall({ query: "failing request" });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(MemCellError);
+      expect(caughtError).not.toBeInstanceOf(RateLimitError);
+      const memError = caughtError as MemCellError;
+      expect(memError.status).toBe(401);
+      expect(memError.code).toBe("unauthorized");
+      expect(memError.message).toContain("Invalid API key provided");
     });
   });
 });

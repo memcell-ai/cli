@@ -31,12 +31,31 @@ interface CallOptions {
   timeoutMs?: number;
   /** Extra headers to send with the request. */
   headers?: Record<string, string>;
+  /** Max retries on HTTP 429 Too Many Requests before failing. Default is 3. */
+  retries?: number;
 }
 
 /** How long a person waits before an unanswered instance is a failure
  *  rather than a wait. The hooks carry their own, tighter, budgets; this is
  *  for the commands somebody typed. */
 const CALL_TIMEOUT_MS = 30_000;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      return reject(signal.reason ?? new Error("aborted"));
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("aborted"));
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 export async function call<T>(
   instance: string,
@@ -49,12 +68,13 @@ export async function call<T>(
     signal,
     timeoutMs,
     headers: customHeaders,
+    retries = 3,
   }: CallOptions = {},
 ): Promise<T> {
   // An instance that accepts the connection and never answers would
   // otherwise hang the terminal forever, with nothing printed. Every call
   // gets a deadline unless its caller brought one.
-  const deadline = signal ? undefined : AbortSignal.timeout(timeoutMs ?? CALL_TIMEOUT_MS);
+  const activeSignal = signal ?? AbortSignal.timeout(timeoutMs ?? CALL_TIMEOUT_MS);
   const headers: Record<string, string> = {
     "content-type": "application/json",
     // Same-origin rules do not apply to a terminal, but the server checks
@@ -75,66 +95,103 @@ export async function call<T>(
     if (credential) headers.authorization = `Bearer ${credential.token}`;
   }
 
-  let response: Response;
-  try {
-    response = await fetch(`${instance}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: signal ?? deadline,
-    });
-  } catch (cause) {
-    // A timeout and a refused connection are different facts, and the
-    // difference is what somebody debugs on: one means the instance is not
-    // there, the other that it is there and not answering.
-    const timedOut = cause instanceof Error && cause.name === "TimeoutError";
-    throw new MemcellError(
-      timedOut ? `${instance} did not answer in time.` : `Could not reach ${instance}.`,
-      0,
-      cause,
-    );
-  }
+  let attempt = 0;
 
-  // The body may not be JSON — a wrong instance answers with an HTML page, a
-  // proxy with plain text, a gateway with nothing. Parsing is tried, never
-  // assumed: a raw "Unexpected token '<'" is the parser leaking through, not
-  // an error a person can act on.
-  const text = await response.text();
-  let parsed: unknown = null;
-  let isJson = false;
-  if (text) {
+  while (true) {
+    let response: Response;
     try {
-      parsed = JSON.parse(text);
-      isJson = true;
-    } catch {
-      // Left as not-JSON; handled below with the status.
+      response = await fetch(`${instance}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: activeSignal,
+      });
+    } catch (cause) {
+      // A timeout and a refused connection are different facts, and the
+      // difference is what somebody debugs on: one means the instance is not
+      // there, the other that it is there and not answering.
+      const timedOut = cause instanceof Error && cause.name === "TimeoutError";
+      throw new MemcellError(
+        timedOut ? `${instance} did not answer in time.` : `Could not reach ${instance}.`,
+        0,
+        cause,
+      );
     }
-  }
 
-  if (!response.ok) {
-    const detail = parsed as { error_description?: string; message?: string } | null;
-    throw new MemcellError(
-      detail?.error_description ??
+    // Handle 429 rate limit with automatic exponential backoff
+    if (response.status === 429 && attempt < retries) {
+      attempt++;
+      const retryAfterHeader =
+        response.headers.get("retry-after") ?? response.headers.get("Retry-After");
+      const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+      const delayMs =
+        (!isNaN(retryAfterSec) && retryAfterSec > 0
+          ? retryAfterSec * 1000
+          : Math.min(15000, 1000 * Math.pow(2, attempt - 1))) + Math.floor(Math.random() * 200);
+
+      try {
+        await sleep(delayMs, activeSignal);
+      } catch (cause) {
+        const timedOut = cause instanceof Error && cause.name === "TimeoutError";
+        throw new MemcellError(
+          timedOut ? `${instance} did not answer in time.` : `Could not reach ${instance}.`,
+          0,
+          cause,
+        );
+      }
+      continue;
+    }
+
+    // The body may not be JSON — a wrong instance answers with an HTML page, a
+    // proxy with plain text, a gateway with nothing. Parsing is tried, never
+    // assumed: a raw "Unexpected token '<'" is the parser leaking through, not
+    // an error a person can act on.
+    const text = await response.text();
+    let parsed: unknown = null;
+    let isJson = false;
+    if (text) {
+      try {
+        parsed = JSON.parse(text);
+        isJson = true;
+      } catch {
+        // Left as not-JSON; handled below with the status.
+      }
+    }
+
+    if (!response.ok) {
+      const detail = parsed as {
+        error_description?: string;
+        message?: string;
+        error?: string;
+        door?: string;
+        retryAfter?: number;
+      } | null;
+
+      const message =
+        detail?.error_description ??
         detail?.message ??
+        (typeof detail?.error === "string" && detail.error === "rate_limited"
+          ? `Rate limit exceeded${detail.door ? ` on door '${detail.door}'` : ""}.`
+          : undefined) ??
         (isJson
           ? `${response.status} from ${path}`
-          : `${instance} answered ${response.status}, not memcell — check the address.`),
-      response.status,
-      parsed,
-    );
-  }
+          : `${instance} answered ${response.status}, not memcell — check the address.`);
 
-  if (text && !isJson) {
-    // A 200 that is not data: usually the address is a website, not an
-    // instance — the connect page's own HTML, say.
-    throw new MemcellError(
-      `${instance} did not answer as a memcell instance — check the address.`,
-      response.status,
-      text,
-    );
-  }
+      throw new MemcellError(message, response.status, parsed);
+    }
 
-  return parsed as T;
+    if (text && !isJson) {
+      // A 200 that is not data: usually the address is a website, not an
+      // instance — the connect page's own HTML, say.
+      throw new MemcellError(
+        `${instance} did not answer as a memcell instance — check the address.`,
+        response.status,
+        text,
+      );
+    }
+
+    return parsed as T;
+  }
 }
 
 export interface Session {

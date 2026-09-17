@@ -20,6 +20,8 @@ export {
   ScopedMemCell,
   OrganizationMemCell,
   AuthManager,
+  MemCellError,
+  RateLimitError,
   type CreateOrganizationParams,
   type FeedbackParams,
   type FeedbackResponse,
