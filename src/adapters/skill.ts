@@ -41,7 +41,7 @@ written once and never sharpened by what happened.
 
 Two ways, and either is enough.
 
-**Tools** named \`recall\`, \`remember\`, \`ingest\`, and \`report\`. Use them if
+**Tools** named \`recall\`, \`remember\`, and \`report\`. Use them if
 they are there.
 
 **The shell**, otherwise — same doors, same memory:
@@ -50,7 +50,7 @@ they are there.
 memcell recall "<what you are trying to do or know>"
 memcell remember "<one claim, in one sentence>"
 memcell report <statement-id> worked|failed
-memcell ingest <file>
+memcell import <file>
 \`\`\`
 
 If those commands are missing, run them through \`npx memcell\` instead. If
@@ -143,12 +143,12 @@ different thing: it is recorded on its own, moves no confidence, and brings
 the statement back on your next recall. Say so in the conversation either
 way, rather than silently overriding it.
 
-## ingest — when a document carries decisions
+## import — when a document carries decisions
 
 Hand specs, ADRs, and runbooks over whole:
 
 \`\`\`
-memcell ingest docs/adr/012-retry-policy.md
+memcell import docs/adr/012-retry-policy.md
 \`\`\`
 
 Do not summarize the document yourself — it is distilled into individual

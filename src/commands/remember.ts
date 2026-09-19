@@ -3,10 +3,7 @@ import { badge, bad, good, id, label, place, row, say, value, variant } from "..
 import { wired } from "./wired.js";
 
 // `memcell remember <text>` — file one finished statement from a shell.
-//
-// One claim, already distilled: this endpoint does no distilling, so a wall of
-// prose lands as a wall. Hand documents to `memcell ingest` instead, which
-// exists to break them into claims.
+// Hand whole documents or files to `memcell import` instead.
 
 interface Written {
   id: string;
@@ -15,17 +12,17 @@ interface Written {
   note: string;
 }
 
-/** The five moments a rule can bear on — the record's own words, so a person
+/** The five moments a directive can bear on — the record's own words, so a person
  *  filing one by hand can say WHEN it applies and have it served then. */
 const APPLIES_AT = ["read", "change", "record", "send", "answer"] as const;
 
 export async function remember(
   text: string,
-  kind?: string,
+  typeOrKind?: string,
   at?: string,
   url?: string,
 ): Promise<number> {
-  // Refused by name rather than dropped: a rule filed as applying at a
+  // Refused by name rather than dropped: a directive filed as applying at a
   // moment nothing fires would sit here looking wired and never be served.
   const appliesAt = (at ?? "")
     .split(",")
@@ -40,12 +37,12 @@ export async function remember(
     );
     return 1;
   }
-  return file(text, kind, appliesAt, url);
+  return file(text, typeOrKind, appliesAt, url);
 }
 
 async function file(
   text: string,
-  kind?: string,
+  typeOrKind?: string,
   appliesAt: string[] = [],
   url?: string,
 ): Promise<number> {
@@ -58,7 +55,7 @@ async function file(
       bearer: here.key,
       body: {
         text,
-        ...(kind ? { kind } : {}),
+        ...(typeOrKind ? { type: typeOrKind, kind: typeOrKind } : {}),
         ...(appliesAt.length > 0 ? { applies_at: appliesAt } : {}),
       },
     });

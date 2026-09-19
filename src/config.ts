@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { parse, stringify } from "smol-toml";
 
-import { PROJECT_FILE } from "./project.js";
+import { PROJECT_FILE, PROJECT_FILE_ASIDE } from "./project.js";
 import { machineFile } from "./machine.js";
 
 // Settings, in two places with one precedence: **the project wins.**
@@ -166,19 +166,26 @@ export async function text(
 async function projectFile(): Promise<string> {
   let dir = resolve(process.cwd());
   for (;;) {
-    const at = join(dir, PROJECT_FILE);
-    try {
-      // A FILE, not merely a path that exists: the machine's own data lives
-      // in a `.memcell` DIRECTORY in the home, so a project anywhere under
-      // the home reaches it on this walk, and opening it as TOML is EISDIR.
-      if ((await stat(at)).isFile()) return at;
-    } catch {
-      // Not here; keep walking up.
+    for (const name of [PROJECT_FILE, PROJECT_FILE_ASIDE]) {
+      const at = join(dir, name);
+      try {
+        // A FILE, not merely a path that exists: the machine's own data lives
+        // in a `.memcell` DIRECTORY in the home, so a project anywhere under
+        // the home reaches it on this walk, and opening it as TOML is EISDIR.
+        if ((await stat(at)).isFile()) return at;
+      } catch {
+        // Not here; keep checking
+      }
     }
     const up = dirname(dir);
-    if (up === dir) return join(resolve(process.cwd()), PROJECT_FILE);
+    if (up === dir) break;
     dir = up;
   }
+  const cwdClassic = join(resolve(process.cwd()), PROJECT_FILE);
+  const taken = await stat(cwdClassic)
+    .then((s) => s.isDirectory())
+    .catch(() => false);
+  return taken ? join(resolve(process.cwd()), PROJECT_FILE_ASIDE) : cwdClassic;
 }
 
 /** Where a scope's settings are written, so a command can name the file. */

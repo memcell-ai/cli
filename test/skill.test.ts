@@ -67,8 +67,8 @@ describe("what the skill is allowed to say", () => {
     }
   });
 
-  it("teaches all four legs of the loop", () => {
-    for (const leg of ["recall", "remember", "ingest", "report"]) {
+  it("teaches the core commands of the loop", () => {
+    for (const leg of ["recall", "remember", "report", "import"]) {
       expect(SKILL_CONTENT).toContain(`memcell ${leg}`);
     }
   });

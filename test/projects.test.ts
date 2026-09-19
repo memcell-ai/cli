@@ -105,6 +105,17 @@ describe("projects new", () => {
 
     await set("organization", "", "global");
   });
+
+  it("handles wrapped project responses gracefully", async () => {
+    answer = () => ({
+      ok: true,
+      project: { id: "p5", slug: "wrapped-proj", name: "Wrapped Project", ownerSlug: "org" },
+    });
+
+    expect(await newProject(instance, "Wrapped Project")).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/projects");
+  });
 });
 
 describe("projects use", () => {
