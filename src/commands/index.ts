@@ -55,12 +55,24 @@ export const COMMANDS: Command[] = [
   {
     path: ["connect"],
     what: "wire this directory — approves in your browser the first time",
+    args: [
+      {
+        name: "project",
+        required: false,
+        what: "project to connect ([owner]/[project] or slug)",
+      },
+    ],
     takes: ["url", "pair", "project", "space", "agent", "no-browser"],
     landing: true,
-    run: ({ instance, from, flags }) =>
+    run: ({ instance, from, args, flags }) =>
       connect(instance, {
         pair: typeof flags.pair === "string" ? flags.pair : undefined,
-        project: typeof flags.project === "string" ? flags.project : undefined,
+        project:
+          typeof args.project === "string"
+            ? args.project
+            : typeof flags.project === "string"
+              ? flags.project
+              : undefined,
         space: typeof flags.space === "string" ? flags.space : undefined,
         agent: typeof flags.agent === "string" ? flags.agent : undefined,
         noBrowser: flags["no-browser"] === true,

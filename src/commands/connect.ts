@@ -50,7 +50,9 @@ export async function connect(
   let targetProject = (options.project || options.space)?.trim();
   if (!targetProject) {
     const existing = await findProject(process.cwd()).catch(() => null);
-    if (existing?.project?.project || existing?.project?.space) {
+    if (existing?.project?.owner && existing?.project?.project) {
+      targetProject = `${existing.project.owner}/${existing.project.project}`;
+    } else if (existing?.project?.project || existing?.project?.space) {
       targetProject = existing.project.project || existing.project.space;
     }
   }
@@ -128,7 +130,7 @@ export async function connect(
     const body = failure.body as {
       error?: string;
       message?: string;
-      projects?: { id: string; slug: string; name: string }[];
+      projects?: { id: string; slug: string; name: string; ownerSlug?: string }[];
     } | null;
 
     if (
@@ -139,8 +141,11 @@ export async function connect(
       say(
         row(0, [badge("memcell"), place(instance)]),
         row(1, [warn("multiple projects found")], [label("choose which one to connect:")]),
-        ...body.projects.map((p) => row(2, [good(p.slug)], [label(p.name)])),
-        row(2, [label("run"), cmd("memcell connect --project <slug>")]),
+        ...body.projects.map((p) => {
+          const display = p.ownerSlug ? `${p.ownerSlug}/${p.slug}` : p.slug;
+          return row(2, [good(display)], [label(p.name)]);
+        }),
+        row(2, [label("run"), cmd("memcell connect [owner]/<slug>")]),
       );
       return 1;
     }
@@ -167,8 +172,10 @@ export async function connect(
     return 1;
   }
   const linked = exchanged.project || exchanged.space;
+  const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
   const at = await saveProject({
     instance,
+    owner: ownerSlug,
     project: linked.slug,
     projectId: linked.id,
     space: linked.slug,
@@ -234,7 +241,6 @@ export async function connect(
   // arrives later; the hooks above stay the enforcement.
   installSkill(process.cwd());
 
-  const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
   const projectUrl = ownerSlug
     ? `${instance}/${ownerSlug}/${linked.slug}`
     : `${instance}/home?space=${linked.slug}`;
