@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/memcell-ai/cli/compare/memcell-v0.10.0...memcell-v0.10.1) (2026-09-19)
+
+
+### Features
+
+* **adapters:** align claude, cursor, and antigravity adapters with official harness specs and statement ontology ([#32](https://github.com/memcell-ai/cli/issues/32)) ([3181159](https://github.com/memcell-ai/cli/commit/318115943d22c3a908cb0b23d880d217b72def9f))
+
 ## [0.10.0](https://github.com/memcell-ai/cli/compare/memcell-v0.9.0...memcell-v0.10.0) (2026-09-17)
 
 
