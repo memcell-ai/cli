@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/memcell-ai/cli/compare/memcell-v0.10.1...memcell-v0.10.2) (2026-09-19)
+
+
+### Bug Fixes
+
+* **adapters:** resolve memcell on PATH on Windows using where.exe ([#30](https://github.com/memcell-ai/cli/issues/30)) ([c0903c4](https://github.com/memcell-ai/cli/commit/c0903c4c6b7914cc8b755c34ffa0a92eebf2b0ee))
+
 ## [0.10.1](https://github.com/memcell-ai/cli/compare/memcell-v0.10.0...memcell-v0.10.1) (2026-09-19)
 
 
