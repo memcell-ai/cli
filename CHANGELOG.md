@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.3](https://github.com/memcell-ai/cli/compare/memcell-v0.10.2...memcell-v0.10.3) (2026-09-19)
+
+
+### Features
+
+* **connect:** support positional and flag [owner]/[project] target ([#35](https://github.com/memcell-ai/cli/issues/35)) ([ac13f64](https://github.com/memcell-ai/cli/commit/ac13f645af4f09b8f698396928eaccfa2dcb911a))
+
 ## [0.10.2](https://github.com/memcell-ai/cli/compare/memcell-v0.10.1...memcell-v0.10.2) (2026-09-19)
 
 
