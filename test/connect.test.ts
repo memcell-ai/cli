@@ -133,4 +133,33 @@ describe("connect idempotency & self-healing", () => {
     const content = await readFile(join(freshDir, ".memcell"), "utf8");
     expect(content).toContain('slug = "fresh-proj"');
   });
+
+  it("connects with owner/project format and records owner in .memcell", async () => {
+    const orgDir = await mkdtemp(join(tmpdir(), "memcell-org-"));
+    process.cwd = () => orgDir;
+
+    answer = () => ({
+      instance,
+      project: { id: "p-org", slug: "analytics", name: "Analytics", ownerSlug: "acme" },
+      space: { id: "p-org", slug: "analytics", name: "Analytics", ownerSlug: "acme" },
+      key: "mc_ag_test_key_org",
+      keyId: "key-org",
+      agentId: "ag-org",
+    });
+
+    const code = await connect(instance, { project: "acme/analytics", from: "test" });
+    expect(code).toBe(0);
+
+    const connectCall = calls.find((c) => c.url.includes("/api/v1/connect"));
+    expect(connectCall?.body?.project).toBe("acme/analytics");
+
+    const found = await findProject(orgDir);
+    expect(found).not.toBeNull();
+    expect(found?.project.owner).toBe("acme");
+    expect(found?.project.project).toBe("analytics");
+
+    const content = await readFile(join(orgDir, ".memcell"), "utf8");
+    expect(content).toContain('owner = "acme"');
+    expect(content).toContain('slug = "analytics"');
+  });
 });

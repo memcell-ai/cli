@@ -27,6 +27,8 @@ export interface Project {
   /** Which memcell — a key minted against a laptop's dev server must never
    *  be presented to the hosted one. `[instance].url`. */
   instance: string;
+  /** The project owner slug. `[project].owner`. */
+  owner?: string;
   /** The project slug. `[project].slug`. */
   project?: string;
   /** The project id. `[project].id`. */
@@ -39,8 +41,8 @@ export interface Project {
 
 interface Doc {
   instance?: { url?: string };
-  project?: { id?: string; slug?: string };
-  space?: { id?: string; slug?: string };
+  project?: { id?: string; slug?: string; owner?: string };
+  space?: { id?: string; slug?: string; owner?: string };
 }
 
 function fromToml(text: string): Project | null {
@@ -49,8 +51,10 @@ function fromToml(text: string): Project | null {
   const slug = doc.project?.slug ?? doc.space?.slug;
   if (!instance || !slug) return null;
   const id = doc.project?.id ?? doc.space?.id;
+  const owner = doc.project?.owner ?? doc.space?.owner;
   return {
     instance,
+    owner,
     project: slug,
     projectId: id,
     space: slug,
@@ -61,10 +65,11 @@ function fromToml(text: string): Project | null {
 function toToml(project: Project): string {
   const slug = project.project || project.space;
   const id = project.projectId || project.spaceId;
+  const owner = project.owner;
   const doc: Doc = {
     instance: { url: project.instance },
-    project: { ...(id ? { id } : {}), slug },
-    space: { ...(id ? { id } : {}), slug },
+    project: { ...(id ? { id } : {}), ...(owner ? { owner } : {}), slug },
+    space: { ...(id ? { id } : {}), ...(owner ? { owner } : {}), slug },
   };
   return stringify(doc);
 }
