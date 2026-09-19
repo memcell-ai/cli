@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.4](https://github.com/memcell-ai/cli/compare/memcell-v0.10.3...memcell-v0.10.4) (2026-09-19)
+
+
+### Features
+
+* **cli:** interactive connect, multi-project keyring, dynamic mcp roots, and demolish ingest ([#37](https://github.com/memcell-ai/cli/issues/37)) ([f626ab5](https://github.com/memcell-ai/cli/commit/f626ab5631f8b33cd4a2041a8b66536ba8664b1c))
+
 ## [0.10.3](https://github.com/memcell-ai/cli/compare/memcell-v0.10.2...memcell-v0.10.3) (2026-09-19)
 
 
