@@ -39,8 +39,21 @@ describe("re-install refreshes memcell's own hook command", () => {
     expect(after).not.toContain("--agent");
     expect(after).toContain("memcell hook session-start claude");
     expect(after).toContain("echo somebody-elses");
-    // Refreshed and deduplicated — exactly one memcell hook per moment.
-    expect(after.match(/hook session-start claude/g)?.length).toBe(1);
+    // Refreshed and deduplicated — exactly one memcell hook per event (SessionStart and SubagentStart).
+    expect(after.match(/hook session-start claude/g)?.length).toBe(2);
+    const parsed = JSON.parse(after) as {
+      hooks: Record<string, { hooks?: { type: string; command: string }[] }[]>;
+    };
+    expect(
+      parsed.hooks.SessionStart!.filter((g) =>
+        g.hooks?.some((h) => h.command.includes("session-start")),
+      ).length,
+    ).toBe(1);
+    expect(
+      parsed.hooks.SubagentStart!.filter((g) =>
+        g.hooks?.some((h) => h.command.includes("session-start")),
+      ).length,
+    ).toBe(1);
   });
 
   it("gemini: the same, in its own dialect with deduplication", async () => {

@@ -1,4 +1,4 @@
-import type { Surface } from "./surface.js";
+import { unsupported, type Surface } from "./surface.js";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -229,11 +229,24 @@ export const antigravity: Adapter = {
     });
   },
 
-  // ── speak — injectSteps with ephemeralMessage ─────────────────────────────
+  // ── speak — dialect output for Antigravity hooks ──────────────────────────
   speak(moment: Moment, context: string | null): string | null {
+    // Antigravity PreToolUse hook proto expects a decision JSON object; on non-refusal, allow.
+    if (moment === "before-act") {
+      return JSON.stringify({ decision: "allow" });
+    }
+
     if (!context) return null;
-    // Antigravity PreToolUse hook proto only accepts decision (deny/allow), not injectSteps.
-    if (moment === "before-act") return null;
+
+    // Antigravity Stop hook proto accepts { decision: "continue", reason: ... }
+    if (moment === "session-end") {
+      return JSON.stringify({
+        decision: "continue",
+        reason: context,
+      });
+    }
+
+    // PreInvocation and PostInvocation inject steps into conversation
     return JSON.stringify({
       injectSteps: [{ ephemeralMessage: context }],
     });
@@ -332,7 +345,9 @@ export const SURFACE: Surface = {
     },
     "before-act": {
       event: "PreToolUse",
-      inject: { via: "json", path: "injectSteps[0].ephemeralMessage" },
+      inject: unsupported(
+        "Antigravity PreToolUse hook accepts decision/overwrite but not injected context messages",
+      ),
     },
     "turn-end": {
       event: "PostInvocation",
@@ -346,7 +361,9 @@ export const SURFACE: Surface = {
   guard: {
     event: "PreToolUse",
     matcher: (tools) => (tools.length > 0 ? tools.join("|") : "*"),
-    inject: { via: "json", path: "injectSteps[0].ephemeralMessage" },
+    inject: unsupported(
+      "Antigravity PreToolUse hook accepts decision/overwrite but not injected context messages",
+    ),
     refuse: { via: "json", path: "decision", deny: "deny" },
     tools: {
       read: ["view_file", "list_dir", "grep_search", "find_by_name", "read_url_content"],

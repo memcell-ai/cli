@@ -78,6 +78,27 @@ interface Incoming {
   /** Protojson tool call structure sent by Antigravity and Vertex AI agents */
   toolCall?: { name?: string; args?: Record<string, unknown> };
   model?: string;
+  subagent_type?: string;
+  subagentType?: string;
+  agent_type?: string;
+  agentType?: string;
+  agent_id?: string;
+  agentId?: string;
+  agent_transcript_path?: string;
+  agentTranscriptPath?: string;
+  last_assistant_message?: string;
+  lastAssistantMessage?: string;
+  task?: string;
+  workspace_roots?: string[];
+  workspaceRoots?: string[];
+  hook_event_name?: string;
+  hookEventName?: string;
+  error?: string;
+  error_message?: string;
+  errorMessage?: string;
+  failure_type?: string;
+  failureType?: string;
+  result?: unknown;
 }
 
 async function incoming(): Promise<Incoming> {
@@ -91,12 +112,33 @@ async function incoming(): Promise<Incoming> {
       conversationId?: string;
       conversation_id?: string;
       workspacePaths?: string[];
+      workspace_roots?: string[];
+      workspaceRoots?: string[];
       model?: string;
+      subagent_type?: string;
+      subagentType?: string;
+      agent_type?: string;
+      agentType?: string;
+      agent_id?: string;
+      agentId?: string;
+      task?: string;
+      hook_event_name?: string;
+      hookEventName?: string;
     };
     raw.sessionId ??= raw.conversationId;
     raw.session_id ??= raw.conversation_id;
-    if (raw.workspacePaths && raw.workspacePaths.length > 0 && !raw.cwd) {
-      raw.cwd = raw.workspacePaths[0];
+    const roots = raw.workspacePaths ?? raw.workspace_roots ?? raw.workspaceRoots;
+    if (roots && roots.length > 0 && !raw.cwd) {
+      raw.cwd = roots[0];
+    }
+    const subagent = raw.subagent_type ?? raw.subagentType ?? raw.agent_type ?? raw.agentType;
+    if (subagent) {
+      raw.tool_name ??= "subagent";
+      raw.tool_input ??= {
+        subagent,
+        prompt: raw.prompt ?? raw.task ?? raw.last_assistant_message,
+        task: raw.task ?? raw.last_assistant_message,
+      };
     }
     if (raw.toolCall) {
       raw.tool_name ??= raw.toolCall.name;
@@ -410,11 +452,11 @@ export function asContext(results: Recalled[], space: string, prompt?: string): 
 
 export interface HookResult {
   context?: string;
-  /** A rule somebody asked to stop this act, in its own words. The command
+  /** A directive somebody asked to stop this act, in its own words. The command
    *  turns it into whatever refusal this harness understands — the reason is
-   *  always the rule itself, so nobody is stopped without being told why. */
+   *  always the directive itself, so nobody is stopped without being told why. */
   refuse?: string;
-  heard: { prompt?: string; transformedPrompt?: string };
+  heard: { prompt?: string; transformedPrompt?: string; hookEventName?: string };
 }
 
 export async function runMoment(moment: LifecycleHook, program: string): Promise<HookResult> {
@@ -431,7 +473,12 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       payload.prompt = latest;
     }
   }
-  const heard = { prompt: payload.prompt, transformedPrompt: payload.transformedPrompt };
+  const hookEventName = payload.hook_event_name ?? payload.hookEventName;
+  const heard = {
+    prompt: payload.prompt,
+    transformedPrompt: payload.transformedPrompt,
+    hookEventName,
+  };
   const here = await resolveProjectWiring(payload.cwd, program);
 
   // Every log line opens with this: moment, program, and the agent id, so a
@@ -540,9 +587,32 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       const saidKey = `said:${evalResult.act}`;
       note.fired[saidKey] = Date.now();
       result.context = evalResult.guidance;
+      note.pendingGuidance = evalResult.guidance;
       await log(
         `${tag} · before-act · ${tool} is ${evalResult.act} · ${evalResult.bears.length} said`,
       );
+      return leaving(result);
+    }
+
+    return leaving(result);
+  }
+
+  if (moment === "after-act") {
+    if (note.pendingGuidance) {
+      result.context = note.pendingGuidance;
+      note.pendingGuidance = null;
+      await log(`${tag} · after-act · delivered staged guidance`);
+      return leaving(result);
+    }
+
+    const errorMessage =
+      payload.error_message ?? (payload as { errorMessage?: string }).errorMessage ?? payload.error;
+    const failureType = payload.failure_type ?? (payload as { failureType?: string }).failureType;
+    if (errorMessage || failureType) {
+      const tool = payload.tool_name ?? payload.toolName ?? "";
+      const reason = errorMessage || failureType || "unknown error";
+      await log(`${tag} · after-act · tool failure on ${tool || "action"}: ${reason}`);
+      result.context = `Tool execution failed on ${tool || "action"}: ${reason}. Review active directives before retrying.`;
       return leaving(result);
     }
 

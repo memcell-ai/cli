@@ -1,6 +1,12 @@
 import { resolve } from "node:path";
 
-import { hookCommand, hookMatches, MOMENTS, type Moment } from "../loop/moments.js";
+import {
+  hookCommand,
+  hookMatches,
+  MOMENTS,
+  type LifecycleHook,
+  type Moment,
+} from "../loop/moments.js";
 import { ours, readJson, writeJson, type Wiring } from "./shared.js";
 
 // The Claude-shaped hooks block, written once for the half of the field
@@ -8,7 +14,7 @@ import { ours, readJson, writeJson, type Wiring } from "./shared.js";
 // register hooks as the same nested JSON — an event name mapping to
 // `[{ matcher?, hooks: [{ type: "command", command, timeout }] }]` — inside
 // some settings file; what differs per agent is only WHERE that file lives
-// and WHAT its four events are called. An adapter hands those two facts in
+// and WHAT its events are called. An adapter hands those facts in
 // and gets install/remove/verify back, so the merge discipline (never
 // touch anybody else's entries; refresh our own in place) exists exactly
 // once.
@@ -33,8 +39,9 @@ export interface CcHookOps {
 export function ccHookOps(
   program: string,
   file: (projectDir: string) => string,
-  EVENT: Record<Moment, string>,
+  EVENT: Record<Moment, string> | Partial<Record<LifecycleHook, string>>,
   extras?: {
+    eventHooks?: Record<string, LifecycleHook>;
     /** Runs after the hooks are written — the place an adapter registers
      *  its MCP entry or anything else that travels with the wiring. */
     afterInstall?: (projectDir: string) => Promise<void>;
@@ -96,8 +103,33 @@ export function ccHookOps(
         if (held) return true;
       }
       const { events } = await load(file(dir));
+      if (extras?.eventHooks) {
+        for (const [event, moment] of Object.entries(extras.eventHooks)) {
+          for (const entry of events[event] ?? []) {
+            for (const h of entry.hooks ?? []) {
+              if (
+                hookMatches(h.command, moment, program) &&
+                h.command !== hookCommand(moment, program)
+              ) {
+                return true;
+              }
+            }
+          }
+        }
+        const missing = Object.entries(extras.eventHooks).some(
+          ([event, moment]) =>
+            !(events[event] ?? []).some((entry) =>
+              (entry.hooks ?? []).some((h) => hookMatches(h.command, moment, program)),
+            ),
+        );
+        if (missing) return true;
+        return false;
+      }
+
       for (const moment of MOMENTS) {
-        for (const entry of events[EVENT[moment]] ?? []) {
+        const eventName = EVENT[moment as Moment];
+        if (!eventName) continue;
+        for (const entry of events[eventName] ?? []) {
           for (const h of entry.hooks ?? []) {
             if (
               hookMatches(h.command, moment, program) &&
@@ -117,11 +149,15 @@ export function ccHookOps(
       // Wired means wired for what we fire NOW, so the first hook after an
       // upgrade carries itself forward and nobody has to be told.
       const wired = new Set(
-        MOMENTS.filter((moment) =>
-          (events[EVENT[moment]] ?? []).some((entry) =>
-            (entry.hooks ?? []).some((h) => ours(h.command)),
-          ),
-        ),
+        MOMENTS.filter((moment) => {
+          const eventName = EVENT[moment as Moment];
+          return (
+            eventName &&
+            (events[eventName] ?? []).some((entry) =>
+              (entry.hooks ?? []).some((h) => ours(h.command)),
+            )
+          );
+        }),
       );
       if (wired.size > 0 && wired.size < MOMENTS.length) return true;
       return false;
@@ -131,8 +167,12 @@ export function ccHookOps(
       const at = file(resolve(projectDir));
       const { doc, events } = await load(at);
       const settings = { hooks: events };
-      for (const moment of MOMENTS) {
-        const entries = (settings.hooks[EVENT[moment]] ??= []);
+      const eventPairs: [string, LifecycleHook][] = extras?.eventHooks
+        ? Object.entries(extras.eventHooks)
+        : MOMENTS.map((m) => [EVENT[m as Moment] ?? m, m]);
+
+      for (const [event, moment] of eventPairs) {
+        const entries = (settings.hooks[event] ??= []);
         const command = hookCommand(moment, program);
         // Merge never clobbers OTHER entries; our own is refreshed in
         // place. A re-connect mints a new agent identity, and a hook left
@@ -159,7 +199,7 @@ export function ccHookOps(
         if (!held) {
           prunedEntries.push({ hooks: [{ type: "command", command, timeout: 30 }] });
         }
-        settings.hooks[EVENT[moment]] = prunedEntries;
+        settings.hooks[event] = prunedEntries;
       }
       await writeJson(at, bare ? settings.hooks : doc);
       // An older release wired somewhere else. Take ours out of there in
@@ -193,15 +233,29 @@ export function ccHookOps(
 
     async verify(projectDir: string): Promise<Wiring[]> {
       const { events } = await load(file(resolve(projectDir)));
-      return MOMENTS.map((moment) => ({
-        moment,
-        event: EVENT[moment],
-        ok: Boolean(
-          events[EVENT[moment]]?.some?.((e) =>
-            e.hooks?.some((h) => hookMatches(h.command, moment, program)),
+      if (extras?.eventHooks) {
+        return Object.entries(extras.eventHooks).map(([event, moment]) => ({
+          moment,
+          event,
+          ok: Boolean(
+            events[event]?.some?.((e) =>
+              e.hooks?.some((h) => hookMatches(h.command, moment, program)),
+            ),
           ),
-        ),
-      }));
+        }));
+      }
+      return MOMENTS.map((moment) => {
+        const eventName = EVENT[moment as Moment] ?? moment;
+        return {
+          moment,
+          event: eventName,
+          ok: Boolean(
+            events[eventName]?.some?.((e) =>
+              e.hooks?.some((h) => hookMatches(h.command, moment, program)),
+            ),
+          ),
+        };
+      });
     },
   };
 }

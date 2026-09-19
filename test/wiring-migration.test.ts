@@ -81,6 +81,114 @@ describe("an older release's wiring is carried forward", () => {
     await claude.install(dir);
     expect(await claude.stale!(dir)).toBe(false);
   });
+
+  it("cursor heals existing config in-place, preserves third-party hooks, and adds missing hooks", async () => {
+    const { cursor } = await import("../src/adapters/cursor.js");
+    const dir = mkdtempSync(join(tmpdir(), "memcell-cursor-heal-"));
+    await mkdir(join(dir, ".cursor"), { recursive: true });
+
+    // Older / incomplete hooks.json with only 2 hooks + a third-party hook
+    const legacyHooks = {
+      version: 1,
+      hooks: {
+        sessionStart: [{ command: "memcell hook session-start cursor" }],
+        beforeSubmitPrompt: [{ command: "memcell hook prompt-submit cursor" }],
+        customEvent: [{ command: "my-custom-script.sh" }],
+      },
+    };
+    await writeFile(join(dir, ".cursor", "hooks.json"), JSON.stringify(legacyHooks, null, 2));
+
+    // Stale check catches missing hooks
+    expect(await cursor.stale!(dir)).toBe(true);
+
+    // migrateWiring heals cursor
+    const migrated = await migrateWiring(dir);
+    expect(migrated).toContain("cursor");
+
+    // Check healed content
+    const healed = JSON.parse(await readFile(join(dir, ".cursor", "hooks.json"), "utf8")) as {
+      version: number;
+      hooks: Record<string, { command: string }[]>;
+    };
+
+    // Third-party custom hook preserved
+    expect(healed.hooks.customEvent).toEqual([{ command: "my-custom-script.sh" }]);
+
+    // All 8 Cursor events wired
+    expect(healed.hooks.sessionStart).toBeDefined();
+    expect(healed.hooks.beforeSubmitPrompt).toBeDefined();
+    expect(healed.hooks.preToolUse).toBeDefined();
+    expect(healed.hooks.subagentStart).toBeDefined();
+    expect(healed.hooks.postToolUse).toBeDefined();
+    expect(healed.hooks.postToolUseFailure).toBeDefined();
+    expect(healed.hooks.stop).toBeDefined();
+    expect(healed.hooks.sessionEnd).toBeDefined();
+
+    // Now it is not stale
+    expect(await cursor.stale!(dir)).toBe(false);
+
+    // Calling install again is idempotent
+    await cursor.install(dir);
+    expect(await cursor.stale!(dir)).toBe(false);
+    const rechecked = JSON.parse(await readFile(join(dir, ".cursor", "hooks.json"), "utf8")) as {
+      hooks: Record<string, { command: string }[]>;
+    };
+    expect(rechecked.hooks.preToolUse).toHaveLength(1);
+  });
+
+  it("claude heals existing config in-place, preserves third-party hooks, and adds missing hooks across all 7 events", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "memcell-claude-heal-"));
+    await mkdir(join(dir, ".claude"), { recursive: true });
+
+    // Older / incomplete settings.json with only SessionStart + a third-party hook
+    const legacyHooks = {
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: "command", command: "memcell hook session-start claude" }] },
+          { hooks: [{ type: "command", command: "echo foreign-hook" }] },
+        ],
+      },
+    };
+    await writeFile(join(dir, ".claude", "settings.json"), JSON.stringify(legacyHooks, null, 2));
+
+    // Stale check catches missing hooks
+    expect(await claude.stale!(dir)).toBe(true);
+
+    // migrateWiring heals claude
+    const migrated = await migrateWiring(dir);
+    expect(migrated).toContain("claude");
+
+    // Check healed content
+    const healed = JSON.parse(await readFile(join(dir, ".claude", "settings.json"), "utf8")) as {
+      hooks: Record<string, { hooks?: { command: string }[] }[]>;
+    };
+
+    // Third-party custom hook preserved in SessionStart
+    const sessionHooks = healed.hooks.SessionStart!.flatMap((e) => e.hooks ?? []);
+    expect(sessionHooks.some((h) => h.command === "echo foreign-hook")).toBe(true);
+
+    // All 7 Claude events wired
+    expect(healed.hooks.SessionStart).toBeDefined();
+    expect(healed.hooks.UserPromptSubmit).toBeDefined();
+    expect(healed.hooks.PreToolUse).toBeDefined();
+    expect(healed.hooks.PostToolUseFailure).toBeDefined();
+    expect(healed.hooks.SubagentStart).toBeDefined();
+    expect(healed.hooks.Stop).toBeDefined();
+    expect(healed.hooks.SessionEnd).toBeDefined();
+
+    // Now it is not stale
+    expect(await claude.stale!(dir)).toBe(false);
+
+    // Calling install again is idempotent
+    await claude.install(dir);
+    expect(await claude.stale!(dir)).toBe(false);
+    const rechecked = JSON.parse(await readFile(join(dir, ".claude", "settings.json"), "utf8")) as {
+      hooks: Record<string, { hooks?: { command: string }[] }[]>;
+    };
+    expect(rechecked.hooks.PreToolUse).toHaveLength(1);
+    expect(rechecked.hooks.PostToolUseFailure).toHaveLength(1);
+    expect(rechecked.hooks.SubagentStart).toHaveLength(1);
+  });
 });
 
 describe("a config file memcell cannot read", () => {

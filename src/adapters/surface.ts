@@ -82,7 +82,7 @@ export interface Guard extends At {
 export type ToolGuard = Guard;
 export type PreActPolicy = Guard;
 
-/** The five moments a standing rule can bear on. Mirrors the record's own
+/** The five action classes a standing directive can bear on. Mirrors the record's own
  *  vocabulary; the mapping from a tool name to one of these is per-agent and
  *  lives above, never in the record. */
 export type ActClass = "read" | "change" | "record" | "send" | "answer";
@@ -95,7 +95,9 @@ export type ActClass = "read" | "change" | "record" | "send" | "answer";
  */
 export interface Surface {
   /** The lifecycle moments the loop already rides. */
-  moments: Record<Moment, At | Unsupported>;
+  moments: Record<Moment, At | Unsupported> & {
+    "after-act"?: At | Unsupported;
+  };
   /** Speaking at the moment of an act. */
   guard: Guard | Unsupported;
 }
