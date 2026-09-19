@@ -184,6 +184,30 @@ describe("reading a session in each agent's dialect", () => {
     expect(s.touched).toEqual(["src/retry.ts"]);
   });
 
+  it("cursor — flat content shape and Delete tool recording in touched", async () => {
+    const path = join(root, "cursor-flat.jsonl");
+    await writeFile(
+      path,
+      [
+        JSON.stringify({
+          role: "user",
+          content: "delete the legacy retry handler",
+        }),
+        JSON.stringify({
+          role: "assistant",
+          content: [
+            { type: "text", text: "Removing obsolete file." },
+            { type: "tool_use", name: "Delete", input: { path: `${proj}/src/legacy-retry.ts` } },
+          ],
+        }),
+      ].join("\n"),
+    );
+    const s = await readSession("cursor", { transcript_path: path, cwd: proj }, 0);
+    expect(s.text).toContain("user: delete the legacy retry handler");
+    expect(s.text).toContain("assistant: Removing obsolete file.");
+    expect(s.touched).toEqual(["src/legacy-retry.ts"]);
+  });
+
   it("opencode — the session database, in its own part shapes", async () => {
     const { DatabaseSync } = await import("node:sqlite");
     const dataHome = join(root, "xdg-data");
@@ -715,6 +739,21 @@ describe("reading a session in each agent's dialect", () => {
     expect(JSON.parse(adapterFor("cursor")!.speak("session-start", "ctx", {})!)).toEqual({
       additional_context: "ctx",
     });
+    expect(JSON.parse(adapterFor("cursor")!.speak("before-act", null, {})!)).toEqual({
+      permission: "allow",
+    });
+    expect(JSON.parse(adapterFor("cursor")!.speak("after-act", "advisory ctx", {})!)).toEqual({
+      additional_context: "advisory ctx",
+    });
+    expect(adapterFor("cursor")!.speak("after-act", null, {})).toBeNull();
+    expect(adapterFor("cursor")!.speak("prompt-submit", "ctx", {})).toBeNull();
+    expect(
+      JSON.parse(adapterFor("cursor")!.refuse!("Action blocked by standing directive")!),
+    ).toEqual({
+      permission: "deny",
+      user_message: "Action blocked by standing directive",
+      agent_message: "Action blocked by standing directive",
+    });
     expect(JSON.parse(adapterFor("opencode")!.speak("prompt-submit", "ctx", {})!)).toEqual({
       hookSpecificOutput: { additionalContext: "ctx" },
     });
@@ -735,8 +774,16 @@ describe("reading a session in each agent's dialect", () => {
     expect(JSON.parse(adapterFor("antigravity")!.speak("prompt-submit", "ctx", {})!)).toEqual({
       injectSteps: [{ ephemeralMessage: "ctx" }],
     });
-    // Antigravity's PreToolUse proto does not support injectSteps (only refuse)
-    expect(adapterFor("antigravity")!.speak("before-act", "ctx", {})).toBeNull();
+    // Antigravity's PreToolUse proto returns { decision: "allow" } on pass
+    expect(JSON.parse(adapterFor("antigravity")!.speak("before-act", "ctx", {})!)).toEqual({
+      decision: "allow",
+    });
+    // Antigravity's Stop proto returns continue decision with reason if context provided
+    expect(JSON.parse(adapterFor("antigravity")!.speak("session-end", "ctx", {})!)).toEqual({
+      decision: "continue",
+      reason: "ctx",
+    });
+    expect(adapterFor("antigravity")!.speak("session-end", null, {})).toBeNull();
     // No context: every dialect is silent.
     expect(adapterFor("claude")!.speak("turn-end", null, {})).toBeNull();
   });

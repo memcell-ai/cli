@@ -66,7 +66,7 @@ report on it.
   through it deliberately.
 - **`layer: public`** — from the open-source commons, kept current. Where it
   contradicts what you remember about a library, it is the later source.
-- **`pinned`** — a standing rule, present whatever you asked. It did not
+- **`pinned`** — a standing statement, present whatever you asked. It did not
   answer your question; do not read its presence as relevance.
 - **`diverged`** — you already went against this one earlier in this
   session. It is served again for that reason. Re-read it before continuing,
@@ -90,7 +90,7 @@ File decisions, constraints discovered, and approaches that failed. Do not
 file activity ("fixed the retry bug"), restatements of code, or anything
 `git log` already carries.
 
-A **rule** — something a future session could disobey — takes `--at`, naming
+An **action guard** or **operational statement** — something a future session could disobey — takes `--at`, naming
 the moments it bears on, so it is served again at the one it applies to
 rather than only at the start of a session:
 

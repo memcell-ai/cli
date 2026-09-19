@@ -22,22 +22,23 @@ export interface ActiveRule {
   tags?: string[];
 }
 export type StandingRule = ActiveRule;
+export type ActiveStatement = ActiveRule;
 
 export interface SessionCache {
   space: string;
   guardMode?: "strict" | "advisory";
-  /** Active rules staged for in-memory pre-act evaluation. Refreshed by every
+  /** Active statements staged for in-memory pre-act evaluation. Refreshed by every
    *  recall; a session that has not recalled yet guards nothing. */
   activeRules?: ActiveRule[];
   /** Legacy alias for activeRules kept for compatibility. */
   standing?: ActiveRule[];
   /**
-   * Rules SERVED immediately before an act, and which act.
+   * Statements SERVED immediately before an act, and which act.
    *
    * The pairing is a fact rather than an inference: the guard knows it put
-   * this rule in front of this act, at this moment. Judging afterwards from
+   * this directive in front of this act, at this moment. Judging afterwards from
    * a transcript has to work out both halves from prose, and measurably does
-   * not — it is what catches a rule broken in the open and calls it nothing.
+   * not — it is what catches a statement broken in the open and calls it nothing.
    *
    * Kept here and handed over with the turn payload, so judging costs one call
    * on transcript data already being sent rather than a call per act.
@@ -49,6 +50,9 @@ export interface SessionCache {
   fired: Record<string, number>;
   /** Model detected for this session, persisted across hooks. */
   model?: string;
+  /** Guidance staged during before-act to be delivered at after-act (for harnesses
+   *  like Cursor whose preToolUse hook only accepts permission decisions). */
+  pendingGuidance?: string | null;
 }
 
 export type Note = SessionCache;

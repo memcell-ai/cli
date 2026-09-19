@@ -1,104 +1,177 @@
 <p align="center">
-  <img src="https://memcell.ai/icon.svg" width="56" alt="" />
+  <img src="https://memcell.ai/icon.svg" width="56" alt="MemCell Logo" />
 </p>
 
 <h1 align="center">memcell</h1>
 
-<p align="center"><strong>Living memory for AI coding agents.</strong><br />
-What this project established, braided with what shipped in your dependencies after the cutoff —<br />
-recalled before your agents act, sharpened by the outcomes they report back.</p>
+<p align="center">
+  <strong>Persistent, adaptive memory engine for AI agents.</strong><br />
+  Stop your agents from repeating the same mistakes across sessions.
+</p>
 
-> **Hooks make the loop deterministic. MCP rides beside them as reach.**
+<p align="center">
+  <a href="https://www.npmjs.com/package/memcell"><img src="https://img.shields.io/npm/v/memcell.svg?style=flat" alt="npm version" /></a>
+  <a href="https://github.com/memcell-ai/cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg" alt="Node.js >= 20" /></a>
+  <a href="https://memcell.ai/docs"><img src="https://img.shields.io/badge/docs-memcell.ai-blue" alt="Documentation" /></a>
+</p>
 
 ```sh
+# Install globally
 npm install -g memcell
+
+# In any project:
 memcell connect
 ```
 
-Run it in a project you code in. It prints a code, one tap in your browser
-approves it — no account needed, and a guest's memory carries over on
-sign-in. Wires **Claude Code, Cursor, Codex, Gemini CLI, Copilot CLI,
-OpenCode, Qwen, Grok, Droid, Kiro, Devin** and more: hooks, the
-`memcell mcp` bridge, an agent key for this directory, and `.memcell`.
+Run it in any project. `memcell connect` automatically:
 
-Installed rather than `npx`ed on purpose: the hooks this writes name
-`memcell`, and a runner's cached copy is gone by the next session. `npx
-memcell connect` works and will say so if the command will not survive.
+- **Approves in 1 tap**: Opens browser approval (no upfront account needed; guest memories carry over seamlessly on sign-in).
+- **Auto-detects agents**: Wires **Claude Code, Cursor, Copilot CLI, Gemini CLI, OpenAI Codex, OpenCode, Cline, Windsurf**, and more with non-destructive lifecycle hooks and the local stdio MCP server (`memcell mcp`).
+- **Secures credentials**: Stores scoped agent keys directly in your OS keyring (Keychain / Secret Service / Credential Manager).
+- **Creates `.memcell`**: Adds a clean, git-safe project descriptor to your repo root.
 
-## Commands
+Verify anytime:
 
-| command               | what it does                                                         |
-| --------------------- | -------------------------------------------------------------------- |
-| `memcell connect`     | wire this directory — approves in your browser the first time        |
-| `memcell recall`      | what memory serves before you act                                    |
-| `memcell remember`    | file one thing this project has established (`--at` when it applies) |
-| `memcell report`      | what happened when something memory served was acted on              |
-| `memcell status`      | who this machine is, and what this directory is linked to            |
-| `memcell stats`       | what your agents did, and what it saved in tokens not spent          |
-| `memcell ingest <f>`  | hand a document to this directory's memory                           |
-| `memcell import`      | bring existing instruction files into memory — bare, it finds them   |
-| `memcell export`      | carry this space out — one document, no account needed               |
-| `memcell hook remove` | take memcell's hooks out of this directory                           |
-| `memcell login`       | sign this machine in                                                 |
-| `memcell reset`       | forget everything memcell keeps on this machine                      |
-
-| resource           | acts on                                   |
-| ------------------ | ----------------------------------------- |
-| `memcell config`   | settings, per project or per machine      |
-| `memcell spaces`   | what you work on, and which one is active |
-| `memcell agents`   | the agents wired to this account          |
-| `memcell memories` | the commons                               |
-
-`memcell --help <name>` explains any of them. Ships two binaries:
-`memcell` and `mem`.
-
-Undo pairs: `login ⇄ logout` (this machine ⇄ an account),
-`connect ⇄ hook remove` (this directory ⇄ a space, with an agent key).
-Revoking a credential never forgets what the agents filed.
-
-## How it works
-
-- **Hooks** — recall runs at session start and prompt submit; remember and
-  report run at turn end; and a rule that names a moment is served again
-  before the act it bears on, which costs no extra call — the rules come
-  down with the turn's recall and the matching is local. MCP tool calls are
-  model-invoked with no session lifecycle, so they cannot guarantee any of
-  those moments; hooks fire regardless of what the model decides to call.
-  Fails open, always.
-- **MCP** — wiring also registers `memcell mcp`, a stdio bridge to the
-  paired instance, so the model can ask memory mid-turn. The committed
-  entry is just that command: no secret in any config file.
-- **`.memcell`** — the instance and the space. Project truth, identical for
-  every clone, safe to commit. Keys live in the machine keyring; a teammate
-  who clones runs one `memcell connect` of their own.
-
-## Options
-
-| option         | what it does                                                          |
-| -------------- | --------------------------------------------------------------------- |
-| `--url`        | which memcell to act on, of the ones this directory is wired to       |
-| `--space`      | name which of your spaces to wire, by slug                            |
-| `--pair <id>`  | claim a pairing from the connect page instead of the in-terminal flow |
-| `--no-browser` | print the approval link instead of opening it                         |
-
-`MEMCELL_INSTANCE` sets the default instance for a shell.
-
-## Claude Code plugin
-
-This repo is also a plugin marketplace:
-
-```
-/plugin marketplace add memcell-ai/cli
-/plugin install memcell@memcell
+```sh
+memcell status
 ```
 
-The plugin registers the MCP bridge and a skill teaching the four doors
-(recall, remember, ingest, report). Hooks still come from
-`memcell connect` — the plugin is reach, the hooks are the loop.
+---
+
+## Why MemCell?
+
+Every time you start a new session with an AI agent, it starts with complete amnesia. It falls into the same traps, repeats outdated assumptions, and recreates issues you already resolved yesterday.
+
+Static instruction files and monolithic system prompts don't solve this:
+
+- **Context Bloat**: Stacking dozens of instructions wastes tokens on every turn and dilutes model attention.
+- **Zero Adaptability**: Outdated instructions keep firing even when requirements change.
+- **Manual Overhead**: You remain the sole feedback loop, constantly hand-editing markdown files.
+
+**MemCell gives your agents closed-loop memory:**
+
+1. **Pre-Action Recall** — Before taking action, agents receive verified statements relevant to the current task.
+2. **Execution & Feedback** — When actions succeed or fail, real outcomes are reported back.
+3. **Earned Confidence** — Statements that work gain confidence; statements that fail decay. Zero manual prompt maintenance.
+
+---
+
+## How It Works
+
+MemCell pairs two lightweight layers so agents stay aligned without getting in your way:
+
+- **Deterministic Hooks (Zero-Touch)**: Fire automatically on session start, prompt submit, and turn end. Relevant statements and directives are checked before actions begin—without relying on the model remembering to call a tool. _Hooks fail open in <50ms, so offline or slow networks never block your editor._
+- **MCP Tool Bridge (`memcell mcp`)**: Provides interactive tools (`recall`, `remember`, `report`, `ingest`) when agents need to search memory or record discoveries mid-turn.
+
+---
+
+## Everyday Usage
+
+Once connected, agents recall and report memory automatically. You can also interact with memory directly from your terminal:
+
+### 1. Recall Verified Context Before Implementing
+
+```sh
+memcell recall "how do we handle multi-tenant database sessions?"
+```
+
+### 2. Record a Decision or Convention
+
+```sh
+# Record a project convention
+memcell remember "Always use pnpm for package operations; never invoke npm directly"
+
+# Bind an invariant to a specific lifecycle trigger
+memcell remember "Check database migrations for column locks before altering tables" --at "before db:migrate"
+```
+
+### 3. Report What Happened
+
+Memories sharpen when told what happened. When an approach succeeds or fails, report the outcome:
+
+```sh
+memcell report stmt_019a4b2c worked --note "CI suite passed cleanly"
+memcell report stmt_019a4b2c failed --note "broke Next.js 15 async cookies"
+```
+
+### 4. Ingest Specs and Existing Guidelines
+
+```sh
+# Ingest an architecture doc, spec, or post-mortem
+memcell ingest docs/architecture/auth.md
+
+# Scan and import existing guideline files (CLAUDE.md, etc.)
+memcell import
+```
+
+### 5. Check Attributed Token Savings
+
+```sh
+memcell stats
+```
+
+Displays statements followed, errors avoided, estimated tokens saved from prevented error loops, and 30-day activity sparklines.
+
+---
+
+## Supported Agents & IDEs
+
+| Agent / Harness                       | Integration          | How It Runs                                                                                |
+| :------------------------------------ | :------------------- | :----------------------------------------------------------------------------------------- |
+| **Claude Code**                       | Hooks + MCP + Plugin | Automatic lifecycle hooks or marketplace plugin (`/plugin marketplace add memcell-ai/cli`) |
+| **Cursor**                            | Hooks + MCP Bridge   | Native lifecycle hooks in `.cursor/hooks.json` and stdio bridge in `.cursor/mcp.json`      |
+| **Gemini CLI**                        | Hooks + MCP          | Session and prompt hooks via native CLI harness                                            |
+| **GitHub Copilot CLI**                | Lifecycle Hooks      | Pre-command validation hooks                                                               |
+| **OpenAI Codex / OpenCode**           | Hooks + MCP          | Project descriptor hooks and stdio tools                                                   |
+| **Cline & Windsurf**                  | MCP Bridge           | Native editor MCP client configuration                                                     |
+| **Factory Droid, Devin, Kiro, Goose** | Hooks + MCP          | Workspace adapters and tool harnesses                                                      |
+
+---
+
+## Command Cheat Sheet
+
+| Command                         | Description                                                            |
+| :------------------------------ | :--------------------------------------------------------------------- |
+| `memcell connect`               | Connect this directory to MemCell, install hooks, and configure MCP    |
+| `memcell status`                | Check authentication standing, active project, and connection health   |
+| `memcell stats`                 | Show statements followed, errors avoided, and token savings            |
+| `memcell recall <intent>`       | Query memory for verified statements and past outcomes before acting   |
+| `memcell remember <text>`       | File a project convention or directive (`--at` for lifecycle triggers) |
+| `memcell report <id> <outcome>` | Report `worked`, `failed`, or `avoided` to update confidence           |
+| `memcell ingest <file>`         | Distill a document or specification into atomic memories               |
+| `memcell import [files...]`     | Import existing guideline files (`CLAUDE.md`, etc.)                    |
+| `memcell export`                | Export project memories as a portable document (`--format json\|md`)   |
+| `memcell orgs`                  | List or switch active organization (`memcell orgs switch <slug>`)      |
+| `memcell projects`              | List or switch active project (`memcell projects use <slug>`)          |
+| `memcell hook remove`           | Cleanly remove all MemCell hooks from this directory                   |
+| `memcell reset`                 | Clear all cached credentials, keys, and tokens on this machine         |
+
+Run `memcell --help` or `memcell <command> --help` for full flag details.
+
+---
+
+## Clean Uninstall
+
+To remove MemCell hooks from a repository without touching your code:
+
+```sh
+memcell hook remove
+rm .memcell
+```
+
+To remove all stored keys and credentials from your local machine:
+
+```sh
+memcell reset
+```
+
+---
 
 ## Links
 
-- Website — https://memcell.ai
-- Docs — https://memcell.ai/docs
+- **Documentation**: [https://memcell.ai/docs](https://memcell.ai/docs)
+- **Website**: [https://memcell.ai](https://memcell.ai)
+- **Issues**: [https://github.com/memcell-ai/cli/issues](https://github.com/memcell-ai/cli/issues)
 
 Apache License 2.0 · © 2026 OpenOri

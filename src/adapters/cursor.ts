@@ -1,7 +1,8 @@
 import type { Surface } from "./surface.js";
+import { unsupported } from "./surface.js";
 import { join, resolve } from "node:path";
 
-import { hookCommand, hookMatches, MOMENTS, type Moment } from "../loop/moments.js";
+import { hookCommand, hookMatches, type LifecycleHook } from "../loop/moments.js";
 import {
   addTouched,
   emptySession,
@@ -30,18 +31,23 @@ import {
 // it hands `transcript_path` on every firing. The MCP registration rides
 // <project>/.cursor/mcp.json, the same file the editor reads.
 //
-// Wired against the CLI's verified event subset: sessionStart,
-// beforeSubmitPrompt and stop fire today; sessionEnd is wired but the
-// harness's support for it is young — absence there is the harness's, and
-// turn-end capture carries the leg either way.
+// Wired against Cursor's verified event subset:
+// - sessionStart: initializes session context
+// - beforeSubmitPrompt: prompt gating
+// - preToolUse & subagentStart: pre-action permission evaluation
+// - postToolUse & postToolUseFailure: post-action context injection & failure recovery
+// - stop & sessionEnd: turn/session termination capture
 
-const EVENT: Record<Moment, string> = {
-  "session-start": "sessionStart",
-  "prompt-submit": "beforeSubmitPrompt",
-  "before-act": "preToolUse",
-  "turn-end": "stop",
-  "session-end": "sessionEnd",
-};
+const EVENT_HOOKS: { event: string; moment: LifecycleHook }[] = [
+  { event: "sessionStart", moment: "session-start" },
+  { event: "beforeSubmitPrompt", moment: "prompt-submit" },
+  { event: "preToolUse", moment: "before-act" },
+  { event: "subagentStart", moment: "before-act" },
+  { event: "postToolUse", moment: "after-act" },
+  { event: "postToolUseFailure", moment: "after-act" },
+  { event: "stop", moment: "turn-end" },
+  { event: "sessionEnd", moment: "session-end" },
+];
 
 interface HooksFile {
   version?: number;
@@ -58,7 +64,7 @@ interface McpFile {
 }
 
 /** Cursor's transcript records writes as Claude-shaped tool_use blocks. */
-const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "write", "edit"]);
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "write", "edit", "Delete", "delete"]);
 
 export const cursor: Adapter = {
   name: "cursor",
@@ -72,7 +78,13 @@ export const cursor: Adapter = {
     // Wiring of the right shape that predates a moment — what every
     // upgrade adding one leaves behind. Caught here so the first hook
     // after an upgrade carries itself forward and nobody is told to.
-    return (await staleText(files)) || missingMoments(files, Object.values(EVENT));
+    return (
+      (await staleText(files)) ||
+      (await missingMoments(
+        files,
+        EVENT_HOOKS.map((e) => e.event),
+      ))
+    );
   },
 
   async install(projectDir: string): Promise<string> {
@@ -80,8 +92,8 @@ export const cursor: Adapter = {
     const held = await readJson<HooksFile>(at);
     held.version ??= 1;
     held.hooks ??= {};
-    for (const moment of MOMENTS) {
-      const entries = (held.hooks[EVENT[moment]] ??= []);
+    for (const { event, moment } of EVENT_HOOKS) {
+      const entries = (held.hooks[event] ??= []);
       const command = hookCommand(moment, "cursor");
       let refreshed = false;
       const kept: { command: string }[] = [];
@@ -97,7 +109,7 @@ export const cursor: Adapter = {
         }
       }
       if (!refreshed) kept.push({ command });
-      held.hooks[EVENT[moment]] = kept;
+      held.hooks[event] = kept;
     }
     await writeJson(at, held);
 
@@ -141,19 +153,34 @@ export const cursor: Adapter = {
 
   async verify(projectDir: string): Promise<Wiring[]> {
     const held = await readJson<HooksFile>(file(resolve(projectDir)));
-    return MOMENTS.map((moment) => ({
+    return EVENT_HOOKS.map(({ event, moment }) => ({
       moment,
-      event: EVENT[moment],
-      ok: Boolean(
-        held.hooks?.[EVENT[moment]]?.some((e) => hookMatches(e.command, moment, "cursor")),
-      ),
+      event,
+      ok: Boolean(held.hooks?.[event]?.some((e) => hookMatches(e.command, moment, "cursor"))),
     }));
   },
 
   // ── speak — snake_case, cursor's own field ────────────────────────────────
-  speak(_moment: Moment, context: string | null): string | null {
-    if (!context) return null;
-    return JSON.stringify({ additional_context: context });
+  speak(moment: LifecycleHook, context: string | null): string | null {
+    if (moment === "before-act") {
+      // Permission hooks (preToolUse, subagentStart): explicit allow response
+      return JSON.stringify({ permission: "allow" });
+    }
+    if (moment === "after-act" || moment === "session-start") {
+      // Context-accepting hooks (postToolUse, postToolUseFailure, sessionStart)
+      if (!context) return null;
+      return JSON.stringify({ additional_context: context });
+    }
+    return null;
+  },
+
+  // ── refuse — structured denial for permission hooks ───────────────────────
+  refuse(reason: string): string {
+    return JSON.stringify({
+      permission: "deny",
+      user_message: reason,
+      agent_message: reason,
+    });
   },
 
   // ── read — the transcript its hook payload names ─────────────────────────
@@ -174,7 +201,7 @@ export const cursor: Adapter = {
       };
       const role = entry.role ?? entry.message?.role;
       if (role !== "user" && role !== "assistant") return;
-      const content = entry.message?.content;
+      const content = entry.message?.content ?? (entry as { content?: unknown }).content;
       if (!content) return;
       if (Array.isArray(content)) {
         for (const block of content as {
@@ -218,42 +245,52 @@ export const cursor: Adapter = {
  * `change` is the same set the capture side already learned — one list, so
  * the two halves cannot drift into disagreeing about what a write is. A tool
  * nobody verified is left out: that act goes unguarded, which is silence
- * rather than a rule shown where it does not apply.
+ * rather than a directive shown where it does not apply.
  */
 export const SURFACE: Surface = {
   moments: {
     "session-start": {
       event: "sessionStart",
-      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+      inject: { via: "json", path: "additional_context" },
     },
     "prompt-submit": {
       event: "beforeSubmitPrompt",
-      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+      inject: unsupported(
+        "Cursor beforeSubmitPrompt hook supports prompt gating but not context injection",
+      ),
     },
     "before-act": {
-      event: "preToolUse",
-      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+      event: "preToolUse,subagentStart",
+      inject: unsupported(
+        "Cursor preToolUse and subagentStart hooks control permission but do not inject context",
+      ),
+    },
+    "after-act": {
+      event: "postToolUse,postToolUseFailure",
+      inject: { via: "json", path: "additional_context" },
     },
     "turn-end": {
       event: "stop",
-      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+      inject: unsupported("Cursor stop hook accepts followup_message but not injected context"),
     },
     "session-end": {
       event: "sessionEnd",
-      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+      inject: unsupported("the session is over — Cursor sessionEnd is fire-and-forget"),
     },
   },
   guard: {
-    event: "preToolUse",
+    event: "preToolUse,subagentStart",
     matcher: (tools) => (tools.length > 0 ? tools.join("|") : undefined),
-    inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
-    refuse: { via: "exit-code", code: 2 },
+    inject: unsupported(
+      "Cursor preToolUse and subagentStart hooks control permission but do not inject context",
+    ),
+    refuse: { via: "json", path: "permission", deny: "deny" },
     tools: {
       read: ["Read", "TabRead", "Grep", "explore"],
       change: [...WRITE_TOOLS],
       // One shell is record AND send; which one is decided from the command.
       record: ["Shell", "shell"],
-      send: ["Shell", "shell"],
+      send: ["Shell", "shell", "subagent", "explore", "Task", "task"],
     },
   },
 };

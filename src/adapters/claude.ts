@@ -2,7 +2,7 @@ import { unsupported, type Surface } from "./surface.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { Moment } from "../loop/moments.js";
+import type { LifecycleHook, Moment } from "../loop/moments.js";
 import { ccHookOps } from "./cc-hooks.js";
 import {
   addTouched,
@@ -25,18 +25,30 @@ import { MCP_ARGS, MCP_COMMAND, oursMcp, readJson, writeJson, type Adapter } fro
 // anything a third party added since the session loaded it, silently, and
 // the loop then does nothing while every surface still says connected.
 
-const EVENT: Record<Moment, string> = {
+const EVENT: Record<LifecycleHook, string> = {
   "session-start": "SessionStart",
   "prompt-submit": "UserPromptSubmit",
   "before-act": "PreToolUse",
+  "after-act": "PostToolUseFailure",
   "turn-end": "Stop",
   "session-end": "SessionEnd",
+};
+
+/** All 7 active events mapped for Claude Code. */
+const EVENT_HOOKS: Record<string, LifecycleHook> = {
+  SessionStart: "session-start",
+  UserPromptSubmit: "prompt-submit",
+  PreToolUse: "before-act",
+  PostToolUseFailure: "after-act",
+  SubagentStart: "session-start",
+  Stop: "turn-end",
+  SessionEnd: "session-end",
 };
 
 /**
  * What this harness can do, declared — see adapters/surface.ts.
  *
- * Claude Code documents thirty-one events; the loop rides four of them. That
+ * Claude Code documents thirty-three events; the loop rides seven of them. That
  * is a statement about what memcell asks for, not about what the agent
  * offers, and the difference is written down here so nobody reads one as the
  * other again.
@@ -44,12 +56,12 @@ const EVENT: Record<Moment, string> = {
  * `PreToolUse` fires before every individual tool call — its own tools and
  * MCP tools alike — takes a regex matcher on the tool NAME, and reads
  * `hookSpecificOutput.additionalContext` back into the model's context.
- * Exit code 2 refuses the call and shows stderr to the model as the reason.
+ * Refusals emit structured JSON with permissionDecision: "deny".
  */
 export const SURFACE: Surface = {
   moments: {
     "session-start": {
-      event: "SessionStart",
+      event: "SessionStart,SubagentStart",
       inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
     },
     "prompt-submit": {
@@ -58,6 +70,10 @@ export const SURFACE: Surface = {
     },
     "before-act": {
       event: "PreToolUse",
+      inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
+    },
+    "after-act": {
+      event: "PostToolUseFailure",
       inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
     },
     "turn-end": {
@@ -74,17 +90,18 @@ export const SURFACE: Surface = {
     // Alternation on the tool name, which is what its matcher takes.
     matcher: (tools) => (tools.length > 0 ? tools.join("|") : undefined),
     inject: { via: "json", path: "hookSpecificOutput.additionalContext" },
-    refuse: { via: "exit-code", code: 2 },
+    refuse: { via: "json", path: "hookSpecificOutput.permissionDecision", deny: "deny" },
     // THIS agent's tools, by the moment each belongs to. The record knows
     // only the five words; which tool is which is knowledge about Claude
     // Code and lives here.
     tools: {
-      read: ["Read", "Glob", "Grep", "WebFetch", "WebSearch", "NotebookRead"],
-      change: ["Write", "Edit", "NotebookEdit"],
-      // Bash is every one of change/record/send depending on the command,
+      read: ["Read", "Glob", "Grep", "WebFetch", "WebSearch", "NotebookRead", "Bash", "PowerShell"],
+      change: ["Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell"],
+      // Shell is every one of change/record/send depending on the command,
       // so it is guarded and the class is decided from the command itself.
-      record: ["Bash"],
-      send: ["Bash"],
+      record: ["Bash", "PowerShell"],
+      send: ["Bash", "PowerShell", "Agent", "Workflow"],
+      answer: ["AskUserQuestion"],
     },
   },
 };
@@ -129,6 +146,7 @@ const wiring = ccHookOps("claude", file, EVENT, {
   afterInstall: installMcp,
   alsoRemove: removeMcp,
   legacy,
+  eventHooks: EVENT_HOOKS,
 });
 
 export const claude: Adapter = {
@@ -137,11 +155,15 @@ export const claude: Adapter = {
   ...wiring,
 
   // ── speak — hookSpecificOutput carries the injection ─────────────────────
-  speak(moment: Moment, context: string | null): string | null {
+  speak(
+    moment: LifecycleHook,
+    context: string | null,
+    heard?: { prompt?: string; transformedPrompt?: string; hookEventName?: string },
+  ): string | null {
     if (!context) return null;
     return JSON.stringify({
       hookSpecificOutput: {
-        hookEventName: EVENT[moment],
+        hookEventName: heard?.hookEventName ?? EVENT[moment] ?? "PreToolUse",
         additionalContext: context,
       },
     });

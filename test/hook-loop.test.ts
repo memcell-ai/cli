@@ -882,3 +882,310 @@ describe("a turn the door refuses", () => {
     expect(calls.filter((c) => c.path.includes("ingest"))).toHaveLength(0);
   });
 });
+
+describe("after-act delivering staged guidance and failure recovery", () => {
+  it("delivers staged guidance in after-act that before-act advisory produced", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-cursor",
+      guardMode: "advisory",
+      results: [
+        {
+          statementId: "s-advise",
+          text: "Prefer using upsert helper over raw write.",
+          confidence: 0.8,
+          layer: "team",
+          appliesAt: ["change"],
+        },
+      ],
+    });
+    fed({ session_id: "cursor-advisory-1", cwd: project, prompt: "modify the user store" });
+    await runMoment("prompt-submit", "cursor");
+
+    reset();
+    fed({
+      session_id: "cursor-advisory-1",
+      cwd: project,
+      tool_name: "Edit",
+      tool_input: { file_path: `${project}/src/store.ts` },
+    });
+    const beforeResult = await runMoment("before-act", "cursor");
+    expect(beforeResult.context).toContain("Prefer using upsert helper over raw write.");
+
+    // Now after-act fires (e.g. postToolUse in Cursor)
+    reset();
+    fed({
+      session_id: "cursor-advisory-1",
+      cwd: project,
+      tool_name: "Edit",
+    });
+    const afterResult = await runMoment("after-act", "cursor");
+    expect(afterResult.context).toContain("Prefer using upsert helper over raw write.");
+
+    // Next after-act call has no more pending guidance
+    reset();
+    fed({
+      session_id: "cursor-advisory-1",
+      cwd: project,
+      tool_name: "Edit",
+    });
+    const subsequentResult = await runMoment("after-act", "cursor");
+    expect(subsequentResult.context).toBeUndefined();
+  });
+
+  it("delivers tool failure recovery guidance on after-act", async () => {
+    reset();
+    fed({
+      session_id: "cursor-fail-1",
+      cwd: project,
+      tool_name: "Shell",
+      error_message: "Process exited with code 127: command not found",
+    });
+    const afterResult = await runMoment("after-act", "cursor");
+    expect(afterResult.context).toContain("Tool execution failed on Shell");
+    expect(afterResult.context).toContain("command not found");
+  });
+
+  it("evaluates subagent delegations through before-act guard", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-subagent",
+      guardMode: "strict",
+      results: [
+        {
+          statementId: "s-subagent",
+          text: "Never launch external subagents without approval.",
+          confidence: 0.9,
+          layer: "team",
+          appliesAt: ["send"],
+          refuses: true,
+        },
+      ],
+    });
+    fed({ session_id: "cursor-sub-1", cwd: project, prompt: "delegate task" });
+    await runMoment("prompt-submit", "cursor");
+
+    reset();
+    fed({
+      session_id: "cursor-sub-1",
+      cwd: project,
+      subagent_type: "Explore",
+      prompt: "find all configuration files",
+    });
+    const beforeResult = await runMoment("before-act", "cursor");
+    expect(beforeResult.refuse).toBe("Never launch external subagents without approval.");
+  });
+
+  it("evaluates subagentStart with task field", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-subagent-task",
+      guardMode: "strict",
+      results: [
+        {
+          statementId: "s-subagent-task",
+          text: "Never launch external subagents without approval.",
+          confidence: 0.9,
+          layer: "team",
+          appliesAt: ["send"],
+          refuses: true,
+        },
+      ],
+    });
+    fed({ session_id: "cursor-sub-2", cwd: project, prompt: "delegate task" });
+    await runMoment("prompt-submit", "cursor");
+
+    reset();
+    fed({
+      session_id: "cursor-sub-2",
+      workspace_roots: [project],
+      subagent_type: "generalPurpose",
+      task: "Run comprehensive audit",
+    });
+    const beforeResult = await runMoment("before-act", "cursor");
+    expect(beforeResult.refuse).toBe("Never launch external subagents without approval.");
+  });
+
+  it("evaluates preToolUse with Task tool", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-task-tool",
+      guardMode: "strict",
+      results: [
+        {
+          statementId: "s-task-tool",
+          text: "Never launch external subagents without approval.",
+          confidence: 0.9,
+          layer: "team",
+          appliesAt: ["send"],
+          refuses: true,
+        },
+      ],
+    });
+    fed({ session_id: "cursor-task-3", cwd: project, prompt: "run task" });
+    await runMoment("prompt-submit", "cursor");
+
+    reset();
+    fed({
+      session_id: "cursor-task-3",
+      workspace_roots: [project],
+      tool_name: "Task",
+      tool_input: { task: "Run audit" },
+    });
+    const beforeResult = await runMoment("before-act", "cursor");
+    expect(beforeResult.refuse).toBe("Never launch external subagents without approval.");
+  });
+
+  it("resolves project directory from workspace_roots when cwd is absent", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-roots",
+      results: [],
+    });
+    fed({
+      session_id: "cursor-roots-1",
+      workspace_roots: [project],
+      prompt: "test roots",
+    });
+    const res = await runMoment("prompt-submit", "cursor");
+    expect(res).toBeDefined();
+  });
+});
+
+describe("Claude Code hook loop integrations", () => {
+  it("delivers tool failure recovery guidance on after-act with Claude error payload", async () => {
+    reset();
+    fed({
+      session_id: "claude-fail-1",
+      cwd: project,
+      tool_name: "Bash",
+      error: "Command failed with exit code 1: git checkout main",
+      hook_event_name: "PostToolUseFailure",
+    });
+    const afterResult = await runMoment("after-act", "claude");
+    expect(afterResult.context).toContain(
+      "Tool execution failed on Bash: Command failed with exit code 1: git checkout main",
+    );
+    expect(afterResult.heard.hookEventName).toBe("PostToolUseFailure");
+
+    const { claude } = await import("../src/adapters/claude.js");
+    const spoken = claude.speak("after-act", afterResult.context ?? null, afterResult.heard);
+    const parsed = JSON.parse(spoken!) as {
+      hookSpecificOutput: { hookEventName: string; additionalContext: string };
+    };
+    expect(parsed.hookSpecificOutput.hookEventName).toBe("PostToolUseFailure");
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("Tool execution failed on Bash");
+  });
+
+  it("seeds subagent context on SubagentStart", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-subagent-start",
+      results: [
+        {
+          statementId: "s-sub-seed",
+          text: "Always sanitize input before calling APIs.",
+          confidence: 0.95,
+          layer: "project",
+        },
+      ],
+    });
+    fed({
+      session_id: "claude-sub-seed-1",
+      cwd: project,
+      agent_type: "Research",
+      agent_id: "agent-123",
+      hook_event_name: "SubagentStart",
+    });
+    const sessionResult = await runMoment("session-start", "claude");
+    expect(sessionResult.context).toContain("Always sanitize input before calling APIs.");
+    expect(sessionResult.heard.hookEventName).toBe("SubagentStart");
+
+    const { claude } = await import("../src/adapters/claude.js");
+    const spoken = claude.speak(
+      "session-start",
+      sessionResult.context ?? null,
+      sessionResult.heard,
+    );
+    const parsed = JSON.parse(spoken!) as {
+      hookSpecificOutput: { hookEventName: string; additionalContext: string };
+    };
+    expect(parsed.hookSpecificOutput.hookEventName).toBe("SubagentStart");
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("Always sanitize input");
+  });
+
+  it("evaluates delegation through before-act guard for Agent tool", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-claude-agent",
+      guardMode: "strict",
+      results: [
+        {
+          statementId: "s-claude-agent",
+          text: "Never spawn subagents without user approval.",
+          confidence: 0.95,
+          layer: "team",
+          appliesAt: ["send"],
+          refuses: true,
+        },
+      ],
+    });
+    fed({ session_id: "claude-agent-1", cwd: project, prompt: "delegate task" });
+    await runMoment("prompt-submit", "claude");
+
+    reset();
+    fed({
+      session_id: "claude-agent-1",
+      cwd: project,
+      tool_name: "Agent",
+      tool_input: { prompt: "run subagent task" },
+    });
+    const beforeResult = await runMoment("before-act", "claude");
+    expect(beforeResult.refuse).toBe("Never spawn subagents without user approval.");
+
+    const { claude } = await import("../src/adapters/claude.js");
+    expect(claude.refuse).toBeDefined();
+    const spoken = claude.refuse!(beforeResult.refuse!);
+    const parsed = JSON.parse(spoken!) as {
+      hookSpecificOutput: {
+        hookEventName: string;
+        permissionDecision: string;
+        permissionDecisionReason: string;
+      };
+    };
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(parsed.hookSpecificOutput.permissionDecisionReason).toBe(
+      "Never spawn subagents without user approval.",
+    );
+  });
+
+  it("evaluates delegation through before-act guard for Workflow tool", async () => {
+    reset();
+    answer = () => ({
+      momentId: "m-claude-workflow",
+      guardMode: "strict",
+      results: [
+        {
+          statementId: "s-claude-workflow",
+          text: "Never spawn workflows without user approval.",
+          confidence: 0.95,
+          layer: "team",
+          appliesAt: ["send"],
+          refuses: true,
+        },
+      ],
+    });
+    fed({ session_id: "claude-wf-1", cwd: project, prompt: "trigger workflow" });
+    await runMoment("prompt-submit", "claude");
+
+    reset();
+    fed({
+      session_id: "claude-wf-1",
+      cwd: project,
+      tool_name: "Workflow",
+      tool_input: { name: "deploy-pipeline" },
+    });
+    const beforeResult = await runMoment("before-act", "claude");
+    expect(beforeResult.refuse).toBe("Never spawn workflows without user approval.");
+  });
+});

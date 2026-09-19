@@ -31,6 +31,11 @@ describe("what an adapter says it can do", () => {
     if (!can(guard)) return;
     expect(guard.event).toBe("PreToolUse");
     expect(can(guard.refuse)).toBe(true);
+    expect(guard.refuse).toEqual({
+      via: "json",
+      path: "hookSpecificOutput.permissionDecision",
+      deny: "deny",
+    });
     expect(can(guard.inject)).toBe(true);
   });
 
@@ -42,10 +47,34 @@ describe("what an adapter says it can do", () => {
     if (!can(guard)) throw new Error("unreachable");
     const named = Object.values(guard.tools).flat();
     expect(named.length).toBeGreaterThan(0);
+    // Cross-platform tools
+    expect(guard.tools.read).toContain("PowerShell");
+    expect(guard.tools.change).toContain("PowerShell");
+    expect(guard.tools.change).toContain("MultiEdit");
+    // Subagent governance tools
+    expect(guard.tools.send).toContain("Agent");
+    expect(guard.tools.send).toContain("Workflow");
+    // Interactive prompt tools
+    expect(guard.tools.answer).toContain("AskUserQuestion");
+
     // A matcher is built from tool names, and must survive being asked for
     // an empty set — a class this agent has no tool for guards nothing.
     expect(guard.matcher?.([])).toBeUndefined();
     expect(guard.matcher?.(["Write", "Edit"])).toBe("Write|Edit");
+  });
+
+  it("wires after-act to PostToolUseFailure and session-start to SubagentStart", () => {
+    const afterAct = SURFACE.moments["after-act"];
+    expect(afterAct && can(afterAct)).toBe(true);
+    if (afterAct && can(afterAct)) {
+      expect(afterAct.event).toBe("PostToolUseFailure");
+    }
+
+    const sessionStart = SURFACE.moments["session-start"];
+    expect(sessionStart && can(sessionStart)).toBe(true);
+    if (sessionStart && can(sessionStart)) {
+      expect(sessionStart.event).toContain("SubagentStart");
+    }
   });
 });
 

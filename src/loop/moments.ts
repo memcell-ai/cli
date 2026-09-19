@@ -8,20 +8,27 @@
 //   turn end · session end        → report.   A statement the turn's own
 //     work corroborated is one the recall got right, and saying so is the
 //     only thing that moves confidence.
-//   before act                    → pre-act guard evaluation. A rule
-//     read at the top of a session and needed forty steps later is a rule
+//   before act                    → pre-act guard evaluation. A directive
+//     read at the top of a session and needed forty steps later is a directive
 //     nobody is holding by the time it applies. This fires before an
-//     individual act and evaluates active rules bearing on THAT act. It fires many
-//     times a turn, so it costs no call: active rules come down once
+//     individual act and evaluates active statements bearing on THAT act. It fires many
+//     times a turn, so it costs no call: active statements come down once
 //     and the in-memory matching happens locally.
+//   after act                     → post-act guidance delivery and failure recovery.
 
-export const LIFECYCLE_HOOKS = [
+export const CORE_MOMENTS = [
   "session-start",
   "prompt-submit",
   "before-act",
   "turn-end",
   "session-end",
 ] as const;
+export type CoreMoment = (typeof CORE_MOMENTS)[number];
+
+export const EXTENDED_MOMENTS = ["after-act"] as const;
+export type ExtendedMoment = (typeof EXTENDED_MOMENTS)[number];
+
+export const LIFECYCLE_HOOKS = [...CORE_MOMENTS, ...EXTENDED_MOMENTS] as const;
 export type LifecycleHook = (typeof LIFECYCLE_HOOKS)[number];
 
 export const isLifecycleHook = (word: string): word is LifecycleHook =>
@@ -32,15 +39,17 @@ export type PipelinePhase = "recall" | "remember" | "report";
 export const PIPELINE_PHASES: Record<LifecycleHook, PipelinePhase[]> = {
   "session-start": ["recall"],
   "prompt-submit": ["recall"],
-  // Evaluated in-memory from active rules held in session cache. No remote phase runs.
+  // Evaluated in-memory from active directives held in session cache. No remote phase runs.
   "before-act": [],
+  // Delivered in-memory from staged guidance or failure recovery context. No remote phase runs.
+  "after-act": [],
   "turn-end": ["remember", "report"],
   "session-end": ["remember", "report"],
 };
 
 // Backwards-compatible aliases for legacy terminology
-export const MOMENTS = LIFECYCLE_HOOKS;
-export type Moment = LifecycleHook;
+export const MOMENTS = CORE_MOMENTS;
+export type Moment = CoreMoment;
 export const isMoment = isLifecycleHook;
 export type Leg = PipelinePhase;
 export const LEGS = PIPELINE_PHASES;
@@ -86,14 +95,14 @@ export const THROWAWAY = /[\\/]_npx[\\/]|[\\/]dlx-|[\\/]\.pnpm-store[\\/]/;
  * by hashing its definition and silently skips one that changed since
  * approval, so a format change means reconnecting.
  */
-export const hookCommand = (moment: Moment, program: string): string =>
+export const hookCommand = (moment: LifecycleHook, program: string): string =>
   `memcell hook ${moment} ${program}`;
 
 /** Whether a command is this moment's hook for this program, whatever
  *  invocation leads it and whatever agent id trails it — so a re-install
  *  does not duplicate, an old bare-word wiring is recognised and replaced,
  *  and a check does not miss one wired under a different id. */
-export const hookMatches = (command: string, moment: Moment, program: string): boolean =>
+export const hookMatches = (command: string, moment: LifecycleHook, program: string): boolean =>
   isOurs(command) && command.includes(` hook ${moment} ${program}`);
 
 /** Whether a command is OURS, whatever invocation leads it: the bare word,

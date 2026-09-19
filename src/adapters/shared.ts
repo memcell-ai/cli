@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { isOurs, type Moment } from "../loop/moments.js";
+import { isOurs, type LifecycleHook, type Moment } from "../loop/moments.js";
 import type { Surface } from "./surface.js";
 import type { Incoming, Session } from "./capture.js";
 
@@ -60,11 +60,11 @@ export interface Adapter {
    * nothing is always safe: a wrong dialect is worse than a dropped
    * injection.
    */
-  speak(moment: Moment, context: string | null, heard: Heard): string | null;
+  speak(moment: LifecycleHook, context: string | null, heard: Heard): string | null;
 
   /**
    * Stop the act about to happen, in this harness's own refusal, with the
-   * rule's words as the reason.
+   * statement's words as the reason.
    *
    * Absent where a harness has no richer way to say it than an exit code —
    * the command falls back to exit 2 with the reason on stderr, which every

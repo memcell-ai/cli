@@ -6,7 +6,7 @@
 // five is knowledge about one harness and one shell, and this is where it is
 // allowed to live.
 //
-// It runs before every tool call, so it costs no call of its own: the rules
+// It runs before every tool call, so it costs no call of its own: the statements
 // came down once with the turn's recall, and this only decides which of them
 // to say now.
 
@@ -53,8 +53,8 @@ const has = (haystack: string, needles: string[]) => needles.some((n) => haystac
  * name, which is what the adapter's own table is for.
  *
  * Null is a real answer and the common one. A guess here is worse than
- * silence: it puts a rule about publishing in front of somebody listing a
- * directory, and the next rule they see is one they have learned to skip.
+ * silence: it puts a directive about publishing in front of somebody listing a
+ * directory, and the next directive they see is one they have learned to skip.
  */
 export function actOf(
   tool: string,
