@@ -18,7 +18,7 @@ export interface Choice {
   picked?: boolean;
 }
 
-const CAN_ASK = (): boolean =>
+export const CAN_ASK = (): boolean =>
   process.stdin.isTTY === true && process.stdout.isTTY === true && !process.env.CI;
 
 /**
@@ -113,5 +113,89 @@ export async function pick(title: string, choices: Choice[]): Promise<string[] |
     });
   } catch {
     return null;
+  }
+}
+
+function drawChoose(choices: Choice[], cursor: number, first: boolean): void {
+  if (!first) process.stdout.write(`\x1b[${choices.length + 2}A`);
+  const lines = [
+    row(1, [label("use ↑/↓ to navigate · enter to confirm · ctrl-c to cancel")]),
+    ...choices.map((c, i) =>
+      row(
+        1,
+        [text(i === cursor ? "❯" : " "), i === cursor ? value(c.label) : label(c.label)],
+        c.note ? [variant(c.note)] : null,
+      ),
+    ),
+  ];
+  process.stdout.write(`\x1b[0J${render(lines)}\n\n`);
+}
+
+/**
+ * Ask to choose one of these options. Returns the chosen name, or null when
+ * cancelled or if there is nobody to ask.
+ */
+export async function choose(
+  title: string,
+  choices: Choice[],
+  initial: number = 0,
+): Promise<string | null> {
+  if (choices.length === 0) return null;
+  if (!CAN_ASK()) return choices[initial]?.name ?? null;
+
+  let cursor = Math.max(0, Math.min(initial, choices.length - 1));
+
+  process.stdout.write(`\n${render([row(0, [cmd(title)])])}\n`);
+  drawChoose(choices, cursor, true);
+
+  emitKeypressEvents(process.stdin);
+  const wasRaw = process.stdin.isRaw;
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  try {
+    return await new Promise<string | null>((resolve) => {
+      const onKey = (_: string, key: { name?: string; ctrl?: boolean }) => {
+        if (key.ctrl && key.name === "c") {
+          stop();
+          resolve(null);
+          return;
+        }
+        if (key.name === "up") cursor = (cursor - 1 + choices.length) % choices.length;
+        else if (key.name === "down") cursor = (cursor + 1) % choices.length;
+        else if (key.name === "return" || key.name === "enter") {
+          stop();
+          resolve(choices[cursor]!.name);
+          return;
+        }
+        drawChoose(choices, cursor, false);
+      };
+
+      const stop = () => {
+        process.stdin.off("keypress", onKey);
+        process.stdin.setRawMode(Boolean(wasRaw));
+        process.stdin.pause();
+      };
+
+      process.stdin.on("keypress", onKey);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prompt for a single line of text. Returns the entered string, or defaultValue
+ * if submitted empty, or null if cancelled / no TTY.
+ */
+export async function ask(question: string, defaultValue?: string): Promise<string | null> {
+  if (!CAN_ASK()) return defaultValue ?? null;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const hint = defaultValue ? ` [${defaultValue}]` : "";
+    const answer = (await rl.question(`${question}${hint}: `)).trim();
+    return answer || (defaultValue ?? null);
+  } finally {
+    rl.close();
   }
 }

@@ -92,16 +92,23 @@ export async function newProject(instance: string, name: string): Promise<number
       body.owner = activeOrg;
     }
 
-    const created = await call<{ slug: string; name: string }>(instance, "/api/v1/projects", {
+    const created = await call<{
+      project?: { slug: string; name?: string };
+      slug?: string;
+      name?: string;
+    }>(instance, "/api/v1/projects", {
       method: "POST",
       body,
     });
+    const proj = created.project ?? created;
+    const slug = proj.slug || name;
+    const projName = proj.name || name;
 
     say(
       row(0, [badge("memcell"), place(instance)]),
-      row(1, [good("made")], [value(created.slug)], [label(created.name || name)]),
+      row(1, [good("made")], [value(slug)], [label(projName)]),
       row(2, [label("empty until something files into it")]),
-      row(2, [label("make it active with"), cmd(`memcell projects use ${created.slug}`)]),
+      row(2, [label("make it active with"), cmd(`memcell projects use ${slug}`)]),
     );
     return 0;
   } catch (error) {

@@ -85,10 +85,15 @@ export const FLAGS: Record<string, FlagSpec> = {
     takes: "count",
     what: "how many MATCHED statements to serve — pins ride on top",
   },
+  type: {
+    name: "type",
+    takes: "type",
+    what: "directive · fact · preference · observation",
+  },
   kind: {
     name: "kind",
-    takes: "kind",
-    what: "decision · convention · gotcha · dead_end · preference · fact",
+    takes: "type",
+    what: "directive · fact · preference · observation (alias for --type)",
   },
   note: { name: "note", takes: "text", what: "what happened, in a sentence" },
   dir: { name: "dir", takes: "path", what: "which directory to act on" },

@@ -43,6 +43,7 @@ interface Doc {
   instance?: { url?: string };
   project?: { id?: string; slug?: string; owner?: string };
   space?: { id?: string; slug?: string; owner?: string };
+  [key: string]: unknown;
 }
 
 function fromToml(text: string): Project | null {
@@ -62,16 +63,70 @@ function fromToml(text: string): Project | null {
   };
 }
 
-function toToml(project: Project): string {
+function toToml(project: Project, existingDoc?: Doc): string {
   const slug = project.project || project.space;
   const id = project.projectId || project.spaceId;
   const owner = project.owner;
   const doc: Doc = {
-    instance: { url: project.instance },
-    project: { ...(id ? { id } : {}), ...(owner ? { owner } : {}), slug },
-    space: { ...(id ? { id } : {}), ...(owner ? { owner } : {}), slug },
+    ...(existingDoc ?? {}),
+    instance: {
+      ...(typeof existingDoc?.instance === "object" && existingDoc?.instance
+        ? existingDoc.instance
+        : {}),
+      url: project.instance,
+    },
+    project: {
+      ...(typeof existingDoc?.project === "object" && existingDoc?.project
+        ? existingDoc.project
+        : {}),
+      ...(id ? { id } : {}),
+      ...(owner ? { owner } : {}),
+      slug,
+    },
+    space: {
+      ...(typeof existingDoc?.space === "object" && existingDoc?.space ? existingDoc.space : {}),
+      ...(id ? { id } : {}),
+      ...(owner ? { owner } : {}),
+      slug,
+    },
   };
   return stringify(doc);
+}
+
+/**
+ * Finds the root directory of a git repository at or above `from`.
+ */
+export async function findGitRoot(from: string = process.cwd()): Promise<string | null> {
+  let dir = resolve(from);
+  for (;;) {
+    const gitPath = join(dir, ".git");
+    try {
+      await stat(gitPath);
+      return dir;
+    } catch {
+      // Keep walking up
+    }
+    const up = dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
+/**
+ * Finds the first connected project among multiple workspace root paths.
+ */
+export async function findProjectFromRoots(
+  roots: string[],
+): Promise<{ project: Project; at: string } | null> {
+  for (const root of roots) {
+    try {
+      const found = await findProject(root);
+      if (found) return found;
+    } catch {
+      // Continue searching next root
+    }
+  }
+  return null;
 }
 
 /**
@@ -89,10 +144,13 @@ export async function findProject(
     for (const name of [PROJECT_FILE, PROJECT_FILE_ASIDE]) {
       const at = join(dir, name);
       try {
-        const project = fromToml(await readFile(at, "utf8"));
-        if (project) return { project, at };
+        const s = await stat(at);
+        if (s.isFile()) {
+          const project = fromToml(await readFile(at, "utf8"));
+          if (project) return { project, at };
+        }
       } catch {
-        // Not here (or a directory wearing the name); try the other, then up.
+        // Not here (or unreadable); try the other, then up.
       }
     }
     const up = dirname(dir);
@@ -101,15 +159,67 @@ export async function findProject(
   }
 }
 
-export async function saveProject(project: Project, at: string = process.cwd()): Promise<string> {
-  const dir = resolve(at);
-  const classic = join(dir, PROJECT_FILE);
-  const taken = await stat(classic)
-    .then((s) => s.isDirectory())
-    .catch(() => false);
-  const path = taken ? join(dir, PROJECT_FILE_ASIDE) : classic;
-  await writeFile(path, `${toToml(project)}\n`, { mode: 0o600 });
-  return path;
+/**
+ * Saves project configuration into the project file.
+ *
+ * If `at` points to an existing file (e.g. `found.at`), that file is updated.
+ * If `at` is a directory or omitted, it targets the git repository root if in a git repo,
+ * or the specified directory / cwd.
+ * Preserves other TOML tables (such as `[config]`) already present in the file.
+ */
+export async function saveProject(project: Project, at?: string): Promise<string> {
+  let targetFile: string;
+
+  if (at) {
+    const resolvedAt = resolve(at);
+    let isDir = false;
+    let isFile = false;
+    try {
+      const s = await stat(resolvedAt);
+      isDir = s.isDirectory();
+      isFile = s.isFile();
+    } catch {
+      // Does not exist yet: if it ends with .memcell or .memcell.toml, treat as file path
+      if (resolvedAt.endsWith(PROJECT_FILE) || resolvedAt.endsWith(PROJECT_FILE_ASIDE)) {
+        isFile = true;
+      }
+    }
+
+    if (isFile) {
+      targetFile = resolvedAt;
+    } else if (isDir) {
+      const classic = join(resolvedAt, PROJECT_FILE);
+      const taken = await stat(classic)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+      targetFile = taken ? join(resolvedAt, PROJECT_FILE_ASIDE) : classic;
+    } else {
+      // Target does not exist; if no extension or not named PROJECT_FILE, treat as dir
+      const classic = join(resolvedAt, PROJECT_FILE);
+      targetFile = classic;
+    }
+  } else {
+    // No target given: check if in a git repository
+    const gitRoot = await findGitRoot(process.cwd());
+    const targetDir = gitRoot ?? resolve(process.cwd());
+    const classic = join(targetDir, PROJECT_FILE);
+    const taken = await stat(classic)
+      .then((s) => s.isDirectory())
+      .catch(() => false);
+    targetFile = taken ? join(targetDir, PROJECT_FILE_ASIDE) : classic;
+  }
+
+  // Preserve existing TOML tables
+  let existingDoc: Doc | undefined;
+  try {
+    const raw = await readFile(targetFile, "utf8");
+    existingDoc = parse(raw) as Doc;
+  } catch {
+    // New or unreadable file
+  }
+
+  await writeFile(targetFile, `${toToml(project, existingDoc)}\n`, { mode: 0o600 });
+  return targetFile;
 }
 
 export async function removeProject(at: string): Promise<void> {

@@ -1,6 +1,6 @@
-import { rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { memcellOnPath } from "../adapters/shared.js";
 import { UnreadableConfig } from "../adapters/shared.js";
@@ -9,11 +9,17 @@ import { adapterFor } from "../adapters/index.js";
 import { currentAgent, detected } from "../agents.js";
 import { call, MemcellError, whoami } from "../client.js";
 import { deviceGrant } from "../grant.js";
-import { credentialFor } from "../instance.js";
+import {
+  badInstance,
+  credentialFor,
+  DEFAULT_INSTANCE,
+  knownInstances,
+  normalize,
+} from "../instance.js";
 import { pruneProjectKeys, saveAgentKey } from "../keyring.js";
-import { machineFile } from "../machine.js";
 import { resolveModelForAgent } from "../model-detect.js";
-import { findProject, saveProject } from "../project.js";
+import { findGitRoot, findProject, PROJECT_FILE, saveProject } from "../project.js";
+import { ask, CAN_ASK, choose, type Choice } from "../select.js";
 import { badge, cmd, good, label, place, row, say, value, viaNpx, warn } from "../ui.js";
 
 // `memcell connect` — a cold terminal to a wired project, one command.
@@ -47,13 +53,226 @@ export async function connect(
   },
 ): Promise<number> {
   const pair = options.pair?.trim();
+  const existing = await findProject(process.cwd()).catch(() => null);
   let targetProject = (options.project || options.space)?.trim();
-  if (!targetProject) {
-    const existing = await findProject(process.cwd()).catch(() => null);
-    if (existing?.project?.owner && existing?.project?.project) {
-      targetProject = `${existing.project.owner}/${existing.project.project}`;
-    } else if (existing?.project?.project || existing?.project?.space) {
-      targetProject = existing.project.project || existing.project.space;
+
+  const isInteractive = !pair && !options.project && !options.space && CAN_ASK();
+
+  if (isInteractive) {
+    let action: string | null = null;
+    if (existing) {
+      const currentSlug = existing.project.owner
+        ? `${existing.project.owner}/${existing.project.project || existing.project.space}`
+        : existing.project.project || existing.project.space;
+
+      say(
+        row(0, [badge("memcell"), label("workspace connection detected")]),
+        row(
+          1,
+          [label("connected to")],
+          [good(currentSlug)],
+          [label("on"), place(existing.project.instance)],
+        ),
+        row(2, [label("file:")], [label(existing.at)]),
+      );
+
+      action = await choose("What would you like to do?", [
+        {
+          name: "keep",
+          label: "Keep current connection & refresh keys",
+          note: currentSlug,
+        },
+        {
+          name: "switch_project",
+          label: "Switch project or organization",
+        },
+        {
+          name: "switch_instance",
+          label: "Switch target instance (Cloud / Local / Custom)",
+          note: existing.project.instance,
+        },
+        {
+          name: "cancel",
+          label: "Cancel",
+        },
+      ]);
+
+      if (!action || action === "cancel") return 0;
+
+      if (action === "keep") {
+        targetProject = currentSlug;
+        instance = existing.project.instance;
+      } else if (action === "switch_project") {
+        instance = existing.project.instance;
+      }
+    }
+
+    // Instance selection (if fresh or user requested instance switch)
+    if (action === "switch_instance" || (!existing && options.from === "default")) {
+      const known = await knownInstances();
+      const instanceChoices: Choice[] = [
+        {
+          name: DEFAULT_INSTANCE,
+          label: "MemCell Cloud",
+          note: "https://memcell.ai (Production)",
+        },
+        {
+          name: "http://localhost:3000",
+          label: "Local Development",
+          note: "http://localhost:3000",
+        },
+        ...known
+          .filter((k) => k !== DEFAULT_INSTANCE && k !== "http://localhost:3000")
+          .map((k) => ({ name: k, label: "Saved Instance", note: k })),
+        {
+          name: "custom",
+          label: "Custom / Self-Hosted URL...",
+        },
+      ];
+
+      const pickedInstance = await choose("Select MemCell instance:", instanceChoices);
+      if (!pickedInstance) return 0;
+
+      if (pickedInstance === "custom") {
+        const customUrl = await ask("Enter MemCell instance URL");
+        if (!customUrl) return 0;
+        const wrong = badInstance(customUrl);
+        if (wrong) {
+          say(row(0, [badge("memcell"), warn("invalid URL")]), row(1, [label(wrong)]));
+          return 1;
+        }
+        instance = normalize(customUrl);
+      } else {
+        instance = pickedInstance;
+      }
+    }
+
+    // Owner & Project selection
+    if (!targetProject) {
+      let held = (await credentialFor(instance)) ? await whoami(instance).catch(() => null) : null;
+      if (!held) {
+        say(
+          row(0, [badge("memcell"), place(instance)]),
+          row(1, [label("signing in to this instance...")]),
+        );
+        const granted = await deviceGrant(instance, {
+          noBrowser: options.noBrowser,
+          retry: "memcell connect",
+        });
+        if (!granted) return 1;
+        held = await whoami(instance).catch(() => null);
+      }
+
+      // Query organizations
+      const orgsRes = await call<{
+        organizations?: { id: string; name: string; slug: string }[];
+      }>(instance, "/api/v1/organizations").catch(() => null);
+      const orgs = orgsRes?.organizations ?? [];
+
+      let selectedOwner: string | null = null;
+      if (orgs.length > 0) {
+        const personalLabel = held?.user
+          ? held.user.isAnonymous
+            ? "Personal"
+            : `${held.user.name} (Personal)`
+          : "Personal";
+        const ownerChoices: Choice[] = [
+          {
+            name: "__personal__",
+            label: personalLabel,
+          },
+          ...orgs.map((o) => ({
+            name: o.slug,
+            label: `${o.name} (${o.slug})`,
+            note: "Organization",
+          })),
+        ];
+        const pickedOwner = await choose("Select account or organization:", ownerChoices);
+        if (!pickedOwner) return 0;
+        selectedOwner = pickedOwner === "__personal__" ? null : pickedOwner;
+      }
+
+      // Query projects for that owner
+      const projectsPath = selectedOwner ? `/api/v1/${selectedOwner}/projects` : "/api/v1/projects";
+      const projectsRes = await call<{
+        projects?: { id: string; name: string; slug: string; ownerSlug?: string }[];
+      }>(instance, projectsPath).catch(() => null);
+      const candidateProjects = projectsRes?.projects ?? [];
+
+      const projectChoices: Choice[] = [
+        ...candidateProjects.map((p) => {
+          const fullSlug =
+            p.ownerSlug && selectedOwner && p.ownerSlug !== selectedOwner
+              ? `${p.ownerSlug}/${p.slug}`
+              : p.slug;
+          return {
+            name: fullSlug,
+            label: fullSlug,
+            note: p.name !== p.slug ? p.name : undefined,
+          };
+        }),
+        {
+          name: "__new__",
+          label: "+ Create new project...",
+        },
+      ];
+
+      const pickedProj = await choose("Select project to connect:", projectChoices);
+      if (!pickedProj) return 0;
+
+      if (pickedProj === "__new__") {
+        const defaultName = basename(process.cwd());
+        const newName = await ask("Project name", defaultName);
+        if (!newName) return 0;
+
+        const body: Record<string, unknown> = { name: newName };
+        if (selectedOwner) body.owner = selectedOwner;
+
+        try {
+          const res = await call<{
+            ok?: boolean;
+            project?: { id?: string; slug: string; name: string; ownerSlug?: string };
+            slug?: string;
+            name?: string;
+            ownerSlug?: string;
+          }>(instance, selectedOwner ? `/api/v1/${selectedOwner}/projects` : "/api/v1/projects", {
+            method: "POST",
+            body,
+          });
+          const proj = res.project ?? res;
+          const slug = proj.slug;
+          if (!slug) {
+            say(
+              row(0, [badge("memcell"), warn("could not resolve project slug")]),
+              row(1, [label("Server responded without a project slug. Please try again.")]),
+            );
+            return 1;
+          }
+          const finalOwner = proj.ownerSlug || selectedOwner;
+          targetProject = finalOwner ? `${finalOwner}/${slug}` : slug;
+        } catch (error) {
+          const failure = error as MemcellError;
+          say(
+            row(0, [badge("memcell"), warn("could not create project")]),
+            row(1, [label(failure.message || "Failed to create project.")]),
+          );
+          return 1;
+        }
+      } else {
+        targetProject =
+          selectedOwner && !pickedProj.includes("/")
+            ? `${selectedOwner}/${pickedProj}`
+            : pickedProj;
+      }
+    }
+  } else {
+    // Non-interactive / Headless fallback
+    if (!targetProject) {
+      if (existing?.project?.owner && existing?.project?.project) {
+        targetProject = `${existing.project.owner}/${existing.project.project}`;
+      } else if (existing?.project?.project || existing?.project?.space) {
+        targetProject = existing.project.project || existing.project.space;
+      }
     }
   }
 
@@ -173,20 +392,30 @@ export async function connect(
   }
   const linked = exchanged.project || exchanged.space;
   const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
-  const at = await saveProject({
-    instance,
-    owner: ownerSlug,
-    project: linked.slug,
-    projectId: linked.id,
-    space: linked.slug,
-    spaceId: linked.id,
-  });
-  await pruneProjectKeys(instance, process.cwd());
+  const gitRoot = !existing ? await findGitRoot(process.cwd()) : null;
+  const targetPath = existing?.at ?? (gitRoot ? join(gitRoot, PROJECT_FILE) : process.cwd());
+  const at = await saveProject(
+    {
+      instance,
+      owner: ownerSlug,
+      project: linked.slug,
+      projectId: linked.id,
+      space: linked.slug,
+      spaceId: linked.id,
+    },
+    targetPath,
+  );
+  const projectRoot = dirname(at);
+  await pruneProjectKeys(instance, projectRoot, undefined, linked.id);
   await saveAgentKey({
     instance,
     keyId: exchanged.keyId,
     key: exchanged.key,
-    project: process.cwd(),
+    project: projectRoot,
+    projectId: linked.id,
+    projectSlug: linked.slug,
+    ownerSlug,
+    projectPath: projectRoot,
     space: linked.slug,
     agentId: exchanged.agentId,
     agent: activeAgent,
@@ -199,15 +428,17 @@ export async function connect(
         instance,
         keyId: sub.keyId,
         key: sub.key,
-        project: process.cwd(),
+        project: projectRoot,
+        projectId: linked.id,
+        projectSlug: linked.slug,
+        ownerSlug,
+        projectPath: projectRoot,
         space: linked.slug,
         agentId: sub.agentId,
         agent: name,
       });
     }
   }
-
-  await rm(machineFile("last-project"), { force: true }).catch(() => undefined);
 
   // The hooks: the loop fires because the harness runs them. Installed for
   // whatever agents this machine actually uses.

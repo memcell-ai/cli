@@ -13,7 +13,7 @@ import { machineDir, machineFile } from "../machine.js";
 // one person's session on one computer, and it is deleted when the session
 // ends. A stale session cache is only ever the tail of a session that crashed.
 
-export interface ActiveRule {
+export interface ActiveStatement {
   statementId: string;
   text: string;
   appliesAt: string[];
@@ -21,17 +21,19 @@ export interface ActiveRule {
   title?: string;
   tags?: string[];
 }
-export type StandingRule = ActiveRule;
-export type ActiveStatement = ActiveRule;
+export type ActiveRule = ActiveStatement;
+export type StandingRule = ActiveStatement;
 
 export interface SessionCache {
   space: string;
   guardMode?: "strict" | "advisory";
   /** Active statements staged for in-memory pre-act evaluation. Refreshed by every
    *  recall; a session that has not recalled yet guards nothing. */
-  activeRules?: ActiveRule[];
-  /** Legacy alias for activeRules kept for compatibility. */
-  standing?: ActiveRule[];
+  activeStatements?: ActiveStatement[];
+  /** Backward-compatible alias for activeStatements. */
+  activeRules?: ActiveStatement[];
+  /** Legacy alias kept for compatibility. */
+  standing?: ActiveStatement[];
   /**
    * Statements SERVED immediately before an act, and which act.
    *
@@ -64,6 +66,7 @@ const EMPTY: SessionCache = {
   space: "",
   read: 0,
   fired: {},
+  activeStatements: [],
   activeRules: [],
   standing: [],
   servedAt: [],
@@ -72,8 +75,14 @@ const EMPTY: SessionCache = {
 export async function sessionCacheFor(id: string): Promise<SessionCache> {
   try {
     const raw = JSON.parse(await readFile(file(id), "utf8")) as SessionCache;
-    const rules = raw.activeRules ?? raw.standing ?? [];
-    return { ...EMPTY, ...raw, activeRules: rules, standing: rules };
+    const statements = raw.activeStatements ?? raw.activeRules ?? raw.standing ?? [];
+    return {
+      ...EMPTY,
+      ...raw,
+      activeStatements: statements,
+      activeRules: statements,
+      standing: statements,
+    };
   } catch {
     return { ...EMPTY };
   }
@@ -89,8 +98,9 @@ export const noteFor = sessionCacheFor;
 export async function keepSessionCache(id: string, cache: SessionCache): Promise<void> {
   try {
     await mkdir(dir(), { recursive: true });
-    cache.standing ??= cache.activeRules;
-    cache.activeRules ??= cache.standing;
+    cache.activeStatements ??= cache.activeRules ?? cache.standing;
+    cache.activeRules ??= cache.activeStatements;
+    cache.standing ??= cache.activeStatements;
     await writeFile(file(id), `${JSON.stringify(cache)}\n`, { mode: 0o600 });
   } catch {
     // Nothing to say to anyone: the log lives on the same disk.

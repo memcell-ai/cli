@@ -1,7 +1,7 @@
 import { actOf } from "./act.js";
 import { can } from "../adapters/surface.js";
 import { dirname } from "node:path";
-import { evaluatePreAct, stageRulesFromRecall, type RawStatementInput } from "./pre-act.js";
+import { evaluatePreAct, stageStatementsFromRecall, type RawStatementInput } from "./pre-act.js";
 
 import { agentKeyForProject } from "../keyring.js";
 import { findProject, type Project } from "../project.js";
@@ -33,7 +33,7 @@ import { detectActiveRuntimeModel } from "../model-detect.js";
 // to happen once for the hooks to come out. Every path here exits 0.
 //
 // THE SECOND RULE: the hook ships and connects, it never judges. It hands
-// the turn's transcript delta to `ingest` and the memory engine distills what was durable;
+// the turn's transcript delta to `remember` and the memory engine distills what was durable;
 // it reports an outcome only where the memory itself said the turn
 // corroborated a statement. Deciding "was that worth keeping" or "did that
 // help" on the client would be guessing with somebody's record.
@@ -329,7 +329,7 @@ export interface Recalled {
 
 /** A statement is treated as an operational guard if the memory flagged it as
  *  refusing the act, if its kind is an explicit trap/dead-end/gotcha, if it is
- *  a standing invariant or action rule, or if its text specifies a hard
+ *  a standing directive or action boundary, or if its text specifies a hard
  *  prohibition or mandatory trigger constraint. */
 export function isGuard(r: Recalled): boolean {
   if (r.refuses || r.kind === "dead_end" || r.kind === "gotcha") return true;
@@ -340,7 +340,7 @@ export function isGuard(r: Recalled): boolean {
 }
 
 interface TriggerViolation {
-  rule: Recalled;
+  statement: Recalled;
   trigger: string;
 }
 
@@ -349,8 +349,8 @@ function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViola
   const triggerPattern =
     /(?:only when (?:explicitly )?triggered by|requires (?:explicit )?)\s+(\[[\w-]+\])/i;
 
-  for (const rule of guards) {
-    const match = rule.text.match(triggerPattern);
+  for (const statement of guards) {
+    const match = statement.text.match(triggerPattern);
     if (!match || !match[1]) continue;
     const trigger = match[1];
     const keyword = trigger.slice(1, -1).toLowerCase();
@@ -358,7 +358,7 @@ function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViola
     const promptLower = prompt.toLowerCase();
     const keywordRegex = new RegExp(`\\b${keyword.replace(/-/g, "[ -]?")}\\b`, "i");
     if (keywordRegex.test(promptLower) && !prompt.includes(trigger)) {
-      violations.push({ rule, trigger });
+      violations.push({ statement, trigger });
     }
   }
 
@@ -390,8 +390,8 @@ export function asContext(results: Recalled[], space: string, prompt?: string): 
       sections.push(
         [
           `🚨 OPERATIONAL GUARD TRIGGER REQUIRED:`,
-          `Rule [${v.rule.statementId.slice(0, 8)}] requires the explicit trigger '${v.trigger}' to execute this flow:`,
-          `"${v.rule.text}"`,
+          `Directive [${v.statement.statementId.slice(0, 8)}] requires the explicit trigger '${v.trigger}' to execute this flow:`,
+          `"${v.statement.text}"`,
           `The current prompt does NOT contain '${v.trigger}'.`,
           `You MUST HALT and refuse to proceed with this operation until the user explicitly provides the '${v.trigger}' trigger token.`,
           "",
@@ -529,11 +529,11 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
   //
   // The hook wrote `note.servedAt` in memory and the process exited without
   // saving it, on every act, in every session, since the pairing was
-  // introduced. Which rule was put in front of which act is the one fact
+  // introduced. Which statement was put in front of which act is the one fact
   // only this hook sees; the instance cannot infer it from the transcript,
   // and that is the whole reason it is recorded here. Lost on exit, no
-  // `rule_act` row was ever written: a memory whose rules fired every turn
-  // read as one whose rules had never fired at all.
+  // statement-act pairing was ever written: a memory whose directives fired every turn
+  // read as one whose directives had never fired at all.
   //
   // The cache is now kept on the way out. `keepSessionCache` is best-effort and
   // never throws — a hook that dies takes the user's turn with it.
@@ -544,14 +544,14 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
 
   // ── before an act ─────────────────────────────────────────────────────
   //
-  // A rule read at the top of a session and needed forty steps later is a
-  // rule nobody is holding by the time it applies. This says the one that
+  // A directive read at the top of a session and needed forty steps later is a
+  // directive nobody is holding by the time it applies. This says the one that
   // bears on THIS act, at the moment of it.
   //
-  // It costs no call: the rules came down with the turn's recall and the
+  // It costs no call: the statements came down with the turn's recall and the
   // choosing happens here. It says nothing far more often than it says
   // something — an act nothing bears on, or an act this build cannot name,
-  // is silence. A rule shown where it does not apply is worse than none,
+  // is silence. A statement shown where it does not apply is worse than none,
   // because the next one is skipped too.
   if (moment === "before-act") {
     const tool = payload.tool_name ?? payload.toolName ?? "";
@@ -562,7 +562,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       tool,
       input: (payload.tool_input ?? payload.toolInput) as Record<string, unknown> | undefined,
       guard,
-      activeRules: note.activeRules ?? note.standing ?? [],
+      activeStatements: note.activeStatements ?? note.activeRules ?? note.standing ?? [],
       firedMap: note.fired,
     });
 
@@ -661,8 +661,9 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       const guardMode = (answer?.guardMode ?? note.guardMode ?? "strict") as "strict" | "advisory";
       note.guardMode = guardMode;
 
-      const staged = stageRulesFromRecall(rawStatements, guardMode);
+      const staged = stageStatementsFromRecall(rawStatements, guardMode);
       if (staged.length > 0) {
+        note.activeStatements = staged;
         note.activeRules = staged;
         note.standing = staged;
       }
@@ -763,7 +764,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       }>(
         project.instance,
         key,
-        "ingest",
+        "remember",
         {
           raw:
             transcriptDelta.text.length > MAX_PAYLOAD_CHARS
@@ -832,7 +833,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       }
 
       // ── report ───────────────────────────────────────────────────────
-      // Not judged here — the engine judged. The one ingest above shipped the
+      // Not judged here — the engine judged. The one remember above shipped the
       // turn's transcript delta AND the session it belongs to; the engine read what
       // that session recalled and assigned credit, worked or failed. THE HOOK
       // IS A PIPE: it only reports what came back. This is why the correlation

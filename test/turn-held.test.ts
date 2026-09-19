@@ -27,7 +27,7 @@ vi.mock("node:os", async (original) => ({
 
 const calls: { path: string; body: Record<string, unknown>; headers: Record<string, string> }[] =
   [];
-let refuseIngest = false;
+let refuseRemember = false;
 
 vi.stubGlobal(
   "fetch",
@@ -38,10 +38,10 @@ vi.stubGlobal(
       body: JSON.parse(init.body) as Record<string, unknown>,
       headers: init.headers,
     });
-    if (path.includes("ingest") && refuseIngest) {
+    if (path.includes("remember") && refuseRemember) {
       return { ok: false, status: 503, json: async () => ({}) };
     }
-    if (path.includes("ingest")) {
+    if (path.includes("remember")) {
       return {
         ok: true,
         status: 200,
@@ -91,18 +91,18 @@ describe("a delivery the instance refused", () => {
       })}\n`,
     );
 
-    refuseIngest = true;
+    refuseRemember = true;
     fed({ session_id: "held", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
-    const first = calls.find((c) => c.path.includes("ingest"));
+    const first = calls.find((c) => c.path.includes("remember"));
     expect(String(first?.body.raw ?? "")).toContain("Retries cap at five attempts");
 
     calls.length = 0;
-    refuseIngest = false;
+    refuseRemember = false;
     fed({ session_id: "held", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
 
-    const again = calls.find((c) => c.path.includes("ingest"));
+    const again = calls.find((c) => c.path.includes("remember"));
     expect(String(again?.body.raw ?? ""), "the refused turn was never offered again").toContain(
       "Retries cap at five attempts",
     );
@@ -121,7 +121,7 @@ describe("a delivery the instance refused", () => {
     );
     fed({ session_id: "held", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
-    expect(String(calls.find((c) => c.path.includes("ingest"))?.body.raw ?? "")).toContain(
+    expect(String(calls.find((c) => c.path.includes("remember"))?.body.raw ?? "")).toContain(
       "A second turn",
     );
 
@@ -129,6 +129,6 @@ describe("a delivery the instance refused", () => {
     calls.length = 0;
     fed({ session_id: "held", cwd: project, transcript_path: transcript });
     await runMoment("turn-end", "claude");
-    expect(calls.some((c) => c.path.includes("ingest"))).toBe(false);
+    expect(calls.some((c) => c.path.includes("remember"))).toBe(false);
   });
 });

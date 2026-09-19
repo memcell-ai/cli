@@ -4,7 +4,6 @@ import { configGet, configSet } from "./config.js";
 import { hook, hookRemove } from "./hook.js";
 import { exportSpace } from "./export.js";
 import { importFiles } from "./import.js";
-import { ingest } from "./ingest.js";
 import { recall } from "./recall.js";
 import { remember } from "./remember.js";
 import { report } from "./report.js";
@@ -125,13 +124,17 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["remember"],
-    what: "file one thing this project has established — --at names when a rule applies",
+    what: "file one thing this project has established — --at names when a directive applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
-    takes: ["kind", "at", "url"],
+    takes: ["type", "kind", "at", "url"],
     run: ({ args, flags }) =>
       remember(
         args.text!,
-        typeof flags.kind === "string" ? flags.kind : undefined,
+        typeof flags.type === "string"
+          ? flags.type
+          : typeof flags.kind === "string"
+            ? flags.kind
+            : undefined,
         typeof flags.at === "string" ? flags.at : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
       ),
@@ -151,15 +154,6 @@ export const COMMANDS: Command[] = [
         typeof flags.note === "string" ? flags.note : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
       ),
-  },
-  {
-    path: ["ingest"],
-    what: "hand a document to this directory's memory",
-    args: [{ name: "file", required: true, what: "the document to distill" }],
-    takes: ["url"],
-    landing: true,
-    run: ({ args, flags }) =>
-      ingest(args.file!, typeof flags.url === "string" ? flags.url : undefined),
   },
   {
     path: ["import"],

@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import { MemcellError, agentStanding, whoami } from "../client.js";
-import { agentKeyForProject } from "../keyring.js";
+import { agentKeyForProject, listConnectedProjects } from "../keyring.js";
 import { credentialFor, DEFAULT_INSTANCE, knownInstances } from "../instance.js";
 import { findProject } from "../project.js";
 import { badge, cmd, good, label, place, row, say, time, value, variant, warn } from "../ui.js";
@@ -19,12 +19,30 @@ export async function status(instance: string, from: string): Promise<number> {
   const credential = await credentialFor(instance);
   const hosted = instance === DEFAULT_INSTANCE;
   const found = await findProject();
-  // Where the directory points wins over where the flags do: standing in a
-  // linked project and being told about a different memcell is the reading
-  // that sends somebody debugging the wrong instance.
-  const linked = found
-    ? row(1, [good("connected")], [label("to"), value(found.project.space)], [label(found.at)])
-    : row(1, [label("not connected here")], [label("connect it with"), cmd("memcell connect")]);
+
+  const projectDisplay = found
+    ? found.project.owner
+      ? `${found.project.owner}/${found.project.project || found.project.space}`
+      : found.project.project || found.project.space
+    : null;
+
+  const connected = !found ? await listConnectedProjects(instance) : [];
+  const linkedRows = found
+    ? [row(1, [good("connected")], [label("to"), value(projectDisplay!)], [label(found.at)])]
+    : connected.length > 0
+      ? [
+          row(1, [label("not connected in this directory")]),
+          ...connected.map((c) =>
+            row(
+              2,
+              [label("connected project:")],
+              [good(c.ownerSlug ? `${c.ownerSlug}/${c.projectSlug}` : c.projectSlug || "unknown")],
+              c.projectPath ? [label(c.projectPath)] : null,
+            ),
+          ),
+          row(2, [label("run"), cmd("memcell connect"), label("to wire this directory")]),
+        ]
+      : [row(1, [label("not connected here")], [label("connect it with"), cmd("memcell connect")])];
 
   if (!credential) {
     const others = (await knownInstances()).filter((known) => known !== instance);
@@ -36,7 +54,7 @@ export async function status(instance: string, from: string): Promise<number> {
         !hosted && [variant("self-hosted")],
       ),
       row(1, [warn("not signed in")], [label("run"), cmd("memcell login")]),
-      linked,
+      ...linkedRows,
       others.length > 0 && row(2, [label("elsewhere")], [label(others.join(", "))]),
     );
     return 1;
@@ -53,7 +71,7 @@ export async function status(instance: string, from: string): Promise<number> {
           !hosted && [variant("self-hosted")],
         ),
         row(1, [warn("session expired")], [label("run"), cmd("memcell login")]),
-        linked,
+        ...linkedRows,
         row(2, [label("obtained")], [time(credential.obtainedAt.slice(0, 16).replace("T", " "))]),
       );
       return 1;
@@ -68,9 +86,13 @@ export async function status(instance: string, from: string): Promise<number> {
         !hosted && [variant("self-hosted")],
       ),
       row(1, [good("live")], [value(who)], session.user.isAnonymous && [variant("anonymous")]),
-      linked,
+      ...linkedRows,
       row(2, [label("since"), time(credential.obtainedAt.slice(0, 16).replace("T", " "))]),
-      await hookKey(instance, found?.at),
+      await hookKey(
+        instance,
+        found?.at,
+        found?.project.projectId ?? (found?.project.project || found?.project.space),
+      ),
     );
     return 0;
   } catch (error) {
@@ -83,7 +105,7 @@ export async function status(instance: string, from: string): Promise<number> {
         !hosted && [variant("self-hosted")],
       ),
       row(1, [warn("unverified")], [label(failure.message)]),
-      linked,
+      ...linkedRows,
     );
     return 1;
   }
@@ -97,9 +119,9 @@ export async function status(instance: string, from: string): Promise<number> {
  *  and carries on, the agent works without memory, and this command said
  *  "live" the whole time because it was verifying the wrong credential.
  */
-async function hookKey(instance: string, projectAt: string | undefined) {
+async function hookKey(instance: string, projectAt: string | undefined, projectIdOrSlug?: string) {
   if (!projectAt) return null;
-  const held = await agentKeyForProject(instance, dirname(projectAt));
+  const held = await agentKeyForProject(instance, dirname(projectAt), undefined, projectIdOrSlug);
   if (!held) return row(3, [warn("no agent key")], [label("run"), cmd("memcell connect")]);
 
   try {

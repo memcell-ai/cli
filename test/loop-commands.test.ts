@@ -3,10 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The three legs of the loop, from a shell. `ingest` could always be run
-// this way; recall, remember and report could not, so an agent with no MCP
-// tools — a skill installed on its own, a harness without MCP, a script in
-// CI — could not use memory at all. What is pinned here is that each leg
+// The three legs of the loop, from a shell: recall, remember, and report.
+// What is pinned here is that each leg
 // rides the directory's own pair key to the door the MCP tool calls, and
 // that the ids recall prints are the ids report takes.
 

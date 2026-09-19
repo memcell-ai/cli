@@ -1,6 +1,6 @@
 import type { Guard, ActClass } from "../adapters/surface.js";
 import { actOf } from "./act.js";
-import type { ActiveRule, StandingRule } from "./session.js";
+import type { ActiveStatement, ActiveRule, StandingRule } from "./session.js";
 
 const VALID_ACTS: ActClass[] = ["read", "change", "record", "send", "answer"];
 
@@ -21,6 +21,7 @@ export interface RawStatementInput {
   reinforcementCount?: number;
   appliesAt?: string[];
   refuses?: boolean;
+  type?: string;
   kind?: string;
   layer?: string;
   contested?: boolean;
@@ -31,14 +32,14 @@ export interface RawStatementInput {
 }
 
 /**
- * Normalizes statements from recall (both modern Knowledge Triads and legacy results)
- * and stages rules bearing on actions into standing rules.
+ * Normalizes statements from recall
+ * and stages statements bearing on actions for pre-act gating.
  */
-export function stageRulesFromRecall(
+export function stageStatementsFromRecall(
   statements: RawStatementInput[],
   guardMode: "strict" | "advisory" = "strict",
-): StandingRule[] {
-  const staged: StandingRule[] = [];
+): ActiveStatement[] {
+  const staged: ActiveStatement[] = [];
 
   for (const stmt of statements) {
     const statementId = stmt.id ?? stmt.statementId;
@@ -53,10 +54,15 @@ export function stageRulesFromRecall(
       : (stmt.text ?? "");
     const tags = Array.isArray(stmt.tags) ? stmt.tags.map((t) => t.toLowerCase()) : [];
 
-    // 1. Determine if this rule is a Guard vs. Convention vs. General Knowledge
+    // 1. Determine if this statement is a Guard Directive vs. Convention vs. General Knowledge
+    const isDirective = stmt.type === "directive";
     const hasGuardTag = tags.includes("guard") || tags.includes("security");
     const isExplicitGuard =
-      hasGuardTag || stmt.refuses === true || stmt.kind === "dead_end" || stmt.kind === "gotcha";
+      isDirective ||
+      hasGuardTag ||
+      stmt.refuses === true ||
+      stmt.kind === "dead_end" ||
+      stmt.kind === "gotcha";
 
     const isExplicitConvention =
       tags.includes("convention") ||
@@ -78,28 +84,28 @@ export function stageRulesFromRecall(
       appliesAt = Array.from(new Set([...appliesAt, ...actsFromTags]));
     }
 
-    // If no explicit acts declared, apply intelligent defaults based on rule category
+    // If no explicit acts declared, apply intelligent defaults based on statement category
     if (appliesAt.length === 0) {
       if (isExplicitGuard) {
         // Guard defaults to modifying / durable / external acts
         appliesAt = ["change", "record", "send"];
       } else if (isExplicitConvention) {
-        // Convention defaults to code modifications and commits
+        // Convention defaults to modifications and records
         appliesAt = ["change", "record"];
       }
     }
 
-    // If rule doesn't bear on any acts, it's general knowledge and not staged for tool-time
+    // If statement doesn't bear on any acts, it's general knowledge and not staged for tool-time
     if (appliesAt.length === 0) {
       continue;
     }
 
     // 3. Determine refusal behavior based on guardMode:
-    // A rule is a hard refusal gate ONLY if it has the #guard tag or stmt.refuses === true,
+    // A statement is a hard refusal gate ONLY if it has the #guard tag, is a directive, or stmt.refuses === true,
     // AND guardMode is "strict".
-    // In "advisory" mode, #guard rules degrade to soft warnings (refuses: false).
-    // Conventions and unflagged standing rules are always soft advisories.
-    const isGuardGate = hasGuardTag || stmt.refuses === true;
+    // In "advisory" mode, guard directives degrade to soft advisories (refuses: false).
+    // Conventions and unflagged standing statements are always soft advisories.
+    const isGuardGate = isDirective || hasGuardTag || stmt.refuses === true;
     const refuses = isGuardGate && guardMode === "strict";
 
     staged.push({
@@ -115,11 +121,15 @@ export function stageRulesFromRecall(
   return staged;
 }
 
+/** Backward-compatible alias for stageStatementsFromRecall. */
+export const stageRulesFromRecall = stageStatementsFromRecall;
+
 export interface PreActOptions {
   tool: string;
   input: Record<string, unknown> | undefined;
   guard: Guard;
-  activeRules?: ActiveRule[];
+  activeStatements?: ActiveStatement[];
+  activeRules?: ActiveStatement[];
   standingRules?: StandingRule[];
   firedMap?: Record<string, number>;
 }
@@ -130,14 +140,14 @@ export type PreActResult =
       verdict: "refuse";
       act: ActClass;
       reason: string;
-      stops: ActiveRule[];
+      stops: ActiveStatement[];
       pairs: { statementId: string; act: string; tool: string; became: string }[];
     }
   | {
       verdict: "advise";
       act: ActClass;
       guidance: string;
-      bears: ActiveRule[];
+      bears: ActiveStatement[];
       pairs: { statementId: string; act: string; tool: string; became: string }[];
     };
 
@@ -147,7 +157,7 @@ export type PreActResult =
  */
 export function evaluatePreAct(options: PreActOptions): PreActResult {
   const { tool, input, guard, firedMap = {} } = options;
-  const rules = options.activeRules ?? options.standingRules ?? [];
+  const statements = options.activeStatements ?? options.activeRules ?? options.standingRules ?? [];
 
   if (!tool || !guard) {
     return { verdict: "pass" };
@@ -158,7 +168,7 @@ export function evaluatePreAct(options: PreActOptions): PreActResult {
     return { verdict: "pass" };
   }
 
-  const bears = rules.filter((r) => r.appliesAt.includes(act));
+  const bears = statements.filter((r) => r.appliesAt.includes(act));
   if (bears.length === 0) {
     return { verdict: "pass" };
   }

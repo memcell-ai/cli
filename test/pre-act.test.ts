@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePreAct, stageRulesFromRecall } from "../src/loop/pre-act.js";
+import { evaluatePreAct, stageStatementsFromRecall } from "../src/loop/pre-act.js";
 import { SURFACE as claudeSurface } from "../src/adapters/claude.js";
 import { can, type Guard } from "../src/adapters/surface.js";
 
@@ -8,7 +8,7 @@ const guard = (() => {
   return claudeSurface.guard as Guard;
 })();
 
-describe("stageRulesFromRecall", () => {
+describe("stageStatementsFromRecall", () => {
   it("stages #guard statements in strict mode as hard refusal gates", () => {
     const statements = [
       {
@@ -20,7 +20,7 @@ describe("stageRulesFromRecall", () => {
       },
     ];
 
-    const staged = stageRulesFromRecall(statements, "strict");
+    const staged = stageStatementsFromRecall(statements, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!).toMatchObject({
       statementId: "s-1",
@@ -41,7 +41,7 @@ describe("stageRulesFromRecall", () => {
       },
     ];
 
-    const staged = stageRulesFromRecall(statements, "advisory");
+    const staged = stageStatementsFromRecall(statements, "advisory");
     expect(staged).toHaveLength(1);
     expect(staged[0]!.refuses).toBe(false);
   });
@@ -57,12 +57,12 @@ describe("stageRulesFromRecall", () => {
       },
     ];
 
-    const stagedStrict = stageRulesFromRecall(statements, "strict");
+    const stagedStrict = stageStatementsFromRecall(statements, "strict");
     expect(stagedStrict).toHaveLength(1);
     expect(stagedStrict[0]!.refuses).toBe(false);
     expect(stagedStrict[0]!.appliesAt).toEqual(["change", "record"]);
 
-    const stagedAdvisory = stageRulesFromRecall(statements, "advisory");
+    const stagedAdvisory = stageStatementsFromRecall(statements, "advisory");
     expect(stagedAdvisory[0]!.refuses).toBe(false);
   });
 
@@ -77,7 +77,7 @@ describe("stageRulesFromRecall", () => {
       },
     ];
 
-    const staged = stageRulesFromRecall(statements, "strict");
+    const staged = stageStatementsFromRecall(statements, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!.appliesAt).toEqual(["send"]);
     expect(staged[0]!.refuses).toBe(true);
@@ -94,7 +94,7 @@ describe("stageRulesFromRecall", () => {
       },
     ];
 
-    const staged = stageRulesFromRecall(statements, "strict");
+    const staged = stageStatementsFromRecall(statements, "strict");
     expect(staged).toHaveLength(0);
   });
 
@@ -109,7 +109,7 @@ describe("stageRulesFromRecall", () => {
       },
     ];
 
-    const staged = stageRulesFromRecall(legacyResults, "strict");
+    const staged = stageStatementsFromRecall(legacyResults, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!).toMatchObject({
       statementId: "s-legacy",
