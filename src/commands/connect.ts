@@ -20,7 +20,20 @@ import { pruneProjectKeys, saveAgentKey } from "../keyring.js";
 import { resolveModelForAgent } from "../model-detect.js";
 import { findGitRoot, findProject, PROJECT_FILE, saveProject } from "../project.js";
 import { ask, CAN_ASK, choose, type Choice } from "../select.js";
-import { badge, cmd, good, label, place, row, say, value, viaNpx, warn } from "../ui.js";
+import {
+  badge,
+  blank,
+  cmd,
+  good,
+  label,
+  place,
+  row,
+  say,
+  value,
+  variant,
+  viaNpx,
+  warn,
+} from "../ui.js";
 
 // `memcell connect` — a cold terminal to a wired project, one command.
 //
@@ -283,8 +296,11 @@ export async function connect(
   // seeing when it is not — the host is named before anything is sent.
   if (options.from === "project") {
     say(
-      row(0, [badge("memcell"), label("connecting to")], [place(instance)]),
-      row(1, [label("chosen by this directory's .memcell")]),
+      row(
+        0,
+        [badge("memcell"), label("connecting to"), place(instance)],
+        [label("(from directory .memcell)")],
+      ),
     );
   }
 
@@ -476,53 +492,52 @@ export async function connect(
     ? `${instance}/${ownerSlug}/${linked.slug}`
     : `${instance}/home?space=${linked.slug}`;
 
+  const projectDisplay = ownerSlug ? `${ownerSlug}/${linked.slug}` : linked.slug;
+
   say(
-    row(0, [badge("memcell"), value(linked.name)]),
-    row(1, [good("connected")], [place(dirname(at))]),
+    row(0, [badge("memcell"), good(`Connected to ${projectDisplay}`)]),
+    row(1, [label("Directory".padEnd(11, " ")), place(dirname(at))]),
+    wired.length > 0
+      ? row(1, [label("Agents".padEnd(11, " ")), value(wired.join(", "))])
+      : row(1, [label("Agents".padEnd(11, " ")), warn("none detected in this directory")]),
     wired.length > 0
       ? row(
           1,
-          [good("hooks")],
-          [value(wired.join(", "))],
-          [label("recall runs before your agent answers")],
+          [label("Hooks".padEnd(11, " ")), good("Installed")],
+          [label("(automatic memory recall before answers)")],
         )
-      : row(1, [warn("no agents detected here")], [label("run this in a project you code in")]),
-    refused.length > 0 &&
-      row(
-        1,
-        [warn(`not wired: ${refused.join(", ")}`)],
-        [label("its config is not valid JSON — fix it, then run this again")],
-      ),
+      : null,
+    refused.length > 0
+      ? row(
+          1,
+          [label("Refused".padEnd(11, " ")), warn(refused.join(", "))],
+          [label("(invalid JSON config)")],
+        )
+      : null,
     row(
       1,
-      [good("skill")],
-      [place(".agents/skills/memcell")],
-      [label("teaches any agent the four doors")],
+      [label("Skill".padEnd(11, " ")), place(".agents/skills/memcell")],
+      [label("(agent memory tools)")],
     ),
-    row(1, [good("workbench")], [place(projectUrl)], [label("view your project in the browser")]),
+    row(1, [label("Dashboard".padEnd(11, " ")), place(projectUrl)]),
     !onPath &&
       row(
         1,
-        [warn("memcell is not on your agent's PATH")],
+        [label("Warning".padEnd(11, " ")), warn("memcell is not on PATH")],
         [label("the hooks will not fire until it is")],
         [value("npm install -g memcell")],
       ),
-    row(2, [label("check it")], [cmd("memcell status")]),
-    row(2, [label("undo it")], [cmd("memcell hook remove")]),
-    // The project above was the instance's pick, not the caller's — say how
-    // to choose, right where the pick just became visible.
+    blank(),
+    row(0, [label("Next:")]),
+    row(1, [cmd("memcell status".padEnd(21, " ")), label("Verify agent connections and quotas")]),
+    row(1, [cmd("memcell hook remove".padEnd(21, " ")), label("Disconnect local agent hooks")]),
     !targetProject &&
-      row(2, [label("a different project")], [cmd(`memcell connect --project <slug>`)]),
-    // An npx run leaves no binary behind: `memcell` alone stays "command
-    // not found" until the package is actually installed. Say so here,
-    // where the habit of typing the short name begins.
+      row(1, [
+        cmd("memcell connect --project <slug>".padEnd(21, " ")),
+        label("Switch connected project"),
+      ]),
     viaNpx() &&
-      row(
-        2,
-        [label("keep it")],
-        [value("npm install -g memcell")],
-        [label("then it is just memcell")],
-      ),
+      row(1, [cmd("npm install -g memcell".padEnd(21, " ")), label("Install CLI globally")]),
   );
   return 0;
 }

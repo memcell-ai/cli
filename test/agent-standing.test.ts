@@ -34,7 +34,7 @@ describe("asking a key about itself", () => {
       agent: "claude code",
       space: "payments",
       standing: "ok",
-      calls: { used: 12, ceiling: 5000, resetsAt: "2026-08-25T00:00:00.000Z" },
+      calls: { used: 12 },
       says: null,
     });
     const said = await agentStanding(BASE, "mc_the-agent-key");
@@ -47,13 +47,13 @@ describe("asking a key about itself", () => {
     answers(200, {
       agent: "claude code",
       space: "payments",
-      standing: "over_ceiling",
-      calls: { used: 5000, ceiling: 5000, resetsAt: "2026-08-25T00:00:00.000Z" },
-      says: "This key has made 5,000 calls today, over its ceiling of 5,000.",
+      standing: "suspended",
+      calls: { used: 12 },
+      says: "This agent has been suspended by a project administrator.",
     });
     const said = await agentStanding(BASE, "mc_the-agent-key");
-    expect(said.standing).toBe("over_ceiling");
-    expect(said.says).toContain("ceiling");
+    expect(said.standing).toBe("suspended");
+    expect(said.says).toContain("suspended");
   });
 
   it("turns a refused key into a sentence rather than a throw with no words", async () => {

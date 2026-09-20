@@ -137,7 +137,7 @@ export async function stats(instance: string): Promise<number> {
           ? [label("space"), value(named)]
           : [label("this instance")],
       ),
-      figure("followed", read.followed, () => "rules kept at the moment they applied"),
+      figure("followed", read.followed, () => "statements kept at the moment they applied"),
       figure("stopped", read.stopped, (n) => `act${n === 1 ? "" : "s"} memory prevented`),
       figure("repeated", read.repeated, (n) => `correction${n === 1 ? "" : "s"} that did not take`),
       // Not a fourth verb — the denominator the first one is read against.

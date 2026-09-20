@@ -54,10 +54,9 @@ const ROLE = {
 } as const;
 
 /** The marks that say what KIND of reading follows. */
-/** The product's mark: a bordered square with its diagonal cells filled,
- *  in the amber. `▧` is that drawing at terminal resolution — the border
- *  and the upper-left-to-lower-right fill in one glyph. */
-export const MARK = "▧";
+/** The product's mark: a solid square in the brand amber.
+ *  `■` renders reliably across all terminal emulators and monospace fonts. */
+export const MARK = "■";
 
 export const GLYPH = {
   meter: "◆",
@@ -175,6 +174,9 @@ export function row(depth: number, ...groups: (Seg | Seg[] | null | undefined | 
   }
   return { depth, groups: kept };
 }
+
+/** An empty spacer row between sections. */
+export const blank = (): Row => ({ depth: 0, groups: [[{ k: "text", t: "" }]] });
 
 // ── the renderer — the only place any of this becomes a string ───────────
 
@@ -321,4 +323,4 @@ export function duration(ms: number): string {
 export const percent = (ratio: number): string =>
   ROLE.value(`${String(Math.round(ratio * 100)).padStart(2, " ")}%`);
 
-export const rule = (): string => ROLE.dim("─".repeat(46));
+export const separator = (): string => ROLE.dim("─".repeat(46));

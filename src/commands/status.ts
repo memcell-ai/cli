@@ -3,19 +3,13 @@ import { MemcellError, agentStanding, whoami } from "../client.js";
 import { agentKeyForProject, listConnectedProjects } from "../keyring.js";
 import { credentialFor, DEFAULT_INSTANCE, knownInstances } from "../instance.js";
 import { findProject } from "../project.js";
-import { badge, cmd, good, label, place, row, say, time, value, variant, warn } from "../ui.js";
+import { badge, blank, cmd, good, label, place, row, say, value, warn } from "../ui.js";
 
 // What this machine knows, checked rather than recited: the stored session
-// is presented to the instance, and what comes back is what gets printed —
-// in the three levels the CLI speaks in.
-//
-// It answers BOTH questions, because there are two and they have separate
-// answers: who this machine is signed in as, and what this directory is
-// linked to. Signed in with nothing linked is the ordinary state right
-// after `login`, and a status that showed only the first would leave
-// somebody wondering why their agents file nowhere.
+// is presented to the instance, and what comes back is what gets printed in
+// a clean, aligned, scannable format.
 
-export async function status(instance: string, from: string): Promise<number> {
+export async function status(instance: string, _from: string): Promise<number> {
   const credential = await credentialFor(instance);
   const hosted = instance === DEFAULT_INSTANCE;
   const found = await findProject();
@@ -26,36 +20,23 @@ export async function status(instance: string, from: string): Promise<number> {
       : found.project.project || found.project.space
     : null;
 
-  const connected = !found ? await listConnectedProjects(instance) : [];
-  const linkedRows = found
-    ? [row(1, [good("connected")], [label("to"), value(projectDisplay!)], [label(found.at)])]
-    : connected.length > 0
-      ? [
-          row(1, [label("not connected in this directory")]),
-          ...connected.map((c) =>
-            row(
-              2,
-              [label("connected project:")],
-              [good(c.ownerSlug ? `${c.ownerSlug}/${c.projectSlug}` : c.projectSlug || "unknown")],
-              c.projectPath ? [label(c.projectPath)] : null,
-            ),
-          ),
-          row(2, [label("run"), cmd("memcell connect"), label("to wire this directory")]),
-        ]
-      : [row(1, [label("not connected here")], [label("connect it with"), cmd("memcell connect")])];
+  const instanceScope = !hosted ? label("(self-hosted)") : label("(cloud)");
 
   if (!credential) {
     const others = (await knownInstances()).filter((known) => known !== instance);
     say(
-      row(
-        0,
-        [badge("memcell"), place(instance)],
-        [variant(from)],
-        !hosted && [variant("self-hosted")],
-      ),
-      row(1, [warn("not signed in")], [label("run"), cmd("memcell login")]),
-      ...linkedRows,
-      others.length > 0 && row(2, [label("elsewhere")], [label(others.join(", "))]),
+      row(0, [badge("memcell"), place(instance)], [instanceScope]),
+      row(1, [label("Status".padEnd(11, " ")), warn("not signed in")]),
+      found ? row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]) : null,
+      found
+        ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
+        : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
+      others.length > 0
+        ? row(1, [label("Instances".padEnd(11, " ")), label(others.join(", "))])
+        : null,
+      blank(),
+      row(0, [label("Next:")]),
+      row(1, [cmd("memcell login".padEnd(21, " ")), label("Sign in to this instance")]),
     );
     return 1;
   }
@@ -64,77 +45,106 @@ export async function status(instance: string, from: string): Promise<number> {
     const session = await whoami(instance);
     if (!session) {
       say(
-        row(
-          0,
-          [badge("memcell"), place(instance)],
-          [variant(from)],
-          !hosted && [variant("self-hosted")],
-        ),
-        row(1, [warn("session expired")], [label("run"), cmd("memcell login")]),
-        ...linkedRows,
-        row(2, [label("obtained")], [time(credential.obtainedAt.slice(0, 16).replace("T", " "))]),
+        row(0, [badge("memcell"), place(instance)], [instanceScope]),
+        row(1, [label("Status".padEnd(11, " ")), warn("session expired")]),
+        found ? row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]) : null,
+        found
+          ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
+          : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
+        blank(),
+        row(0, [label("Next:")]),
+        row(1, [cmd("memcell login".padEnd(21, " ")), label("Sign in to this instance")]),
       );
       return 1;
     }
 
-    const who = session.user.isAnonymous ? "you, so far" : session.user.name;
-    say(
-      row(
-        0,
-        [badge("memcell"), place(instance)],
-        [variant(from)],
-        !hosted && [variant("self-hosted")],
-      ),
-      row(1, [good("live")], [value(who)], session.user.isAnonymous && [variant("anonymous")]),
-      ...linkedRows,
-      row(2, [label("since"), time(credential.obtainedAt.slice(0, 16).replace("T", " "))]),
-      await hookKey(
+    const who = session.user.isAnonymous ? "Anonymous" : session.user.name;
+    const accountDisplay = session.user.isAnonymous ? "Anonymous" : `${who} (Personal)`;
+
+    if (found) {
+      const keyRow = await hookKey(
         instance,
-        found?.at,
-        found?.project.projectId ?? (found?.project.project || found?.project.space),
+        found.at,
+        found.project.projectId ?? (found.project.project || found.project.space),
+      );
+
+      say(
+        row(0, [badge("memcell"), place(instance)], [instanceScope]),
+        row(1, [label("Account".padEnd(11, " ")), value(accountDisplay)]),
+        row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]),
+        row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
+        keyRow,
+      );
+      return 0;
+    }
+
+    // Not connected in current directory
+    const connected = await listConnectedProjects(instance);
+    say(
+      row(0, [badge("memcell"), place(instance)], [instanceScope]),
+      row(1, [label("Account".padEnd(11, " ")), value(accountDisplay)]),
+      row(1, [label("Project".padEnd(11, " ")), warn("not connected in this directory")]),
+      row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
+      ...connected.map((c) =>
+        row(
+          1,
+          [
+            label("Connected".padEnd(11, " ")),
+            good(c.ownerSlug ? `${c.ownerSlug}/${c.projectSlug}` : c.projectSlug || "unknown"),
+          ],
+          c.projectPath ? [place(c.projectPath)] : null,
+        ),
       ),
+      blank(),
+      row(0, [label("Next:")]),
+      row(1, [
+        cmd("memcell connect".padEnd(21, " ")),
+        label("Connect this directory to a project"),
+      ]),
     );
     return 0;
   } catch (error) {
     const failure = error as MemcellError;
     say(
-      row(
-        0,
-        [badge("memcell"), place(instance)],
-        [variant(from)],
-        !hosted && [variant("self-hosted")],
-      ),
-      row(1, [warn("unverified")], [label(failure.message)]),
-      ...linkedRows,
+      row(0, [badge("memcell"), place(instance)], [instanceScope]),
+      row(1, [label("Status".padEnd(11, " ")), warn("unverified")], [label(failure.message)]),
+      found ? row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]) : null,
+      found
+        ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
+        : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
     );
     return 1;
   }
 }
 
-/** The credential the HOOKS carry, which is not the one above.
- *
- *  `whoami` answers for the person's session; the hooks present an agent key
- *  minted by `memcell connect`. They fail independently, and the way this
- *  goes wrong is silent: a refused hook writes a line to a log nobody reads
- *  and carries on, the agent works without memory, and this command said
- *  "live" the whole time because it was verifying the wrong credential.
- */
+/** The credential the HOOKS carry, which is verified independently. */
 async function hookKey(instance: string, projectAt: string | undefined, projectIdOrSlug?: string) {
   if (!projectAt) return null;
   const held = await agentKeyForProject(instance, dirname(projectAt), undefined, projectIdOrSlug);
-  if (!held) return row(3, [warn("no agent key")], [label("run"), cmd("memcell connect")]);
+  if (!held) {
+    return row(
+      1,
+      [label("Agent Key".padEnd(11, " ")), warn("no agent key")],
+      [label("run"), cmd("memcell connect")],
+    );
+  }
 
   try {
     const said = await agentStanding(instance, held.key);
     if (said.standing === "ok") {
-      return row(3, [good("agent key live")], said.agent ? [value(said.agent)] : null, [
-        label(`${said.calls.used} of ${said.calls.ceiling} calls today`),
-      ]);
+      const agentName = said.agent || held.agent || "default";
+      return row(1, [label("Agent Key".padEnd(11, " ")), value(agentName)], [good("active")]);
     }
-    return row(3, [warn(said.standing.replace(/_/g, " "))], [label(said.says ?? "")]);
+    return row(
+      1,
+      [label("Agent Key".padEnd(11, " ")), warn(said.standing.replace(/_/g, " "))],
+      [label(said.says ?? "")],
+    );
   } catch (error) {
-    // A key the instance will not answer for is the failure this exists to
-    // catch — say it, rather than letting the session's "live" stand for it.
-    return row(3, [warn("agent key refused")], [label((error as MemcellError).message)]);
+    return row(
+      1,
+      [label("Agent Key".padEnd(11, " ")), warn("refused")],
+      [label((error as MemcellError).message)],
+    );
   }
 }
