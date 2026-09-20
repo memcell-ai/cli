@@ -137,14 +137,8 @@ export async function whoamiAgent(instance: string): Promise<number> {
         [label("standing:"), value(standing.standing)],
         proj ? [label("on"), value(proj)] : null,
       ),
-      standing.calls
-        ? row(
-            2,
-            [label("quota:"), value(`${standing.calls.used} / ${standing.calls.ceiling}`)],
-            standing.calls.resetsAt
-              ? [label("resets"), time(standing.calls.resetsAt.slice(0, 16).replace("T", " "))]
-              : null,
-          )
+      typeof standing.calls?.used === "number"
+        ? row(2, [label("calls:"), value(standing.calls.used.toLocaleString())])
         : null,
       row(2, [label("key:"), id(held.keyId)]),
     );

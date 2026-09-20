@@ -101,9 +101,15 @@ describe("one voice, everywhere", () => {
     const lines = out.split("\n");
     // The badge is split into its own group, so identity is separated by
     // the same dot every other pair gets — however the caller grouped it.
-    expect(lines[0]).toBe("▧ memcell · payments");
+    expect(lines[0]).toBe("■ memcell · payments");
     expect(lines[1]).toBe("  ✓ linked · to avalon");
     expect(lines[2]).toBe("    undo with memcell unlink");
+  });
+
+  it("renders a blank spacer row between sections", async () => {
+    const { render, row, blank, label } = await import("../src/ui.js");
+    const out = render([row(1, [label("first")]), blank(), row(1, [label("second")])]);
+    expect(out).toBe("  first\n\n  second");
   });
 
   it("keeps a list to one field, so it never reads as more of the line", async () => {

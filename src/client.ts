@@ -209,8 +209,8 @@ export interface Session {
 export interface AgentStanding {
   agent: string | null;
   space: string | null;
-  standing: "ok" | "over_ceiling" | "suspended" | "revoked";
-  calls: { used: number; ceiling: number; resetsAt: string };
+  standing: "ok" | "suspended" | "revoked";
+  calls?: { used: number };
   says: string | null;
 }
 
