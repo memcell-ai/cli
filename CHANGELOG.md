@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.5](https://github.com/memcell-ai/cli/compare/memcell-v0.10.4...memcell-v0.10.5) (2026-09-20)
+
+
+### Features
+
+* redesign cli presentation and purge legacy call limits ([#39](https://github.com/memcell-ai/cli/issues/39)) ([24a4e21](https://github.com/memcell-ai/cli/commit/24a4e21e51dd5e74a738854e50b3ba04ce19c269))
+
 ## [0.10.4](https://github.com/memcell-ai/cli/compare/memcell-v0.10.3...memcell-v0.10.4) (2026-09-19)
 
 
