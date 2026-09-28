@@ -21,6 +21,8 @@ export async function remember(
   typeOrKind?: string,
   at?: string,
   url?: string,
+  scope?: string,
+  meta?: string,
 ): Promise<number> {
   // Refused by name rather than dropped: a directive filed as applying at a
   // moment nothing fires would sit here looking wired and never be served.
@@ -37,7 +39,21 @@ export async function remember(
     );
     return 1;
   }
-  return file(text, typeOrKind, appliesAt, url);
+
+  let parsedMeta: Record<string, unknown> | undefined;
+  if (meta) {
+    try {
+      parsedMeta = JSON.parse(meta);
+    } catch {
+      say(
+        row(0, [badge("memcell"), label("remember")]),
+        row(1, [bad("invalid metadata")], [label("metadata must be valid JSON")]),
+      );
+      return 1;
+    }
+  }
+
+  return file(text, typeOrKind, appliesAt, url, scope, parsedMeta);
 }
 
 async function file(
@@ -45,6 +61,8 @@ async function file(
   typeOrKind?: string,
   appliesAt: string[] = [],
   url?: string,
+  scope?: string,
+  metadata?: Record<string, unknown>,
 ): Promise<number> {
   const here = await wired("remember", url);
   if (!here) return 1;
@@ -57,6 +75,8 @@ async function file(
         text,
         ...(typeOrKind ? { type: typeOrKind, kind: typeOrKind } : {}),
         ...(appliesAt.length > 0 ? { applies_at: appliesAt } : {}),
+        ...(scope ? { scope } : {}),
+        ...(metadata ? { metadata } : {}),
       },
     });
     say(

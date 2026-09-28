@@ -52,6 +52,15 @@ const DEFAULT_TOOLS = [
           items: { type: "string" },
           description: "Optional tags to filter or guide lexical matching",
         },
+        scope: {
+          type: "string",
+          description: "Operational scope filter (e.g. 'common', 'domain:finance')",
+        },
+        scopes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of authorized operational scopes to recall from",
+        },
       },
     },
   },
@@ -81,6 +90,10 @@ const DEFAULT_TOOLS = [
         context: {
           type: "string",
           description: "Why this was learned: the task, trigger, or surrounding circumstance",
+        },
+        scope: {
+          type: "string",
+          description: "Operational boundary scope (defaults to session if active, or 'common')",
         },
       },
     },

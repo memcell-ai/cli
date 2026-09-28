@@ -94,6 +94,28 @@ describe("the markdown renderers", () => {
     expect(rules).not.toContain("## ");
     expect(rules).not.toContain("the old worker");
   });
+
+  it("groups guard kind and directive type under Decisions", () => {
+    const docWithGuard = {
+      space: { slug: "ops", name: "ops", exportedAt: "2026-08-21T00:00:00.000Z" },
+      statements: [
+        {
+          text: "Never push directly to main branch.",
+          kind: "guard",
+          type: "directive",
+          scope: "team",
+          status: "active",
+          confidence: 0.9,
+          context: null,
+          createdAt: "2026-08-01T00:00:00.000Z",
+          evidence: [],
+        },
+      ],
+    };
+    const md = renderMarkdown(docWithGuard, "Ops Memory");
+    expect(md).toContain("## Decisions");
+    expect(md).toContain("- Never push directly to main branch.");
+  });
 });
 
 describe("reading text out of a JSON export", () => {

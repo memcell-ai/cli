@@ -98,6 +98,15 @@ export const FLAGS: Record<string, FlagSpec> = {
   note: { name: "note", takes: "text", what: "what happened, in a sentence" },
   dir: { name: "dir", takes: "path", what: "which directory to act on" },
   name: { name: "name", takes: "title", what: "display name for the resource" },
+  at: { name: "at", takes: "moments", what: "comma-separated lifecycle moments" },
+  scope: {
+    name: "scope",
+    takes: "scope",
+    what: "operational scope (e.g. common, domain:<slug>, session:<id>)",
+  },
+  scopes: { name: "scopes", takes: "scopes", what: "comma-separated operational scopes" },
+  meta: { name: "meta", takes: "json", what: "structured JSON metadata" },
+  to: { name: "to", takes: "scope", what: "target scope to promote to (default: common)" },
 };
 
 export interface Invocation {

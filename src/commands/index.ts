@@ -17,6 +17,8 @@ import { listProjects, newProject, useProject } from "./projects.js";
 import { listOrganizations, createOrganization, switchOrganization } from "./orgs.js";
 import { stats } from "./stats.js";
 import { status } from "./status.js";
+import { promote } from "./promote.js";
+import { scopes } from "./scopes.js";
 
 // Every command the CLI has, declared rather than dispatched by hand.
 //
@@ -113,20 +115,22 @@ export const COMMANDS: Command[] = [
     path: ["recall"],
     what: "what memory serves before you act",
     args: [{ name: "intent", required: true, what: "what you are trying to do or know" }],
-    takes: ["limit", "url"],
+    takes: ["limit", "url", "scope", "scopes"],
     landing: true,
     run: ({ args, flags }) =>
       recall(
         args.intent!,
         typeof flags.limit === "string" ? flags.limit : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
+        typeof flags.scope === "string" ? flags.scope : undefined,
+        typeof flags.scopes === "string" ? flags.scopes : undefined,
       ),
   },
   {
     path: ["remember"],
     what: "file one thing this project has established — --at names when a directive applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
-    takes: ["type", "kind", "at", "url"],
+    takes: ["type", "kind", "at", "url", "scope", "meta"],
     run: ({ args, flags }) =>
       remember(
         args.text!,
@@ -137,7 +141,29 @@ export const COMMANDS: Command[] = [
             : undefined,
         typeof flags.at === "string" ? flags.at : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
+        typeof flags.scope === "string" ? flags.scope : undefined,
+        typeof flags.meta === "string" ? flags.meta : undefined,
       ),
+  },
+  {
+    path: ["promote"],
+    what: "elevate a statement to common baseline or target scope",
+    args: [{ name: "statement", required: true, what: "the statement's id" }],
+    takes: ["to", "reason", "url"],
+    run: ({ args, flags }) =>
+      promote(
+        args.statement!,
+        typeof flags.to === "string" ? flags.to : "common",
+        typeof flags.reason === "string" ? flags.reason : undefined,
+        typeof flags.url === "string" ? flags.url : undefined,
+      ),
+  },
+  {
+    path: ["scopes"],
+    what: "list active operational scopes in this project",
+    takes: ["url"],
+    landing: true,
+    run: ({ flags }) => scopes(typeof flags.url === "string" ? flags.url : undefined),
   },
   {
     path: ["report"],

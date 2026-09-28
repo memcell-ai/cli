@@ -14,7 +14,12 @@ import { wired } from "./wired.js";
 // keeping a copy in the repo) needs no translator afterwards.
 
 interface ExportedStatement {
+  id?: string;
+  statementId?: string;
   text: string;
+  title?: string;
+  type?: string | null;
+  tags?: string[];
   kind: string | null;
   scope: string;
   status: string;
@@ -32,14 +37,14 @@ interface ExportDoc {
 export const EXPORT_FORMATS = ["json", "agents-md", "claude-md", "cursorrules"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
-/** The kinds, in the order a reader wants them: what was decided, what must
+/** The kinds and types, in the order a reader wants them: what was decided, what must
  *  be followed, what to avoid, then everything known. */
-const SECTIONS: [title: string, kinds: (string | null)[]][] = [
-  ["Decisions", ["decision"]],
-  ["Conventions", ["convention", "preference"]],
-  ["Gotchas", ["gotcha"]],
-  ["Dead ends — do not retry", ["dead_end"]],
-  ["Facts", ["fact", null]],
+const SECTIONS: [title: string, kinds: (string | null)[], types?: (string | null)[]][] = [
+  ["Decisions", ["decision", "guard"], ["directive"]],
+  ["Conventions", ["convention", "preference"], ["preference"]],
+  ["Gotchas", ["gotcha"], ["observation"]],
+  ["Dead ends — do not retry", ["dead_end"], []],
+  ["Facts", ["fact", null], ["fact"]],
 ];
 
 /** A statement as one Markdown line: the claim, then its condition. */
@@ -56,8 +61,11 @@ export function renderMarkdown(doc: ExportDoc, heading: string): string {
     `What ${doc.space.name} knows — ${live.length} statement${live.length === 1 ? "" : "s"}, exported from memcell on ${doc.space.exportedAt.slice(0, 10)}.`,
   ];
   const placed = new Set<ExportedStatement>();
-  for (const [title, kinds] of SECTIONS) {
-    const here = live.filter((s) => !placed.has(s) && kinds.includes(s.kind));
+  for (const [title, kinds, types] of SECTIONS) {
+    const here = live.filter(
+      (s) =>
+        !placed.has(s) && (kinds.includes(s.kind) || (s.type && types && types.includes(s.type))),
+    );
     if (here.length === 0) continue;
     here.forEach((s) => placed.add(s));
     parts.push("", `## ${title}`, "", ...here.map(lineOf));

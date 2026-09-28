@@ -1,0 +1,55 @@
+import { call, MemcellError } from "../client.js";
+import { badge, bad, label, place, row, say, variant } from "../ui.js";
+import { wired } from "./wired.js";
+
+// `memcell scopes` — list active operational scopes and statement
+// counts in the currently wired project.
+
+interface ScopesResponse {
+  scopes: Array<{ scope: string; count: number }>;
+}
+
+export async function scopes(url?: string): Promise<number> {
+  const here = await wired("scopes", url);
+  if (!here) return 1;
+
+  try {
+    const res = await call<ScopesResponse>(here.instance, "/api/v1/scopes", {
+      method: "GET",
+      bearer: here.key,
+    });
+
+    if (res.scopes.length === 0) {
+      say(
+        row(0, [badge("memcell"), label("scopes"), place(here.space)]),
+        row(1, [label("no active scopes established yet")]),
+      );
+      return 0;
+    }
+
+    say(
+      row(
+        0,
+        [badge("memcell"), label("scopes"), place(here.space)],
+        [variant(`${res.scopes.length} active`)],
+      ),
+      ...res.scopes.map((s) =>
+        row(
+          1,
+          [variant(s.scope)],
+          [label(s.count === 1 ? "1 statement" : `${s.count} statements`)],
+        ),
+      ),
+    );
+    return 0;
+  } catch (error) {
+    if (error instanceof MemcellError) {
+      say(
+        row(0, [badge("memcell"), label("scopes")]),
+        row(1, [bad("refused")], [label(error.message)]),
+      );
+      return 1;
+    }
+    throw error;
+  }
+}

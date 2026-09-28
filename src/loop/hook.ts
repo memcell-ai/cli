@@ -644,7 +644,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         project.instance,
         key,
         "recall",
-        { intent },
+        { intent, ...(session ? { sessionId: session } : {}) },
         moment === "prompt-submit" ? WATCHED_MS : UNWATCHED_MS,
         session,
         agentId,
@@ -778,6 +778,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
           // contents — so the session can be read back as work, not just
           // as prose. Absent when the transcript named none.
           ...(transcriptDelta.touched.length > 0 ? { touched: transcriptDelta.touched } : {}),
+          ...(session ? { sessionId: session } : {}),
         },
         PAYLOAD_TIMEOUT_MS,
         session,
