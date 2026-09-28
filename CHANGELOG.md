@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6](https://github.com/memcell-ai/cli/compare/memcell-v0.10.5...memcell-v0.10.6) (2026-09-28)
+
+
+### Features
+
+* **scope:** add scope flags, promote, and scopes commands ([#41](https://github.com/memcell-ai/cli/issues/41)) ([0a9127d](https://github.com/memcell-ai/cli/commit/0a9127dac9504486c9f6ee459687a62dd570ee12))
+
 ## [0.10.5](https://github.com/memcell-ai/cli/compare/memcell-v0.10.4...memcell-v0.10.5) (2026-09-20)
 
 
