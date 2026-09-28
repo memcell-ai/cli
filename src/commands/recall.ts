@@ -19,11 +19,24 @@ interface Served {
   pinned?: boolean;
 }
 
-export async function recall(intent: string, limit?: string, url?: string): Promise<number> {
+export async function recall(
+  intent: string,
+  limit?: string,
+  url?: string,
+  scope?: string,
+  scopes?: string,
+): Promise<number> {
   const here = await wired("recall", url);
   if (!here) return 1;
 
   const asked = Number(limit);
+  const parsedScopes = scopes
+    ? scopes
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
+
   try {
     const answer = await call<{ momentId: string; results: Served[] }>(
       here.instance,
@@ -31,7 +44,12 @@ export async function recall(intent: string, limit?: string, url?: string): Prom
       {
         method: "POST",
         bearer: here.key,
-        body: { intent, ...(Number.isFinite(asked) && asked > 0 ? { limit: asked } : {}) },
+        body: {
+          intent,
+          ...(Number.isFinite(asked) && asked > 0 ? { limit: asked } : {}),
+          ...(scope ? { scope } : {}),
+          ...(parsedScopes && parsedScopes.length > 0 ? { scopes: parsedScopes } : {}),
+        },
       },
     );
 
