@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.8](https://github.com/memcell-ai/cli/compare/memcell-v0.10.7...memcell-v0.10.8) (2026-09-29)
+
+
+### Features
+
+* **loop:** separate guards from directives in pre-act and enhance import command ([#45](https://github.com/memcell-ai/cli/issues/45)) ([577e79f](https://github.com/memcell-ai/cli/commit/577e79f2ab6a9573827598a199319f588db20be9))
+
 ## [0.10.7](https://github.com/memcell-ai/cli/compare/memcell-v0.10.6...memcell-v0.10.7) (2026-09-29)
 
 
