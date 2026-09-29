@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.7](https://github.com/memcell-ai/cli/compare/memcell-v0.10.6...memcell-v0.10.7) (2026-09-29)
+
+
+### Features
+
+* **cli:** integrate node sdk and achieve api parity for platform resources ([#43](https://github.com/memcell-ai/cli/issues/43)) ([dd75903](https://github.com/memcell-ai/cli/commit/dd7590304e1b39c12499c5f756f564da3d5fbcb7))
+
 ## [0.10.6](https://github.com/memcell-ai/cli/compare/memcell-v0.10.5...memcell-v0.10.6) (2026-09-28)
 
 
