@@ -6,6 +6,8 @@ import { parse } from "./parse.js";
 import { findProject } from "./project.js";
 import { dirname } from "node:path";
 
+import { checkUpdate, printUpdateNotice } from "./update.js";
+
 // The entry point, and now only that: parse, resolve which memcell, run.
 //
 // It used to hold the parser, the help text and the dispatch switch, which
@@ -47,6 +49,9 @@ export async function main(argv: string[], version: string): Promise<number> {
         return 1;
       }
 
+      // Check for updates in the background (suppressed for hook, mcp, non-TTY, and CI)
+      const updateCheck = checkUpdate(version, parsed.command.path).catch(() => null);
+
       // Carry an older release's wiring forward before doing the work.
       // Every entry runs it, the hook firings included, which is what makes
       // an upgrade need nothing from anybody: the first hook after it
@@ -56,13 +61,20 @@ export async function main(argv: string[], version: string): Promise<number> {
       const found = await findProject().catch(() => null);
       if (found) await migrateWiring(dirname(found.at)).catch(() => []);
 
-      return parsed.command.run({
+      const exitCode = await parsed.command.run({
         instance,
         from,
         args: parsed.args,
         flags: parsed.flags,
         many: parsed.many,
       });
+
+      const newerVersion = await updateCheck;
+      if (newerVersion) {
+        printUpdateNotice(version, newerVersion);
+      }
+
+      return exitCode;
     }
   }
 }
