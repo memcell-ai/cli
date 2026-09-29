@@ -56,6 +56,7 @@ const { saveAgentKey } = await import("../src/keyring.js");
 const { saveProject } = await import("../src/project.js");
 
 const transcript = join(project, "t.jsonl");
+const projectLog = (space: string = "api") => join(home, ".memcell", "projects", space, "hook.log");
 
 beforeAll(async () => {
   await saveProject({ instance: "http://memcell.test", space: "api" }, project);
@@ -313,7 +314,7 @@ describe("recall", () => {
     fed({ session_id: "r5", cwd: project, prompt: "anything" });
 
     await runMoment("prompt-submit", "claude");
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     expect(log).toContain("Nothing here answers that.");
   });
 });
@@ -347,7 +348,7 @@ describe("remember, and the report it justifies", () => {
 
     // Nothing was handed over, so nothing can be named twice.
     expect(calls.find((c) => c.path.endsWith("remember"))).toBeUndefined();
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     expect(log).toContain("without advancing");
   });
 
@@ -393,7 +394,7 @@ describe("remember, and the report it justifies", () => {
     // judged and the remember response carried the credit; the hook only reports
     // what came back.
     expect(calls.find((c) => c.path.includes("/outcomes"))).toBeUndefined();
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     expect(log).toContain("report · 1 worked");
   });
 
@@ -407,7 +408,7 @@ describe("remember, and the report it justifies", () => {
 
     await runMoment("turn-end", "claude");
     expect(calls.find((c) => c.path.includes("/outcomes"))).toBeUndefined();
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     expect(log).toContain("nothing the session bore on");
   });
 
@@ -521,7 +522,7 @@ describe("failing open", () => {
     expect(deliveries).toHaveLength(1); // the drop never reached the recorder
     // The tag carries the agent, not the session, so anchor on the last
     // remember line — the one this turn wrote after its retry.
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     const tail = log.slice(log.lastIndexOf(" remember "));
     expect(tail).toContain("1 kept");
     expect(tail).not.toContain("could not be reached");
@@ -539,7 +540,7 @@ describe("failing open", () => {
     await runMoment("prompt-submit", "claude");
     await runMoment("turn-end", "claude");
 
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     const today = log.slice(log.indexOf("down-2") - 200);
     expect(today).toContain("answered 503");
     expect(today).toContain("not captured, holding this turn for the next firing");
@@ -562,7 +563,7 @@ describe("failing open", () => {
     expect(out.context).toBeUndefined();
     expect(calls).toHaveLength(0);
 
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     expect(log).toContain("no key for");
     expect(log).toContain("memcell connect");
 
@@ -585,9 +586,10 @@ describe("failing open", () => {
   });
 
   it("writes a line whichever way it went, so 'fired and found nothing' is tellable from 'never fired'", async () => {
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
-    expect(log).toContain("recall · 0 served");
-    expect(log).toContain("not wired");
+    const projLog = await readFile(projectLog(), "utf8");
+    const globalLog = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    expect(projLog).toContain("recall · 0 served");
+    expect(globalLog).toContain("not wired");
   });
 });
 
@@ -686,7 +688,7 @@ describe("a hand-over the instance will never take", () => {
     expect(sent[1]).not.toContain("the first turn");
     expect(sent[1]).toContain("the second turn");
 
-    const log = await readFile(join(home, ".memcell", "hook.log"), "utf8");
+    const log = await readFile(projectLog(), "utf8");
     expect(log).toContain("not worth re-sending; moving past it");
   });
 
@@ -844,7 +846,7 @@ describe("a turn the door refuses", () => {
   // And the refusal's own sentence was dropped at the transport, so the log
   // read "the instance answered 400" two hundred times with no reason in it.
 
-  const logText = async () => readFile(join(home, ".memcell", "hook.log"), "utf8").catch(() => "");
+  const logText = async () => readFile(projectLog(), "utf8").catch(() => "");
 
   it("says WHAT the instance refused, not just that it did", async () => {
     reset();

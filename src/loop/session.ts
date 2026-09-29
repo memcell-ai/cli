@@ -1,5 +1,5 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { machineDir, machineFile } from "../machine.js";
 
 // What one working session has done so far, kept between hook firings.
@@ -118,6 +118,49 @@ export async function dropSessionCache(id: string): Promise<void> {
 }
 export const dropNote = dropSessionCache;
 
+export interface ProjectLogScope {
+  owner?: string;
+  project?: string;
+  space?: string;
+}
+
+function sanitizeSegment(segment: string): string {
+  const clean = segment
+    .replace(/[^a-zA-Z0-9_.-]/g, "_")
+    .replace(/\.+/g, ".")
+    .replace(/^\./, "");
+  return clean || "unknown";
+}
+
+/**
+ * The directory on this machine holding project-scoped files (logs, state).
+ *
+ * Examples:
+ *   - scope with owner "alice", project "my-app" -> ~/.memcell/projects/alice/my-app
+ *   - scope without owner, project "my-app" -> ~/.memcell/projects/my-app
+ *   - undefined scope -> ~/.memcell
+ */
+export function projectDir(scope?: ProjectLogScope | string): string {
+  if (!scope) return machineDir();
+  if (typeof scope === "string") {
+    const parts = scope.split("/").filter(Boolean).map(sanitizeSegment);
+    return parts.length > 0 ? machineFile("projects", ...parts) : machineDir();
+  }
+  const owner = scope.owner ? sanitizeSegment(scope.owner) : undefined;
+  const name = sanitizeSegment(scope.project ?? scope.space ?? "");
+  if (!name) return machineDir();
+  return owner ? machineFile("projects", owner, name) : machineFile("projects", name);
+}
+
+/**
+ * The log file path for a project, or ~/.memcell/hook.log if unscoped.
+ */
+export function projectLogFile(scope?: ProjectLogScope | string): string {
+  if (!scope) return machineFile("hook.log");
+  const dir = projectDir(scope);
+  return dir === machineDir() ? machineFile("hook.log") : join(dir, "hook.log");
+}
+
 /**
  * What happened, in one line, appended as it happens.
  *
@@ -126,11 +169,16 @@ export const dropNote = dropSessionCache;
  * do". Every firing writes a line whether or not it found anything, because
  * "fired and found nothing" and "never fired" are the two answers a person
  * is trying to tell apart.
+ *
+ * When a project context is present, writes to ~/.memcell/projects/<owner>/<project>/hook.log
+ * instead of dumping into a single machine-wide god file. If unwired or outside any project,
+ * falls back cleanly to ~/.memcell/hook.log.
  */
-export async function log(line: string): Promise<void> {
+export async function log(line: string, scope?: ProjectLogScope | string): Promise<void> {
   try {
-    await mkdir(machineDir(), { recursive: true });
-    await appendFile(machineFile("hook.log"), `${new Date().toISOString()}  ${line}\n`);
+    const file = projectLogFile(scope);
+    await mkdir(dirname(file), { recursive: true });
+    await appendFile(file, `${new Date().toISOString()}  ${line}\n`);
   } catch {
     // Logging is a courtesy; a hook must not fail because a disk is full.
   }
