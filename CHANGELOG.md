@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.10](https://github.com/memcell-ai/cli/compare/memcell-v0.10.9...memcell-v0.10.10) (2026-09-29)
+
+
+### Features
+
+* **logs:** project-scoped session logging and hook loop integration ([#50](https://github.com/memcell-ai/cli/issues/50)) ([b05be55](https://github.com/memcell-ai/cli/commit/b05be55a0b3d40bfebcb68bae205af102f73ec95))
+
 ## [0.10.9](https://github.com/memcell-ai/cli/compare/memcell-v0.10.8...memcell-v0.10.9) (2026-09-29)
 
 
