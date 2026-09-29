@@ -125,6 +125,10 @@ export const FLAGS: Record<string, FlagSpec> = {
     name: "json",
     what: "output results as JSON",
   },
+  verify: {
+    name: "verify",
+    what: "verify agent hook and MCP wiring in this workspace",
+  },
 };
 
 export interface Invocation {

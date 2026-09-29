@@ -37,9 +37,12 @@ const {
   deleteAgent,
   createAgentKey,
   revokeAgentKey,
+  verifyAgents,
 } = await import("../src/commands/agents.js");
 const { saveCredential } = await import("../src/instance.js");
 const { saveProject } = await import("../src/project.js");
+const { claude } = await import("../src/adapters/claude.js");
+const { installSkill } = await import("../src/adapters/skill.js");
 
 const instance = "http://memcell.test";
 const cwd = process.cwd;
@@ -258,5 +261,83 @@ describe("agents key revoke", () => {
     const out = printed.join("\n");
     expect(out).toContain("revoked");
     expect(out).toContain("key_abc");
+  });
+});
+
+describe("agents --verify", () => {
+  it("warns when no agents are wired in directory", async () => {
+    const emptyDir = await mkdtemp(join(tmpdir(), "memcell-empty-"));
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => printed.push(line);
+    try {
+      const code = await verifyAgents(instance, { project: emptyDir });
+      expect(code).toBe(1);
+    } finally {
+      console.log = log;
+    }
+    const out = printed.join("\n");
+    expect(out).toContain("no agents wired here");
+  });
+
+  it("fails on unknown agent specification", async () => {
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => printed.push(line);
+    try {
+      const code = await verifyAgents(instance, {}, "unknown-agent-xyz");
+      expect(code).toBe(1);
+    } finally {
+      console.log = log;
+    }
+    const out = printed.join("\n");
+    expect(out).toContain("unknown agent: unknown-agent-xyz");
+  });
+
+  it("verifies installed adapter hooks and skill", async () => {
+    const wiredDir = await mkdtemp(join(tmpdir(), "memcell-wired-"));
+    await claude.install(wiredDir);
+    installSkill(wiredDir);
+
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => printed.push(line);
+    try {
+      const code = await verifyAgents(instance, { project: wiredDir });
+      expect(code).toBe(0);
+    } finally {
+      console.log = log;
+    }
+
+    const out = printed.join("\n");
+    expect(out).toContain("Claude Code");
+    expect(out).toContain("7 of 7 events wired");
+    expect(out).toContain("SessionStart");
+    expect(out).toContain("Skill");
+    expect(out).toContain("present & current");
+  });
+
+  it("outputs structured JSON when --json flag is provided", async () => {
+    const wiredDir = await mkdtemp(join(tmpdir(), "memcell-wired-json-"));
+    await claude.install(wiredDir);
+
+    let captured = "";
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: any) => {
+      captured += String(chunk);
+      return true;
+    });
+
+    try {
+      const code = await verifyAgents(instance, { project: wiredDir, json: true }, "claude");
+      expect(code).toBe(0);
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+
+    const parsed = JSON.parse(captured.trim());
+    expect(parsed.agents).toBeDefined();
+    expect(parsed.agents[0].name).toBe("claude");
+    expect(parsed.agents[0].wired).toBe(true);
+    expect(parsed.agents[0].okEvents).toBe(7);
   });
 });
