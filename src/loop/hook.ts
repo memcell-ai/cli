@@ -157,7 +157,8 @@ async function incoming(): Promise<Incoming> {
  * somebody to check the link file that was sitting right in front of them.
  */
 export type ProjectWiring =
-  { ok: true; project: Project; key: string; agentId?: string } | { ok: false; why: string };
+  | { ok: true; project: Project; key: string; agentId?: string }
+  | { ok: false; why: string; project?: Project };
 export type Standing = ProjectWiring; // Backwards-compatible alias
 
 export async function resolveProjectWiring(cwd?: string, program?: string): Promise<ProjectWiring> {
@@ -168,7 +169,11 @@ export async function resolveProjectWiring(cwd?: string, program?: string): Prom
   // the project file names the memory, never the person.
   const held = await agentKeyForProject(found.project.instance, dirname(found.at), program);
   if (!held) {
-    return { ok: false, why: `no key for ${found.project.space} · run memcell connect` };
+    return {
+      ok: false,
+      why: `no key for ${found.project.space} · run memcell connect`,
+      project: found.project,
+    };
   }
   // The wired agent, resolved HERE rather than read off the command line.
   // A hook carrying a baked-in id keeps reporting the agent it was wired
@@ -488,8 +493,9 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
   // firing can be correlated to one wired agent when reading the log back.
   const agentId = here.ok ? here.agentId : undefined;
   const tag = agentId ? `${moment} ${program} ${agentId}` : `${moment} ${program}`;
+  const logEvent = (line: string) => log(line, here.project);
   if (!here.ok) {
-    await log(`${tag} · ${here.why}`);
+    await logEvent(`${tag} · ${here.why}`);
     // Said once, at the start, and only when the loop cannot run AT ALL.
     //
     // The rule above is that this stays quiet, and that rule is about
@@ -582,7 +588,9 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
 
     if (evalResult.verdict === "refuse") {
       result.refuse = evalResult.reason;
-      await log(`${tag} · before-act · ${tool} is ${evalResult.act} · refused · ${result.refuse}`);
+      await logEvent(
+        `${tag} · before-act · ${tool} is ${evalResult.act} · refused · ${result.refuse}`,
+      );
       return leaving(result);
     }
 
@@ -591,7 +599,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       note.fired[saidKey] = Date.now();
       result.context = evalResult.guidance;
       note.pendingGuidance = evalResult.guidance;
-      await log(
+      await logEvent(
         `${tag} · before-act · ${tool} is ${evalResult.act} · ${evalResult.bears.length} said`,
       );
       return leaving(result);
@@ -604,7 +612,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
     if (note.pendingGuidance) {
       result.context = note.pendingGuidance;
       note.pendingGuidance = null;
-      await log(`${tag} · after-act · delivered staged guidance`);
+      await logEvent(`${tag} · after-act · delivered staged guidance`);
       return leaving(result);
     }
 
@@ -614,7 +622,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
     if (errorMessage || failureType) {
       const tool = payload.tool_name ?? payload.toolName ?? "";
       const reason = errorMessage || failureType || "unknown error";
-      await log(`${tag} · after-act · tool failure on ${tool || "action"}: ${reason}`);
+      await logEvent(`${tag} · after-act · tool failure on ${tool || "action"}: ${reason}`);
       result.context = `Tool execution failed on ${tool || "action"}: ${reason}. Review active directives before retrying.`;
       return leaving(result);
     }
@@ -658,7 +666,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       if (!answer) {
         // The turn goes on without memory — fail open — but the log says
         // what actually happened, not "0 served".
-        await log(`${tag} · recall · ${formatApiError(asked)}`);
+        await logEvent(`${tag} · recall · ${formatApiError(asked)}`);
       }
       const rawStatements = (answer?.statements ?? answer?.results ?? []) as RawStatementInput[];
       const guardMode = (answer?.guardMode ?? note.guardMode ?? "strict") as "strict" | "advisory";
@@ -699,12 +707,12 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         result.context = answer.note;
       }
       if (answer) {
-        await log(
+        await logEvent(
           `${tag} · recall · ${results.length} served${answer.note ? ` · ${answer.note}` : ""}`,
         );
       }
     } else {
-      await log(`${tag} · recall · nothing to ask`);
+      await logEvent(`${tag} · recall · nothing to ask`);
     }
   }
 
@@ -751,7 +759,9 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
     const enough = transcriptDelta.text.trim().length >= 20;
 
     if (enough && !advanced) {
-      await log(`${tag} · remember · read returned transcript delta without advancing — held back`);
+      await logEvent(
+        `${tag} · remember · read returned transcript delta without advancing — held back`,
+      );
     } else if (enough) {
       const handed = await apiCall<{
         created: { statementId: string }[];
@@ -794,14 +804,14 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       // ordinary turn, so it is said as what it is.
       const queued = handed?.at === "answered" && handed.status === 202;
       if (kept && queued) {
-        await log(`${tag} · remember · handed over${kept.note ? ` · ${kept.note}` : ""}`);
+        await logEvent(`${tag} · remember · handed over${kept.note ? ` · ${kept.note}` : ""}`);
       } else if (kept) {
         const created = kept.created.length;
         const reinforced = kept.reinforced;
         const superseded = kept.superseded?.length ?? 0;
         // The log carries the memory's own words for what it did, so reading
         // ~/.memcell/hook.log answers "why nothing" without guessing.
-        await log(
+        await logEvent(
           `${tag} · remember · ${created} kept, ${reinforced.length} reinforced${superseded > 0 ? `, ${superseded} superseded` : ""}${kept.note ? ` · ${kept.note}` : ""}`,
         );
       } else {
@@ -823,7 +833,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         // said "holding for the next firing" every single time.
         const forGood = handed?.at === "refused" && refusedForGood(handed.status);
         if (!forGood) note.read = startedAt;
-        await log(
+        await logEvent(
           forGood
             ? `${tag} · remember · ${formatApiError(handed as Answered<unknown>)} — this turn was refused and is not worth re-sending; moving past it`
             : handed?.at === "refused"
@@ -849,23 +859,27 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
           if (attributed.length > 0) {
             const worked = attributed.filter((a) => a.outcome === "worked").length;
             const failed = attributed.length - worked;
-            await log(`${tag} · report · ${worked} worked${failed ? `, ${failed} failed` : ""}`);
+            await logEvent(
+              `${tag} · report · ${worked} worked${failed ? `, ${failed} failed` : ""}`,
+            );
           } else {
-            await log(`${tag} · report · nothing the session bore on`);
+            await logEvent(`${tag} · report · nothing the session bore on`);
           }
           // Divergence is not an outcome and is counted apart from them: it
           // says what this turn did, not whether anything is true. The next
           // recall re-asserts what is named here.
           const against = kept.diverged ?? [];
           if (against.length > 0) {
-            await log(`${tag} · report · went against ${against.length}, re-asserting next turn`);
+            await logEvent(
+              `${tag} · report · went against ${against.length}, re-asserting next turn`,
+            );
           }
         } else {
-          await log(`${tag} · report · not asked — the payload delivery did not land`);
+          await logEvent(`${tag} · report · not asked — the payload delivery did not land`);
         }
       }
     } else {
-      await log(`${tag} · remember · nothing new to hand over`);
+      await logEvent(`${tag} · remember · nothing new to hand over`);
     }
   }
 

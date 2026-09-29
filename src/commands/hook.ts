@@ -40,7 +40,11 @@ export async function hook(moment: string, program: string): Promise<number> {
   try {
     result = await runMoment(moment, program);
   } catch (trouble) {
-    await log(`${moment} ${program} · fell over · ${(trouble as Error)?.message ?? trouble}`);
+    const found = await findProject(process.cwd()).catch(() => null);
+    await log(
+      `${moment} ${program} · fell over · ${(trouble as Error)?.message ?? trouble}`,
+      found?.project,
+    );
     return 0;
   }
   const adapter = adapterFor(program);
