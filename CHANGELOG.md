@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.9](https://github.com/memcell-ai/cli/compare/memcell-v0.10.8...memcell-v0.10.9) (2026-09-29)
+
+
+### Features
+
+* **cli:** add non-intrusive cached update notifier for interactive commands ([#48](https://github.com/memcell-ai/cli/issues/48)) ([5dee697](https://github.com/memcell-ai/cli/commit/5dee697e3dba14162f883b312eb5aa1ad4b3ae11))
+
 ## [0.10.8](https://github.com/memcell-ai/cli/compare/memcell-v0.10.7...memcell-v0.10.8) (2026-09-29)
 
 
