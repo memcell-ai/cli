@@ -98,6 +98,46 @@ describe("stageStatementsFromRecall", () => {
     expect(staged).toHaveLength(0);
   });
 
+  it("stages statements with type === 'guard' as hard refusal gates in strict mode", () => {
+    const statements = [
+      {
+        id: "s-guard-type",
+        title: "Never drop production tables",
+        type: "guard",
+        confidence: 0.95,
+      },
+    ];
+
+    const staged = stageStatementsFromRecall(statements, "strict");
+    expect(staged).toHaveLength(1);
+    expect(staged[0]!).toMatchObject({
+      statementId: "s-guard-type",
+      title: "Never drop production tables",
+      refuses: true,
+      appliesAt: ["change", "record", "send"],
+    });
+  });
+
+  it("stages statements with type === 'directive' as soft advisories (refuses: false) even in strict mode", () => {
+    const statements = [
+      {
+        id: "s-directive",
+        title: "Always verify output before executing",
+        type: "directive",
+        confidence: 0.9,
+      },
+    ];
+
+    const staged = stageStatementsFromRecall(statements, "strict");
+    expect(staged).toHaveLength(1);
+    expect(staged[0]!).toMatchObject({
+      statementId: "s-directive",
+      title: "Always verify output before executing",
+      refuses: false,
+      appliesAt: ["change", "record"],
+    });
+  });
+
   it("correctly normalizes legacy statement objects", () => {
     const legacyResults = [
       {
@@ -120,7 +160,7 @@ describe("stageStatementsFromRecall", () => {
 });
 
 describe("evaluatePreAct", () => {
-  const strictGuardRule = {
+  const strictGuardStatement = {
     statementId: "g-1",
     title: "Never push directly to production branch",
     text: "Never push directly to production branch: git push must go through PR.",
@@ -129,7 +169,7 @@ describe("evaluatePreAct", () => {
     refuses: true,
   };
 
-  const conventionRule = {
+  const conventionStatement = {
     statementId: "c-1",
     title: "Follow strict TypeScript conventions",
     text: "Follow strict TypeScript conventions: no explicit any.",
@@ -143,18 +183,18 @@ describe("evaluatePreAct", () => {
       tool: "",
       input: {},
       guard,
-      standingRules: [strictGuardRule],
+      activeStatements: [strictGuardStatement],
     });
     expect(result.verdict).toBe("pass");
   });
 
-  it("returns pass when tool action does not match any standing rule appliesAt", () => {
+  it("returns pass when tool action does not match any statement appliesAt", () => {
     // Read action (e.g. git status) should not trigger send guard
     const result = evaluatePreAct({
       tool: "Bash",
       input: { command: "git status" },
       guard,
-      standingRules: [strictGuardRule],
+      activeStatements: [strictGuardStatement],
     });
     expect(result.verdict).toBe("pass");
   });
@@ -165,7 +205,7 @@ describe("evaluatePreAct", () => {
       tool: "Bash",
       input: { command: "git push origin main" },
       guard,
-      standingRules: [strictGuardRule],
+      activeStatements: [strictGuardStatement],
     });
 
     expect(result.verdict).toBe("refuse");
@@ -184,13 +224,46 @@ describe("evaluatePreAct", () => {
     }
   });
 
-  it("provides soft guidance when matching an advisory rule", () => {
+  it("provides soft guidance and never refuses when executing tools with an advisory directive", () => {
+    const directiveStatement = {
+      statementId: "d-1",
+      title: "Always verify output before executing",
+      text: "Always verify output before executing: systematically validate before triggering.",
+      tags: ["workflow"],
+      appliesAt: ["change" as const],
+      refuses: false,
+    };
+
+    const result = evaluatePreAct({
+      tool: "Edit",
+      input: { file_path: "src/index.ts" },
+      guard,
+      activeStatements: [directiveStatement],
+    });
+
+    expect(result.verdict).toBe("advise");
+    if (result.verdict === "advise") {
+      expect(result.act).toBe("change");
+      expect(result.guidance).toContain("Always verify output before executing");
+      expect(result.bears[0]!.refuses).toBe(false);
+      expect(result.pairs).toEqual([
+        {
+          statementId: "d-1",
+          act: "change",
+          tool: "Edit",
+          became: "served",
+        },
+      ]);
+    }
+  });
+
+  it("provides soft guidance when matching an advisory statement", () => {
     // Change action (e.g. Edit tool) matches convention
     const result = evaluatePreAct({
       tool: "Edit",
       input: { file_path: "src/index.ts" },
       guard,
-      standingRules: [conventionRule],
+      activeStatements: [conventionStatement],
     });
 
     expect(result.verdict).toBe("advise");
@@ -213,7 +286,7 @@ describe("evaluatePreAct", () => {
       tool: "Edit",
       input: { file_path: "src/index.ts" },
       guard,
-      standingRules: [conventionRule],
+      activeStatements: [conventionStatement],
       firedMap: { "said:change": Date.now() },
     });
 
@@ -221,14 +294,14 @@ describe("evaluatePreAct", () => {
   });
 
   it("completes evaluation in sub-millisecond time (< 1ms)", () => {
-    const rules = [strictGuardRule, conventionRule];
+    const statements = [strictGuardStatement, conventionStatement];
     const start = performance.now();
     for (let i = 0; i < 1000; i++) {
       evaluatePreAct({
         tool: "Bash",
         input: { command: "git push origin main" },
         guard,
-        standingRules: rules,
+        activeStatements: statements,
       });
     }
     const elapsed = performance.now() - start;

@@ -25,14 +25,14 @@ import { detectActiveRuntimeModel } from "../model-detect.js";
 // What an installed hook executes — the loop, fired by the harness rather
 // than chosen by the model.
 //
-// THE RULE, above everything: this fails open, always. It runs inside
+// THE FIRST AXIOM, above everything: this fails open, always. It runs inside
 // somebody's coding session, between them pressing enter and their agent
 // answering. If memcell is down, slow, unreachable or wrong, the right
 // behaviour is to say nothing and let the session continue. A memory service
 // that can break an agent is worse than no memory service, and it only has
 // to happen once for the hooks to come out. Every path here exits 0.
 //
-// THE SECOND RULE: the hook ships and connects, it never judges. It hands
+// THE SECOND AXIOM: the hook ships and connects, it never judges. It hands
 // the turn's transcript delta to `remember` and the memory engine distills what was durable;
 // it reports an outcome only where the memory itself said the turn
 // corroborated a statement. Deciding "was that worth keeping" or "did that
@@ -56,8 +56,8 @@ const UNWATCHED_MS = 20_000;
  *  model. */
 const PAYLOAD_TIMEOUT_MS = 60_000;
 const HANDOVER_MS = PAYLOAD_TIMEOUT_MS; // Backwards-compatible alias
-/** How many rule-and-act pairings one turn hands over. A turn with forty
- *  acts must not cost forty judgements, and the same rule against the same
+/** How many statement-and-act pairings one turn hands over. A turn with forty
+ *  acts must not cost forty judgements, and the same statement against the same
  *  kind of act twice says nothing the first one did not. */
 const SERVED_AT_LIMIT = 12;
 
@@ -311,6 +311,8 @@ export interface Recalled {
   text: string;
   confidence: number;
   layer: string;
+  type?: string;
+  tags?: string[];
   kind?: string;
   /** The moments this bears on — read, change, record, send, answer. Empty
    *  for knowledge, which is most of a memory. */
@@ -319,7 +321,7 @@ export interface Recalled {
   /** Served because this session already went against it. */
   diverged?: boolean;
   violated?: boolean;
-  /** Somebody asked this rule to STOP the act it bears on. */
+  /** Somebody asked this statement to STOP the act it bears on. */
   refuses?: boolean;
   pinned?: boolean;
   standing?: boolean;
@@ -327,12 +329,13 @@ export interface Recalled {
   verified?: boolean;
 }
 
-/** A statement is treated as an operational guard if the memory flagged it as
- *  refusing the act, if its kind is an explicit trap/dead-end/gotcha, if it is
- *  a standing directive or action boundary, or if its text specifies a hard
- *  prohibition or mandatory trigger constraint. */
+/** A statement is treated as an operational guard if it is explicitly typed as a
+ *  guard, tagged with 'guard', flagged as refusing the act, or if its text specifies a hard
+ *  prohibition or mandatory trigger constraint. Standard directives and preferences are NOT guards. */
 export function isGuard(r: Recalled): boolean {
-  if (r.refuses || r.kind === "dead_end" || r.kind === "gotcha") return true;
+  if (r.type === "guard" || r.refuses || r.tags?.includes("guard")) return true;
+  if (r.type === "preference" || r.type === "observation" || r.type === "fact") return false;
+  if (r.kind === "dead_end" || r.kind === "gotcha") return true;
   if (r.standing || r.pinned || (r.appliesAt && r.appliesAt.length > 0)) return true;
   return /\b(prohibited|forbidden|must not|never|do not|cannot|only when (?:explicitly )?triggered by)\b/i.test(
     r.text,
@@ -671,21 +674,17 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       const results: Recalled[] = rawStatements.map((r) => {
         const statementId = (r.id ?? r.statementId ?? "") as string;
         const text = r.title ? (r.context ? `${r.title}: ${r.context}` : r.title) : (r.text ?? "");
+        const isGuardStatement =
+          r.type === "guard" || r.tags?.includes("guard") || Boolean(r.refuses);
         return {
           statementId,
           text,
           confidence: r.confidence ?? 0.8,
           layer: r.layer ?? (r.tags?.join(", ") || "project"),
-          kind:
-            r.kind ??
-            (r.tags?.includes("guard")
-              ? "guard"
-              : r.tags?.includes("convention")
-                ? "convention"
-                : undefined),
+          type: r.type,
           tags: r.tags,
           appliesAt: r.appliesAt,
-          refuses: guardMode === "strict" ? r.tags?.includes("guard") || r.refuses : false,
+          refuses: guardMode === "strict" ? isGuardStatement : false,
           contested: Boolean(r.contested),
           diverged: Boolean(r.diverged || r.violated),
           violated: Boolean(r.diverged || r.violated),

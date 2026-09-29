@@ -45,12 +45,12 @@ export async function hook(moment: string, program: string): Promise<number> {
   }
   const adapter = adapterFor(program);
 
-  // A rule somebody asked to STOP this act. Spoken in the harness's own
-  // refusal, and the reason is always the rule's own words — nobody is
+  // A guard somebody asked to STOP this act. Spoken in the harness's own
+  // refusal, and the reason is always the guard statement's own words — nobody is
   // stopped without being told what stopped them.
   //
   // This is the ONE place the loop is allowed to stand in the way, and only
-  // because a person turned it on for that rule. Everything else fails open:
+  // because a person or safety policy turned it on for that guard. Everything else fails open:
   // a hook that blocks work it should not is a hook that gets removed, and a
   // removed hook remembers nothing at all.
   if (result.refuse) {

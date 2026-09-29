@@ -1,6 +1,6 @@
 import type { Guard, ActClass } from "../adapters/surface.js";
 import { actOf } from "./act.js";
-import type { ActiveStatement, ActiveRule, StandingRule } from "./session.js";
+import type { ActiveStatement } from "./session.js";
 
 const VALID_ACTS: ActClass[] = ["read", "change", "record", "send", "answer"];
 
@@ -54,21 +54,20 @@ export function stageStatementsFromRecall(
       : (stmt.text ?? "");
     const tags = Array.isArray(stmt.tags) ? stmt.tags.map((t) => t.toLowerCase()) : [];
 
-    // 1. Determine if this statement is a Guard Directive vs. Convention vs. General Knowledge
-    const isDirective = stmt.type === "directive";
-    const hasGuardTag = tags.includes("guard") || tags.includes("security");
-    const isExplicitGuard =
-      isDirective ||
-      hasGuardTag ||
-      stmt.refuses === true ||
-      stmt.kind === "dead_end" ||
-      stmt.kind === "gotcha";
+    // 1. Determine if this statement is a Guard vs. Directive vs. Convention vs. General Knowledge
+    const isGuard =
+      stmt.type === "guard" ||
+      tags.includes("guard") ||
+      tags.includes("security") ||
+      stmt.refuses === true;
 
-    const isExplicitConvention =
+    const isDirective = stmt.type === "directive";
+
+    const isConvention =
+      stmt.type === "preference" ||
       tags.includes("convention") ||
       tags.includes("style") ||
-      tags.includes("guideline") ||
-      stmt.kind === "convention";
+      tags.includes("guideline");
 
     // 2. Determine target ActClasses (appliesAt)
     let appliesAt: ActClass[] = [];
@@ -86,11 +85,11 @@ export function stageStatementsFromRecall(
 
     // If no explicit acts declared, apply intelligent defaults based on statement category
     if (appliesAt.length === 0) {
-      if (isExplicitGuard) {
+      if (isGuard) {
         // Guard defaults to modifying / durable / external acts
         appliesAt = ["change", "record", "send"];
-      } else if (isExplicitConvention) {
-        // Convention defaults to modifications and records
+      } else if (isDirective || isConvention) {
+        // Directives and conventions default to modifications and records
         appliesAt = ["change", "record"];
       }
     }
@@ -101,12 +100,11 @@ export function stageStatementsFromRecall(
     }
 
     // 3. Determine refusal behavior based on guardMode:
-    // A statement is a hard refusal gate ONLY if it has the #guard tag, is a directive, or stmt.refuses === true,
+    // A statement is a hard refusal gate ONLY if it is a Guard (type === 'guard', #guard tag, or stmt.refuses === true)
     // AND guardMode is "strict".
-    // In "advisory" mode, guard directives degrade to soft advisories (refuses: false).
-    // Conventions and unflagged standing statements are always soft advisories.
-    const isGuardGate = isDirective || hasGuardTag || stmt.refuses === true;
-    const refuses = isGuardGate && guardMode === "strict";
+    // In "advisory" mode, guards degrade to soft advisories (refuses: false).
+    // Directives, conventions, and other statements are ALWAYS soft advisories (refuses: false).
+    const refuses = isGuard && guardMode === "strict";
 
     staged.push({
       statementId,
@@ -121,16 +119,15 @@ export function stageStatementsFromRecall(
   return staged;
 }
 
-/** Backward-compatible alias for stageStatementsFromRecall. */
-export const stageRulesFromRecall = stageStatementsFromRecall;
-
 export interface PreActOptions {
   tool: string;
   input: Record<string, unknown> | undefined;
   guard: Guard;
   activeStatements?: ActiveStatement[];
+  /** @deprecated Kept for backward compatibility */
+  standingRules?: ActiveStatement[];
+  /** @deprecated Kept for backward compatibility */
   activeRules?: ActiveStatement[];
-  standingRules?: StandingRule[];
   firedMap?: Record<string, number>;
 }
 

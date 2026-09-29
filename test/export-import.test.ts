@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { renderCursorrules, renderMarkdown } from "../src/commands/export.js";
-import { deliveryOf, discover, textsFromJson } from "../src/commands/import.js";
+import { deliveryOf, discover, importFiles, textsFromJson } from "../src/commands/import.js";
 
 // Import and export are the promise that memory is the user's to carry:
 // what a project already wrote down goes in without retyping, and what the
@@ -179,5 +179,28 @@ describe("finding the instruction files a project already keeps", () => {
       join(root, ".cursor", "rules", "a.mdc"),
       join(root, ".cursor", "rules", "b.mdc"),
     ]);
+  });
+
+  it("finds Gemini, Windsurf, Claude, and Agent files across directory structures", async () => {
+    const root = await mkdtemp(join(tmpdir(), "memcell-import-multi-"));
+    await writeFile(join(root, "GEMINI.md"), "# Gemini Instructions");
+    await writeFile(join(root, "AGENTS.md"), "# Agent Instructions");
+    await mkdir(join(root, ".windsurf", "rules"), { recursive: true });
+    await writeFile(join(root, ".windsurf", "rules", "frontend.md"), "frontend guidelines");
+    await mkdir(join(root, ".claude", "rules"), { recursive: true });
+    await writeFile(join(root, ".claude", "rules", "style.md"), "code style");
+
+    const found = await discover(root);
+    expect(found).toContain(join(root, "GEMINI.md"));
+    expect(found).toContain(join(root, "AGENTS.md"));
+    expect(found).toContain(join(root, ".windsurf", "rules", "frontend.md"));
+    expect(found).toContain(join(root, ".claude", "rules", "style.md"));
+  });
+});
+
+describe("importFiles invocation", () => {
+  it("returns 1 when directory is not wired", async () => {
+    const res = await importFiles({ files: [], dryRun: true });
+    expect(res).toBe(1);
   });
 });

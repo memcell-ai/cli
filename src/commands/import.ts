@@ -1,11 +1,14 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { MemCellError } from "@memcell/sdk";
 
-import { call, MemcellError } from "../client.js";
+import { MemcellError } from "../client.js";
+import { getSdkClient } from "../sdk-client.js";
 import {
   badge,
   bad,
   clearLine,
+  emit,
   good,
   label,
   pending,
@@ -14,38 +17,76 @@ import {
   row,
   say,
   value,
+  variant,
   warn,
   type Row,
 } from "../ui.js";
 import { wired } from "./wired.js";
 
-// `memcell import [files…]` — what this project already wrote down, handed
-// to its memory. Run bare, it finds the instruction files agents already
-// read — CLAUDE.md, AGENTS.md, .cursorrules, .cursor/rules, Copilot
-// instructions — so a project that has been keeping notes starts remembering
-// them without retyping anything.
+// `memcell import [files…]` — what this project already established or wrote
+// down, handed to its institutional memory. Run bare, it automatically finds
+// the standing guidance and instruction files agents read — CLAUDE.md, AGENTS.md,
+// GEMINI.md, .cursorrules, .cursor/rules, .windsurfrules, Copilot instructions —
+// so a project with notes starts remembering them without retyping anything.
 //
-// Every file goes through the real remember endpoint and gets distilled there:
-// atomic statements with provenance, not a transcription. A JSON file is
-// read for its text first — a top-level array, or one under a plainly named
-// key, of strings or of objects that carry their text in a string field.
-// That shape is generic on purpose: it reads our own export back, and it
-// reads any export that says what it means, without hard-coding anybody
-// else's format.
+// Every file goes through the server's distillation engine and gets turned into
+// atomic statements with provenance. A JSON file is read for its text first —
+// a top-level array, or one under a plainly named key, of strings or of objects
+// that carry their text in a string field. That shape is generic on purpose:
+// it reads our own export back, and it reads any export that says what it means,
+// without hard-coding external formats.
 
-/** Where projects already keep their standing instructions. */
+/** Standing guidance files checked in bare discovery. */
 export const KNOWN_FILES = [
   "CLAUDE.md",
   "AGENTS.md",
   ".cursorrules",
   ".github/copilot-instructions.md",
+  "GEMINI.md",
+  "AGY.md",
+  ".windsurfrules",
+  ".clinerules",
+  ".claude/CLAUDE.md",
+  ".gemini/GEMINI.md",
+  ".agents/instructions.md",
+  ".codex/instructions.md",
+  ".goosehints",
 ];
-const KNOWN_DIRS: { dir: string; ext: string }[] = [{ dir: ".cursor/rules", ext: ".mdc" }];
 
-interface Kept {
-  created: { statementId: string }[];
-  reinforced: { statementId: string }[];
-  note?: string;
+export const KNOWN_DIRS: { dir: string; ext: string }[] = [
+  { dir: ".cursor/rules", ext: ".mdc" },
+  { dir: ".cursor/rules", ext: ".md" },
+  { dir: ".claude/rules", ext: ".md" },
+  { dir: ".windsurf/rules", ext: ".md" },
+  { dir: ".clinerules", ext: ".md" },
+  { dir: ".agents", ext: ".md" },
+];
+
+export interface ImportOptions {
+  files?: string[];
+  url?: string;
+  dryRun?: boolean;
+  scope?: string;
+  type?: string;
+  json?: boolean;
+}
+
+export interface ImportResultFile {
+  file: string;
+  status: "kept" | "unreadable" | "empty" | "refused" | "preview";
+  created?: number;
+  reinforced?: number;
+  chars?: number;
+  error?: string;
+}
+
+export interface ImportResultSummary {
+  ok: boolean;
+  space?: string;
+  dryRun: boolean;
+  files: ImportResultFile[];
+  totalCreated: number;
+  totalReinforced: number;
 }
 
 /** The text inside a JSON export, if the shape says where it is. */
@@ -69,7 +110,7 @@ export function textsFromJson(parsed: unknown): string[] | null {
       continue;
     }
     if (entry && typeof entry === "object") {
-      for (const key of ["text", "memory", "content", "statement"]) {
+      for (const key of ["text", "memory", "content", "statement", "title"]) {
         const held = (entry as Record<string, unknown>)[key];
         if (typeof held === "string" && held.trim()) {
           texts.push(held.trim());
@@ -96,64 +137,130 @@ export function deliveryOf(name: string, raw: string): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** The instruction files this directory actually has. */
+/** The guidance files this directory actually contains. */
 export async function discover(root: string): Promise<string[]> {
   const found: string[] = [];
   for (const name of KNOWN_FILES) {
     try {
-      await readFile(join(root, name), "utf8");
-      found.push(join(root, name));
+      const stats = await stat(join(root, name));
+      if (stats.isFile()) {
+        const fullPath = join(root, name);
+        if (!found.includes(fullPath)) found.push(fullPath);
+      }
     } catch {
-      // Absent — most of them will be.
+      // Absent or not a file
     }
   }
   for (const { dir, ext } of KNOWN_DIRS) {
     try {
       const names = await readdir(join(root, dir));
       for (const name of names.sort()) {
-        if (name.endsWith(ext)) found.push(join(root, dir, name));
+        if (name.endsWith(ext)) {
+          const fullPath = join(root, dir, name);
+          try {
+            const stats = await stat(fullPath);
+            if (stats.isFile() && !found.includes(fullPath)) {
+              found.push(fullPath);
+            }
+          } catch {
+            // Inaccessible
+          }
+        }
       }
     } catch {
-      // No such directory.
+      // No such directory
     }
   }
   return found;
 }
 
-export async function importFiles(files: string[], url?: string): Promise<number> {
-  const here = await wired("import", url);
+export async function importFiles(
+  filesOrOptions: string[] | ImportOptions,
+  legacyUrl?: string,
+): Promise<number> {
+  const options: ImportOptions = Array.isArray(filesOrOptions)
+    ? { files: filesOrOptions, url: legacyUrl }
+    : filesOrOptions;
+
+  const here = await wired("import", options.url);
   if (!here) return 1;
   const root = here.root;
 
-  const chosen = files.length > 0 ? files : await discover(root);
+  const chosen = options.files && options.files.length > 0 ? options.files : await discover(root);
   if (chosen.length === 0) {
+    if (options.json) {
+      emit(
+        JSON.stringify(
+          {
+            ok: false,
+            space: here.space,
+            dryRun: Boolean(options.dryRun),
+            files: [],
+            totalCreated: 0,
+            totalReinforced: 0,
+            message: "nothing to import",
+            lookedFor: KNOWN_FILES,
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      return 1;
+    }
     say(
       row(0, [badge("memcell"), label("import"), place(here.space)]),
-      row(1, [warn("nothing to import")], [label("looked for"), value(KNOWN_FILES.join(" · "))]),
+      row(
+        1,
+        [warn("nothing to import")],
+        [label("looked for"), value(KNOWN_FILES.slice(0, 4).join(" · ") + " …")],
+      ),
     );
     return 1;
   }
 
-  // One block at the end, in the statusline voice; while a file distills,
-  // a live line breathes so a slow model pass does not read as a hang.
   const rows: Row[] = [row(0, [badge("memcell"), label("import"), place(here.space)])];
+  const summaryFiles: ImportResultFile[] = [];
   let landed = 0;
   let created = 0;
   let reinforced = 0;
+
   for (const file of chosen) {
-    const shown = relative(process.cwd(), file) || file;
+    const shown = (relative(process.cwd(), file) || file).replace(/\\/g, "/");
     let raw: string;
     try {
       raw = await readFile(file, "utf8");
     } catch {
+      summaryFiles.push({ file: shown, status: "unreadable", error: "cannot read file" });
       rows.push(row(1, [bad("cannot read")], [place(shown)]));
       continue;
     }
+
     const delivery = deliveryOf(file, raw);
     if (delivery === null) {
+      summaryFiles.push({ file: shown, status: "empty", error: "no text found" });
       rows.push(row(1, [warn("no text found")], [place(shown)]));
       continue;
     }
+
+    if (options.dryRun) {
+      landed += 1;
+      summaryFiles.push({
+        file: shown,
+        status: "preview",
+        chars: delivery.length,
+      });
+      rows.push(
+        row(
+          1,
+          [variant(shown)],
+          [label("preview"), value(`${delivery.length} chars`)],
+          options.type ? [label("type"), value(options.type)] : null,
+          options.scope ? [label("scope"), value(options.scope)] : null,
+        ),
+      );
+      continue;
+    }
+
     let tick = 0;
     const breathe = setInterval(
       () =>
@@ -162,42 +269,91 @@ export async function importFiles(files: string[], url?: string): Promise<number
         ),
       120,
     );
+
     try {
-      const kept = await call<Kept>(here.instance, "/api/v1/remember", {
-        method: "POST",
-        bearer: here.key,
-        body: { raw: delivery, origin: { title: shown } },
+      const sdk = await getSdkClient(here.instance, { bearer: here.key });
+      const kept = await sdk.remember({
+        namespace: here.space,
+        title: shown,
+        raw: delivery,
+        type: options.type as any,
+        scope: options.scope,
+        metadata: {
+          origin: { title: shown, path: shown },
+        },
       });
+
+      const createdCount = kept.created ? kept.created.length : 0;
+      const reinforcedCount = Array.isArray(kept.reinforced) ? kept.reinforced.length : 0;
+
       landed += 1;
-      created += kept.created.length;
-      reinforced += kept.reinforced.length;
+      created += createdCount;
+      reinforced += reinforcedCount;
+
+      summaryFiles.push({
+        file: shown,
+        status: "kept",
+        created: createdCount,
+        reinforced: reinforcedCount,
+      });
+
       rows.push(
         row(
           1,
           [good(shown)],
-          [label("kept"), value(String(kept.created.length))],
-          kept.reinforced.length > 0
-            ? [label("reinforced"), value(String(kept.reinforced.length))]
-            : null,
+          [label("kept"), value(String(createdCount))],
+          reinforcedCount > 0 ? [label("reinforced"), value(String(reinforcedCount))] : null,
+          options.type ? [label("type"), value(options.type)] : null,
+          options.scope ? [label("scope"), value(options.scope)] : null,
         ),
       );
     } catch (error) {
-      if (!(error instanceof MemcellError)) throw error;
-      rows.push(row(1, [bad("refused")], [place(shown)], [label(error.message)]));
+      const message =
+        error instanceof MemcellError || error instanceof MemCellError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      summaryFiles.push({ file: shown, status: "refused", error: message });
+      rows.push(row(1, [bad("refused")], [place(shown)], [label(message)]));
     } finally {
       clearInterval(breathe);
       clearLine();
     }
   }
 
-  rows.push(
-    row(
-      1,
-      landed > 0 ? [good(`${landed} of ${chosen.length} files`)] : [bad("nothing landed")],
-      [label("kept"), value(String(created))],
-      reinforced > 0 ? [label("reinforced"), value(String(reinforced))] : null,
-    ),
-  );
+  if (options.json) {
+    const summary: ImportResultSummary = {
+      ok: landed > 0,
+      space: here.space,
+      dryRun: Boolean(options.dryRun),
+      files: summaryFiles,
+      totalCreated: created,
+      totalReinforced: reinforced,
+    };
+    emit(JSON.stringify(summary, null, 2) + "\n");
+    return landed > 0 ? 0 : 1;
+  }
+
+  if (options.dryRun) {
+    rows.push(
+      row(
+        1,
+        [good(`${landed} of ${chosen.length} files previewed`)],
+        [label("dry run"), value("no memory written")],
+      ),
+    );
+  } else {
+    rows.push(
+      row(
+        1,
+        landed > 0 ? [good(`${landed} of ${chosen.length} files`)] : [bad("nothing landed")],
+        [label("kept"), value(String(created))],
+        reinforced > 0 ? [label("reinforced"), value(String(reinforced))] : null,
+      ),
+    );
+  }
+
   say(...rows);
   return landed > 0 ? 0 : 1;
 }

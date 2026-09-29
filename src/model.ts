@@ -88,12 +88,7 @@ export const FLAGS: Record<string, FlagSpec> = {
   type: {
     name: "type",
     takes: "type",
-    what: "directive · fact · preference · observation",
-  },
-  kind: {
-    name: "kind",
-    takes: "type",
-    what: "directive · fact · preference · observation (alias for --type)",
+    what: "guard · directive · fact · preference · observation",
   },
   note: { name: "note", takes: "text", what: "what happened, in a sentence" },
   dir: { name: "dir", takes: "path", what: "which directory to act on" },
@@ -122,6 +117,14 @@ export const FLAGS: Record<string, FlagSpec> = {
   description: { name: "description", takes: "text", what: "description of the resource" },
   text: { name: "text", takes: "statement", what: "statement text content" },
   expires: { name: "expires", takes: "days", what: "token expiration duration in days" },
+  "dry-run": {
+    name: "dry-run",
+    what: "preview what would be imported without writing to memory",
+  },
+  json: {
+    name: "json",
+    what: "output results as JSON",
+  },
 };
 
 export interface Invocation {
