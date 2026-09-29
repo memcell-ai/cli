@@ -1,4 +1,6 @@
-import { call, MemcellError } from "../client.js";
+import { MemCellError } from "@memcell/sdk";
+import { MemcellError } from "../client.js";
+import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, good, id, label, place, row, say, value, variant } from "../ui.js";
 import { wired } from "./wired.js";
 
@@ -68,30 +70,28 @@ async function file(
   if (!here) return 1;
 
   try {
-    const written = await call<Written>(here.instance, "/api/v1/remember", {
-      method: "POST",
-      bearer: here.key,
-      body: {
-        text,
-        ...(typeOrKind ? { type: typeOrKind, kind: typeOrKind } : {}),
-        ...(appliesAt.length > 0 ? { applies_at: appliesAt } : {}),
-        ...(scope ? { scope } : {}),
-        ...(metadata ? { metadata } : {}),
-      },
-    });
+    const sdk = await getSdkClient(here.instance, { bearer: here.key });
+    const written = (await sdk.remember({
+      title: text,
+      type: typeOrKind as any,
+      kind: typeOrKind as any,
+      scope,
+      metadata,
+    } as any)) as unknown as Written;
+
     say(
       row(0, [badge("memcell"), label("remember"), place(here.space)]),
       row(
         1,
-        [good(written.note)],
-        [label("confidence"), value(written.confidence.toFixed(2))],
-        [variant(written.scope)],
+        [good(written.note || "Filed.")],
+        [label("confidence"), value(written.confidence ? written.confidence.toFixed(2) : "0.55")],
+        [variant(written.scope || "common")],
       ),
       row(2, [id(written.id)]),
     );
     return 0;
   } catch (error) {
-    if (error instanceof MemcellError) {
+    if (error instanceof MemcellError || error instanceof MemCellError) {
       say(
         row(0, [badge("memcell"), label("remember")]),
         row(1, [bad("refused")], [label(error.message)]),

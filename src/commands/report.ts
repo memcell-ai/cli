@@ -1,4 +1,6 @@
-import { call, MemcellError } from "../client.js";
+import { MemCellError } from "@memcell/sdk";
+import { MemcellError } from "../client.js";
+import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, good, label, place, row, say, value, warn } from "../ui.js";
 import { wired } from "./wired.js";
 
@@ -14,7 +16,7 @@ export async function report(
   note?: string,
   url?: string,
 ): Promise<number> {
-  if (!(OUTCOMES as readonly string[]).includes(outcome)) {
+  if (!(OUTCOMES as readonly string[]).includes(outcome as any)) {
     say(
       row(0, [badge("memcell"), label("report")]),
       row(1, [warn(`no outcome called ${outcome}`)], [value(OUTCOMES.join(" · "))]),
@@ -26,22 +28,28 @@ export async function report(
   if (!here) return 1;
 
   try {
-    const moved = await call<{ from: number; to: number }>(here.instance, "/api/v1/feedback", {
-      method: "POST",
-      bearer: here.key,
-      body: { statementId, outcome, ...(note ? { note } : {}) },
-    });
+    const sdk = await getSdkClient(here.instance, { bearer: here.key });
+    const moved = (await (sdk as any).feedback({
+      statementId,
+      outcome: outcome as any,
+      reason: note,
+      note,
+    })) as any;
+    const fromNum: number =
+      typeof moved.from === "number" ? moved.from : (moved.attributed?.[0]?.from ?? 0.5);
+    const toNum: number =
+      typeof moved.to === "number" ? moved.to : (moved.attributed?.[0]?.to ?? 0.6);
     say(
       row(0, [badge("memcell"), label("report"), place(here.space)]),
       row(
         1,
         [good(outcome)],
-        [label("confidence"), value(`${moved.from.toFixed(2)} → ${moved.to.toFixed(2)}`)],
+        [label("confidence"), value(`${fromNum.toFixed(2)} → ${toNum.toFixed(2)}`)],
       ),
     );
     return 0;
   } catch (error) {
-    if (error instanceof MemcellError) {
+    if (error instanceof MemcellError || error instanceof MemCellError) {
       say(
         row(0, [badge("memcell"), label("report")]),
         row(1, [bad("refused")], [label(error.message)]),

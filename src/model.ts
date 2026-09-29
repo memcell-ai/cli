@@ -75,7 +75,7 @@ export const FLAGS: Record<string, FlagSpec> = {
   pair: { name: "pair", takes: "id", what: "the pairing shown on the connect page" },
   format: {
     name: "format",
-    takes: "kind",
+    takes: "format",
     what: "json · agents-md · claude-md · cursorrules",
   },
   out: { name: "out", short: "o", takes: "file", what: "write here instead of stdout" },
@@ -107,6 +107,21 @@ export const FLAGS: Record<string, FlagSpec> = {
   scopes: { name: "scopes", takes: "scopes", what: "comma-separated operational scopes" },
   meta: { name: "meta", takes: "json", what: "structured JSON metadata" },
   to: { name: "to", takes: "scope", what: "target scope to promote to (default: common)" },
+  owner: { name: "owner", takes: "slug", what: "owner (user or organization slug)" },
+  status: { name: "status", takes: "status", what: "status filter or state" },
+  query: { name: "query", short: "q", takes: "text", what: "search query filter" },
+  cursor: { name: "cursor", takes: "cursor", what: "pagination cursor" },
+  page: { name: "page", takes: "number", what: "page number for pagination" },
+  role: { name: "role", takes: "role", what: "role (e.g. read, write, admin, owner, member)" },
+  into: { name: "into", takes: "target", what: "target project namespace to adopt into" },
+  timeframe: {
+    name: "timeframe",
+    takes: "window",
+    what: "telemetry timeframe: 24h · 7d · 30d · all",
+  },
+  description: { name: "description", takes: "text", what: "description of the resource" },
+  text: { name: "text", takes: "statement", what: "statement text content" },
+  expires: { name: "expires", takes: "days", what: "token expiration duration in days" },
 };
 
 export interface Invocation {
