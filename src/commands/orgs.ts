@@ -1,30 +1,36 @@
-import { call, MemcellError } from "../client.js";
+import { MemCellError } from "@memcell/sdk";
 import { get, set } from "../config.js";
 import { credentialFor } from "../instance.js";
-import { badge, cmd, good, label, place, row, say, value, variant, warn } from "../ui.js";
-
-interface OrganizationItem {
-  id: string;
-  name: string;
-  slug: string;
-  role: string;
-}
-
-interface OrganizationListResponse {
-  ok: boolean;
-  organizations: OrganizationItem[];
-}
-
-interface CreateOrganizationResponse {
-  ok: boolean;
-  organization: OrganizationItem;
-}
+import { getSdkClient } from "../sdk-client.js";
+import {
+  badge,
+  bad,
+  cmd,
+  good,
+  id as idSeg,
+  label,
+  place,
+  row,
+  say,
+  time,
+  value,
+  variant,
+  warn,
+} from "../ui.js";
 
 const needsSession = (instance: string) =>
   say(
     row(0, [badge("memcell"), place(instance)]),
     row(1, [warn("not signed in")], [label("run"), cmd("memcell login")]),
   );
+
+function refused(instance: string, failure: Error): number {
+  say(
+    row(0, [badge("memcell"), place(instance)]),
+    row(1, [warn("refused")], [label(failure.message)]),
+  );
+  return 1;
+}
 
 export async function listOrganizations(instance: string): Promise<number> {
   if (!(await credentialFor(instance))) {
@@ -33,8 +39,8 @@ export async function listOrganizations(instance: string): Promise<number> {
   }
 
   try {
-    const res = await call<OrganizationListResponse>(instance, "/api/v1/organizations");
-    const organizations = res.organizations || [];
+    const sdk = await getSdkClient(instance);
+    const organizations = await sdk.organizations.list();
 
     const active = (await get("organization"))?.value as string | undefined;
 
@@ -54,7 +60,7 @@ export async function listOrganizations(instance: string): Promise<number> {
           1,
           [org.slug === active ? good(org.slug) : value(org.slug)],
           [label(org.name)],
-          [variant(org.role)],
+          org.role ? [variant(org.role)] : null,
           org.slug === active && [variant("active")],
         ),
       ),
@@ -62,14 +68,14 @@ export async function listOrganizations(instance: string): Promise<number> {
     );
     return 0;
   } catch (error) {
-    return refused(instance, error as MemcellError);
+    return refused(instance, error as Error);
   }
 }
 
 export async function createOrganization(
   instance: string,
   slug: string,
-  flags: { name?: string },
+  flags: { name?: string } = {},
 ): Promise<number> {
   if (!(await credentialFor(instance))) {
     needsSession(instance);
@@ -79,12 +85,9 @@ export async function createOrganization(
   const name = flags.name?.trim() || slug;
 
   try {
-    const res = await call<CreateOrganizationResponse>(instance, "/api/v1/organizations", {
-      method: "POST",
-      body: { slug, name },
-    });
+    const sdk = await getSdkClient(instance);
+    const created = await sdk.organizations.create({ slug, name });
 
-    const created = res.organization;
     await set("organization", created.slug || slug, "global");
 
     say(
@@ -98,7 +101,256 @@ export async function createOrganization(
     );
     return 0;
   } catch (error) {
-    return refused(instance, error as MemcellError);
+    return refused(instance, error as Error);
+  }
+}
+
+export async function getOrganization(instance: string, slug: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const org = await sdk.organizations.get(slug);
+
+    say(
+      row(0, [badge("memcell"), label("organization"), place(instance)]),
+      row(1, [good(org.name)], [value(org.slug)], org.role ? [variant(org.role)] : null),
+      org.id ? row(2, [idSeg(org.id)]) : null,
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function updateOrganization(
+  instance: string,
+  slug: string,
+  flags: { name?: string } = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const name = flags.name?.trim();
+    const updated = await sdk.organizations.update(slug, { name });
+
+    say(
+      row(0, [badge("memcell"), label("orgs update"), place(instance)]),
+      row(1, [good("updated")], [value(updated.slug)], [label(updated.name)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function deleteOrganization(instance: string, slug: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    await sdk.organizations.delete(slug);
+
+    // If active organization was this one, clear it
+    const active = (await get("organization"))?.value as string | undefined;
+    if (active === slug) {
+      await set("organization", "", "global");
+    }
+
+    say(
+      row(0, [badge("memcell"), label("orgs delete"), place(instance)]),
+      row(1, [good("deleted organization")], [value(slug)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function listOrgMembers(
+  instance: string,
+  slug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const role = typeof flags.role === "string" ? (flags.role as any) : undefined;
+    const res = await sdk.organizations.listMembers(slug, { role });
+    const members = res.items || [];
+
+    say(
+      row(
+        0,
+        [badge("memcell"), label("org members"), place(slug)],
+        [variant(`${members.length} member${members.length === 1 ? "" : "s"}`)],
+      ),
+      ...members.map((m) =>
+        row(
+          1,
+          [good(m.name || m.email || m.userId)],
+          [variant(m.role)],
+          m.email ? [label(m.email)] : null,
+          [idSeg(m.userId)],
+        ),
+      ),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function updateOrgMember(
+  instance: string,
+  slug: string,
+  userId: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const role = typeof flags.role === "string" ? (flags.role as any) : undefined;
+  if (!role) {
+    say(row(0, [bad("missing role")], [label("specify --role <owner|admin|member>")]));
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    await sdk.organizations.updateMemberRole(slug, userId, role);
+
+    say(
+      row(0, [badge("memcell"), label("org member update"), place(slug)]),
+      row(1, [good("updated member role")], [value(userId)], [label("to"), variant(role)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function removeOrgMember(
+  instance: string,
+  slug: string,
+  userId: string,
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    await sdk.organizations.removeMember(slug, userId);
+
+    say(
+      row(0, [badge("memcell"), label("org member remove"), place(slug)]),
+      row(1, [good("removed member")], [value(userId)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function listOrgInvitations(instance: string, slug: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const invitations = await sdk.organizations.listInvitations(slug);
+
+    say(
+      row(
+        0,
+        [badge("memcell"), label("org invitations"), place(slug)],
+        [variant(`${invitations.length}`)],
+      ),
+      ...invitations.map((inv) =>
+        row(
+          1,
+          [variant(inv.email)],
+          [label("role:"), variant(inv.role)],
+          inv.expiresAt ? [label("expires:"), time(String(inv.expiresAt))] : null,
+          [idSeg(inv.id)],
+        ),
+      ),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function inviteOrgMember(
+  instance: string,
+  slug: string,
+  email: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const role = typeof flags.role === "string" ? (flags.role as any) : "member";
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const invitation = await sdk.organizations.inviteMember(slug, { email, role });
+
+    say(
+      row(0, [badge("memcell"), label("org invite"), place(slug)]),
+      row(1, [good("invited")], [value(email)], [label("as"), variant(role)]),
+      row(2, [idSeg(invitation.id)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function revokeOrgInvitation(
+  instance: string,
+  slug: string,
+  invitationId: string,
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    await sdk.organizations.revokeInvitation(slug, invitationId);
+
+    say(
+      row(0, [badge("memcell"), label("org invite revoke"), place(slug)]),
+      row(1, [good("revoked invitation")], [idSeg(invitationId)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
   }
 }
 
@@ -118,8 +370,8 @@ export async function switchOrganization(instance: string, slug: string): Promis
   }
 
   try {
-    const res = await call<OrganizationListResponse>(instance, "/api/v1/organizations");
-    const organizations = res.organizations || [];
+    const sdk = await getSdkClient(instance);
+    const organizations = await sdk.organizations.list();
     const match = organizations.find(
       (o) => o.slug.toLowerCase() === slug.toLowerCase() || o.id === slug,
     );
@@ -141,14 +393,6 @@ export async function switchOrganization(instance: string, slug: string): Promis
     );
     return 0;
   } catch (error) {
-    return refused(instance, error as MemcellError);
+    return refused(instance, error as Error);
   }
-}
-
-function refused(instance: string, failure: MemcellError): number {
-  say(
-    row(0, [badge("memcell"), place(instance)]),
-    row(1, [warn("refused")], [label(failure.message)]),
-  );
-  return 1;
 }

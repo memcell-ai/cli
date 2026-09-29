@@ -1,27 +1,29 @@
+import { MemCellError } from "@memcell/sdk";
 import { call, MemcellError } from "../client.js";
 import { get } from "../config.js";
 import { credentialFor } from "../instance.js";
+import { resolveNamespace } from "../namespace.js";
 import { findProject } from "../project.js";
-import { badge, cmd, good, label, place, row, say, value, variant, warn } from "../ui.js";
-
-// Projects, and which one you are working on.
-//
-// `use` writes the active project preference on the user profile held by
-// the instance and read by every surface — so the terminal and the browser
-// agree on where statements land.
-//
-// A wired directory stays anchored: `connect` records its project, and a
-// directory files where it was wired regardless of what anybody switched to
-// since.
+import { getSdkClient } from "../sdk-client.js";
+import {
+  badge,
+  bad,
+  cmd,
+  good,
+  id as idSeg,
+  label,
+  place,
+  row,
+  say,
+  value,
+  variant,
+  warn,
+} from "../ui.js";
 
 interface Me {
   activeProject?: { slug: string; name: string } | null;
   activeSpace?: { slug: string; name: string } | null;
   projects?: { id: string; slug: string; name: string }[];
-}
-
-interface ProjectListResponse {
-  projects: { id: string; slug: string; name: string }[];
 }
 
 const needsSession = (instance: string) =>
@@ -30,20 +32,34 @@ const needsSession = (instance: string) =>
     row(1, [warn("not signed in")], [label("run"), cmd("memcell login")]),
   );
 
-export async function listProjects(instance: string): Promise<number> {
+function refused(instance: string, failure: Error): number {
+  say(
+    row(0, [badge("memcell"), place(instance)]),
+    row(1, [warn("refused")], [label(failure.message)]),
+  );
+  return 1;
+}
+
+export async function listProjects(
+  instance: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
   if (!(await credentialFor(instance))) {
     needsSession(instance);
     return 1;
   }
 
   try {
-    const [me, direct] = await Promise.all([
+    const sdk = await getSdkClient(instance);
+    const owner = typeof flags.owner === "string" ? flags.owner : undefined;
+
+    const [me, res] = await Promise.all([
       call<Me>(instance, "/api/v1/me").catch(() => null),
-      call<ProjectListResponse>(instance, "/api/v1/projects").catch(() => null),
+      (owner ? sdk.projects.listForOwner(owner) : sdk.projects.list()).catch(() => null),
     ]);
 
     const active = me?.activeProject || me?.activeSpace;
-    const projects = direct?.projects || me?.projects || [];
+    const projects = res?.items || me?.projects || [];
 
     if (projects.length === 0) {
       say(
@@ -75,34 +91,34 @@ export async function listProjects(instance: string): Promise<number> {
     );
     return 0;
   } catch (error) {
-    return refused(instance, error as MemcellError);
+    return refused(instance, error as Error);
   }
 }
 
-export async function newProject(instance: string, name: string): Promise<number> {
+export async function newProject(
+  instance: string,
+  name: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
   if (!(await credentialFor(instance))) {
     needsSession(instance);
     return 1;
   }
 
   try {
+    const sdk = await getSdkClient(instance);
     const activeOrg = (await get("organization"))?.value as string | undefined;
-    const body: Record<string, unknown> = { name };
-    if (activeOrg) {
-      body.owner = activeOrg;
-    }
+    const owner = typeof flags.owner === "string" ? flags.owner : activeOrg;
+    const description = typeof flags.description === "string" ? flags.description : undefined;
 
-    const created = await call<{
-      project?: { slug: string; name?: string };
-      slug?: string;
-      name?: string;
-    }>(instance, "/api/v1/projects", {
-      method: "POST",
-      body,
+    const created = await sdk.projects.create({
+      name,
+      ...(owner ? { owner } : {}),
+      ...(description ? { description } : {}),
     });
-    const proj = created.project ?? created;
-    const slug = proj.slug || name;
-    const projName = proj.name || name;
+
+    const slug = created.slug || name;
+    const projName = created.name || name;
 
     say(
       row(0, [badge("memcell"), place(instance)]),
@@ -112,7 +128,117 @@ export async function newProject(instance: string, name: string): Promise<number
     );
     return 0;
   } catch (error) {
-    return refused(instance, error as MemcellError);
+    return refused(instance, error as Error);
+  }
+}
+
+export async function getProject(
+  instance: string,
+  targetSlug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const namespace = await resolveNamespace(sdk, targetSlug);
+    const project = await sdk.projects.get(namespace);
+
+    say(
+      row(0, [badge("memcell"), label("project"), place(namespace)]),
+      row(1, [good(project.name)], [label(`(${project.slug})`)]),
+      project.description ? row(2, [label(project.description)]) : null,
+      project.id ? row(2, [idSeg(project.id)]) : null,
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function updateProject(
+  instance: string,
+  targetSlug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const namespace = await resolveNamespace(sdk, targetSlug);
+    const name = typeof flags.name === "string" ? flags.name : undefined;
+    const description = typeof flags.description === "string" ? flags.description : undefined;
+
+    const updated = await sdk.projects.update(namespace, {
+      name,
+      description,
+    });
+
+    say(
+      row(0, [badge("memcell"), label("projects update"), place(namespace)]),
+      row(1, [good("updated")], [value(updated.name)], [label(updated.slug)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function deleteProject(instance: string, targetSlug: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const namespace = await resolveNamespace(sdk, targetSlug);
+    await sdk.projects.delete(namespace);
+
+    say(
+      row(0, [badge("memcell"), label("projects delete"), place(namespace)]),
+      row(1, [good("deleted project")], [value(namespace)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function transferProject(
+  instance: string,
+  targetSlug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const to = typeof flags.to === "string" ? flags.to : (flags.owner as string | undefined);
+  if (!to) {
+    say(row(0, [bad("missing target owner")], [label("specify --to <new-owner>")]));
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const namespace = await resolveNamespace(sdk, targetSlug);
+    await sdk.projects.transfer(namespace, { targetOwner: to });
+
+    say(
+      row(0, [badge("memcell"), label("projects transfer"), place(namespace)]),
+      row(1, [good("transferred ownership to")], [value(to)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
   }
 }
 
@@ -148,14 +274,6 @@ export async function useProject(instance: string, slug: string): Promise<number
     );
     return 0;
   } catch (error) {
-    return refused(instance, error as MemcellError);
+    return refused(instance, error as Error);
   }
-}
-
-function refused(instance: string, failure: MemcellError): number {
-  say(
-    row(0, [badge("memcell"), place(instance)]),
-    row(1, [warn("refused")], [label(failure.message)]),
-  );
-  return 1;
 }
