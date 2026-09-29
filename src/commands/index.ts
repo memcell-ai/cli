@@ -730,12 +730,19 @@ export const COMMANDS: Command[] = [
   // ── Integration & Tooling ──────────────────────────────────────────────
   {
     path: ["import"],
-    what: "bring existing instruction files into memory — bare, it finds them",
+    what: "bring existing guidance or instruction files into memory — bare, it finds them",
     args: [{ name: "files", rest: true, what: "documents or a JSON export to distill" }],
-    takes: ["url"],
+    takes: ["url", "dry-run", "scope", "type", "json"],
     landing: true,
     run: ({ many, flags }) =>
-      importFiles(many.files ?? [], typeof flags.url === "string" ? flags.url : undefined),
+      importFiles({
+        files: many.files ?? [],
+        url: typeof flags.url === "string" ? flags.url : undefined,
+        dryRun: Boolean(flags["dry-run"]),
+        scope: typeof flags.scope === "string" ? flags.scope : undefined,
+        type: typeof flags.type === "string" ? flags.type : undefined,
+        json: Boolean(flags.json),
+      }),
   },
   {
     path: ["export"],
