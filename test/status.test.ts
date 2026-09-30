@@ -51,6 +51,22 @@ describe("status command", () => {
     expect(code).toBe(0);
   });
 
+  it("reports 0 when project is paused", async () => {
+    await saveProject(
+      { instance, owner: "memcell", project: "sample", space: "sample", paused: true },
+      projectDir,
+    );
+    answer = () => ({
+      user: { id: "u1", name: "Alice", isAnonymous: false },
+    });
+    const code = await status(instance, "project");
+    expect(code).toBe(0);
+    await saveProject(
+      { instance, owner: "memcell", project: "sample", space: "sample", paused: false },
+      projectDir,
+    );
+  });
+
   it("reports 0 when signed in but not connected in an empty directory", async () => {
     const emptyDir = await mkdtemp(join(tmpdir(), "memcell-status-empty-"));
     process.cwd = () => emptyDir;

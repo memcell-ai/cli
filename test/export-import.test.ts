@@ -200,7 +200,14 @@ describe("finding the instruction files a project already keeps", () => {
 
 describe("importFiles invocation", () => {
   it("returns 1 when directory is not wired", async () => {
-    const res = await importFiles({ files: [], dryRun: true });
-    expect(res).toBe(1);
+    const emptyDir = await mkdtemp(join(tmpdir(), "memcell-unwired-"));
+    const origCwd = process.cwd();
+    try {
+      process.chdir(emptyDir);
+      const res = await importFiles({ files: [], dryRun: true, url: "http://unwired.local" });
+      expect(res).toBe(1);
+    } finally {
+      process.chdir(origCwd);
+    }
   });
 });

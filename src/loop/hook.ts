@@ -165,6 +165,14 @@ export async function resolveProjectWiring(cwd?: string, program?: string): Prom
   const found = await findProject(cwd ?? process.cwd());
   if (!found) return { ok: false, why: "not wired · run memcell connect" };
 
+  if (found.project.paused) {
+    return {
+      ok: false,
+      why: "paused · run memcell resume",
+      project: found.project,
+    };
+  }
+
   // Identity is the keyring's, found by the wired directory and program —
   // the project file names the memory, never the person.
   const held = await agentKeyForProject(found.project.instance, dirname(found.at), program);
@@ -508,7 +516,9 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
     // the hooks fired four times, did nothing, and said so only in a log
     // nobody watches. An agent told nothing concludes memcell is broken; an
     // agent told this can say it out loud.
-    return moment === "session-start" ? { heard, context: here.why } : { heard };
+    return moment === "session-start" && !here.why.startsWith("paused")
+      ? { heard, context: here.why }
+      : { heard };
   }
 
   const { project, key } = here;

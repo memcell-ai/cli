@@ -38,17 +38,14 @@ export async function getSdkClient(
     if (init?.headers) {
       if (init.headers instanceof Headers || typeof (init.headers as any).forEach === "function") {
         (init.headers as any).forEach((value: string, key: string) => {
-          headersObj[key] = value;
           headersObj[key.toLowerCase()] = value;
         });
       } else if (Array.isArray(init.headers)) {
         for (const [key, value] of init.headers) {
-          headersObj[key] = value;
           headersObj[key.toLowerCase()] = value;
         }
       } else {
         for (const [key, value] of Object.entries(init.headers)) {
-          headersObj[key] = value as string;
           headersObj[key.toLowerCase()] = value as string;
         }
       }
@@ -145,10 +142,11 @@ export async function getSdkClient(
     };
 
     return new Proxy(res, {
-      get(target, prop, receiver) {
+      get(target, prop) {
         if (prop === "headers") return headersMap;
         if (prop === "json") return jsonFn;
-        return Reflect.get(target, prop, receiver);
+        const val = Reflect.get(target, prop, target);
+        return typeof val === "function" ? val.bind(target) : val;
       },
     });
   };
