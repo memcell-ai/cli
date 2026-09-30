@@ -164,16 +164,18 @@ describe("what one file delivers", () => {
 describe("finding the instruction files a project already keeps", () => {
   it("finds the known names and the cursor rules directory, nothing else", async () => {
     const root = await mkdtemp(join(tmpdir(), "memcell-import-"));
-    await writeFile(join(root, "CLAUDE.md"), "# rules");
-    await writeFile(join(root, ".cursorrules"), "rules");
-    await writeFile(join(root, "README.md"), "not instructions");
+    await writeFile(join(root, "README.md"), "# Project Overview");
+    await writeFile(join(root, "CLAUDE.md"), "# instructions");
+    await writeFile(join(root, ".cursorrules"), "instructions");
+    await writeFile(join(root, "package.json"), "{}");
     await mkdir(join(root, ".cursor", "rules"), { recursive: true });
     await writeFile(join(root, ".cursor", "rules", "b.mdc"), "b");
     await writeFile(join(root, ".cursor", "rules", "a.mdc"), "a");
-    await writeFile(join(root, ".cursor", "rules", "note.txt"), "not a rule");
+    await writeFile(join(root, ".cursor", "rules", "note.txt"), "not an instruction file");
 
     const found = await discover(root);
     expect(found).toEqual([
+      join(root, "README.md"),
       join(root, "CLAUDE.md"),
       join(root, ".cursorrules"),
       join(root, ".cursor", "rules", "a.mdc"),

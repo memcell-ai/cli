@@ -38,6 +38,7 @@ import { wired } from "./wired.js";
 
 /** Standing guidance files checked in bare discovery. */
 export const KNOWN_FILES = [
+  "README.md",
   "CLAUDE.md",
   "AGENTS.md",
   ".cursorrules",
@@ -65,6 +66,8 @@ export const KNOWN_DIRS: { dir: string; ext: string }[] = [
 export interface ImportOptions {
   files?: string[];
   url?: string;
+  project?: string;
+  owner?: string;
   dryRun?: boolean;
   scope?: string;
   type?: string;
@@ -182,9 +185,25 @@ export async function importFiles(
     ? { files: filesOrOptions, url: legacyUrl }
     : filesOrOptions;
 
-  const here = await wired("import", options.url);
-  if (!here) return 1;
-  const root = here.root;
+  const hasProject = Boolean(options.project);
+  const here = await wired("import", options.url, { silent: hasProject });
+
+  let targetSpace: string;
+  let root: string;
+  let targetInstance = options.url ?? "http://localhost:3000";
+  let targetBearer: string | undefined;
+
+  if (here) {
+    targetSpace = here.space;
+    root = here.root;
+    targetInstance = here.instance;
+    targetBearer = here.key;
+  } else if (options.project) {
+    targetSpace = options.project;
+    root = process.cwd();
+  } else {
+    return 1;
+  }
 
   const chosen = options.files && options.files.length > 0 ? options.files : await discover(root);
   if (chosen.length === 0) {
@@ -193,7 +212,7 @@ export async function importFiles(
         JSON.stringify(
           {
             ok: false,
-            space: here.space,
+            space: targetSpace,
             dryRun: Boolean(options.dryRun),
             files: [],
             totalCreated: 0,
@@ -208,7 +227,7 @@ export async function importFiles(
       return 1;
     }
     say(
-      row(0, [badge("memcell"), label("import"), place(here.space)]),
+      row(0, [badge("memcell"), label("import"), place(targetSpace)]),
       row(
         1,
         [warn("nothing to import")],
@@ -218,7 +237,7 @@ export async function importFiles(
     return 1;
   }
 
-  const rows: Row[] = [row(0, [badge("memcell"), label("import"), place(here.space)])];
+  const rows: Row[] = [row(0, [badge("memcell"), label("import"), place(targetSpace)])];
   const summaryFiles: ImportResultFile[] = [];
   let landed = 0;
   let created = 0;
@@ -271,9 +290,9 @@ export async function importFiles(
     );
 
     try {
-      const sdk = await getSdkClient(here.instance, { bearer: here.key });
+      const sdk = await getSdkClient(targetInstance, targetBearer ? { bearer: targetBearer } : {});
       const kept = await sdk.remember({
-        namespace: here.space,
+        namespace: targetSpace,
         title: shown,
         raw: delivery,
         type: options.type as any,
@@ -325,7 +344,7 @@ export async function importFiles(
   if (options.json) {
     const summary: ImportResultSummary = {
       ok: landed > 0,
-      space: here.space,
+      space: targetSpace,
       dryRun: Boolean(options.dryRun),
       files: summaryFiles,
       totalCreated: created,

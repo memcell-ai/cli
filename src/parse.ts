@@ -1,4 +1,4 @@
-import { FLAGS, type Command } from "./model.js";
+import { FLAGS, GLOBAL_FLAGS, type Command } from "./model.js";
 
 // One parser, driven by what the commands declare.
 //
@@ -123,7 +123,7 @@ export function parse(argv: string[], commands: Command[]): Parse {
   // Flags a command did not ask for are refused rather than ignored.
   const takes = new Set(command.takes ?? []);
   for (const name of Object.keys(flags)) {
-    if (!takes.has(name)) {
+    if (!takes.has(name) && !GLOBAL_FLAGS.has(name)) {
       return {
         kind: "error",
         message: `--${name} means nothing to ${command.path.join(" ")}`,

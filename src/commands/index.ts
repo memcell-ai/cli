@@ -64,11 +64,15 @@ import {
   getStatement,
   historyStatement,
   listStatements,
+  relateStatements,
   starStatement,
+  statementRelations,
+  unrelateStatements,
   updateStatement,
 } from "./statements.js";
 import { stats } from "./stats.js";
 import { status } from "./status.js";
+import { sweepConsolidate } from "./sweep.js";
 import { getUsage } from "./usage.js";
 
 /** The nouns, so help groups by resource instead of listing every verb. */
@@ -81,6 +85,7 @@ export const RESOURCES: Resource[] = [
   { name: "usage", what: "quotas, active metrics, and statement breakdowns" },
   { name: "account", what: "your profile and personal access tokens" },
   { name: "config", what: "settings, per project or per machine" },
+  { name: "sweep", what: "background consolidation and cognitive sleep cycles" },
   { name: "memories", what: "the commons" },
 ];
 
@@ -237,6 +242,42 @@ export const COMMANDS: Command[] = [
     run: ({ instance }) => stats(instance),
   },
 
+  // ── Sweep & Epistemic Consolidation ───────────────────────────────────
+  {
+    path: ["sweep"],
+    what: "run an epistemic consolidation sweep over the active project",
+    takes: [
+      "url",
+      "project",
+      "owner",
+      "min-similarity",
+      "min-cluster-size",
+      "max-cluster-size",
+      "wait",
+      "no-wait",
+      "json",
+    ],
+    landing: true,
+    run: ({ instance, flags, context }) => sweepConsolidate(instance, flags, context),
+  },
+  {
+    path: ["sweep", "consolidate"],
+    what: "run an epistemic consolidation sweep over the active project",
+    takes: [
+      "url",
+      "project",
+      "owner",
+      "min-similarity",
+      "min-cluster-size",
+      "max-cluster-size",
+      "wait",
+      "no-wait",
+      "json",
+    ],
+    landing: true,
+    run: ({ instance, flags, context }) => sweepConsolidate(instance, flags, context),
+  },
+
   // ── Statements Resource ────────────────────────────────────────────────
   {
     path: ["statements"],
@@ -324,6 +365,38 @@ export const COMMANDS: Command[] = [
         typeof flags.reason === "string" ? flags.reason : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
       ),
+  },
+  {
+    path: ["statements", "relate"],
+    what: "connect two statements with an epistemic relation edge",
+    args: [
+      { name: "source", required: true, what: "source statement ID" },
+      { name: "target", required: true, what: "target statement ID" },
+    ],
+    takes: ["url", "project", "type", "confidence"],
+    run: ({ instance, args, flags }) =>
+      relateStatements(instance, args.source!, args.target!, flags),
+  },
+  {
+    path: ["statements", "unrelate"],
+    what: "remove an epistemic relation edge between statements",
+    args: [
+      {
+        name: "arg1",
+        required: true,
+        what: "relation ID (or source statement ID if relation ID is second)",
+      },
+      { name: "arg2", required: false, what: "relation ID (if source statement ID is first)" },
+    ],
+    takes: ["url", "project"],
+    run: ({ instance, args, flags }) => unrelateStatements(instance, args.arg1!, args.arg2, flags),
+  },
+  {
+    path: ["statements", "relations"],
+    what: "list incoming and outgoing epistemic relations for a statement",
+    args: [{ name: "id", required: true, what: "statement ID" }],
+    takes: ["url", "project"],
+    run: ({ instance, args, flags }) => statementRelations(instance, args.id!, flags),
   },
 
   // ── Projects Resource ──────────────────────────────────────────────────
@@ -752,10 +825,12 @@ export const COMMANDS: Command[] = [
     args: [{ name: "files", rest: true, what: "documents or a JSON export to distill" }],
     takes: ["url", "dry-run", "scope", "type", "json"],
     landing: true,
-    run: ({ many, flags }) =>
+    run: ({ many, flags, context }) =>
       importFiles({
         files: many.files ?? [],
         url: typeof flags.url === "string" ? flags.url : undefined,
+        project: typeof flags.project === "string" ? flags.project : context?.project?.namespace,
+        owner: typeof flags.owner === "string" ? flags.owner : (context?.owner ?? undefined),
         dryRun: Boolean(flags["dry-run"]),
         scope: typeof flags.scope === "string" ? flags.scope : undefined,
         type: typeof flags.type === "string" ? flags.type : undefined,
@@ -767,11 +842,12 @@ export const COMMANDS: Command[] = [
     what: "carry this space out — one document, no account needed",
     takes: ["format", "out", "url"],
     landing: true,
-    run: ({ flags }) =>
+    run: ({ flags, context }) =>
       exportSpace(
         typeof flags.format === "string" ? flags.format : "json",
         typeof flags.out === "string" ? flags.out : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
+        typeof flags.project === "string" ? flags.project : context?.project?.namespace,
       ),
   },
   {

@@ -29,13 +29,19 @@ export interface Wired {
  *  could ever be reached. It selects among what this directory already has;
  *  it never reaches an instance nothing here is wired to, which is what
  *  keeps "where the directory points" the answer rather than a flag. */
-export async function wired(what: string, url?: string): Promise<Wired | null> {
+export async function wired(
+  what: string,
+  url?: string,
+  options: { silent?: boolean } = {},
+): Promise<Wired | null> {
   const found = await findProject(process.cwd());
   if (!found) {
-    say(
-      row(0, [badge("memcell"), label(what)]),
-      row(1, [warn("not wired")], [label("run"), cmd("memcell connect")]),
-    );
+    if (!options.silent) {
+      say(
+        row(0, [badge("memcell"), label(what)]),
+        row(1, [warn("not wired")], [label("run"), cmd("memcell connect")]),
+      );
+    }
     return null;
   }
   const root = dirname(found.at);
