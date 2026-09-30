@@ -53,6 +53,7 @@ import { promote } from "./promote.js";
 import { recall } from "./recall.js";
 import { remember } from "./remember.js";
 import { report } from "./report.js";
+import { pause, resume } from "./pause.js";
 import { reset } from "./reset.js";
 import { scopes } from "./scopes.js";
 import { seed } from "./seed.js";
@@ -139,6 +140,23 @@ export const COMMANDS: Command[] = [
     takes: ["force"],
     landing: true,
     run: ({ flags }) => reset(flags.force === true),
+  },
+  {
+    path: ["pause"],
+    what: "pause background hooks for this project",
+    landing: true,
+    run: ({ from }) => pause(from),
+  },
+  {
+    path: ["resume"],
+    what: "resume background hooks for this project",
+    landing: true,
+    run: ({ from }) => resume(from),
+  },
+  {
+    path: ["unpause"],
+    what: "resume background hooks for this project (alias for resume)",
+    run: ({ from }) => resume(from),
   },
 
   // ── High-Frequency Memory Loop Ergonomics ──────────────────────────────

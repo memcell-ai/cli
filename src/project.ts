@@ -37,11 +37,14 @@ export interface Project {
   space: string;
   /** The space id. `[space].id`. */
   spaceId?: string;
+  /** Whether background hooks are paused for this project. */
+  paused?: boolean;
 }
 
 interface Doc {
   instance?: { url?: string };
-  project?: { id?: string; slug?: string; owner?: string };
+  project?: { id?: string; slug?: string; owner?: string; paused?: boolean };
+  paused?: boolean;
   space?: { id?: string; slug?: string; owner?: string };
   [key: string]: unknown;
 }
@@ -53,6 +56,12 @@ function fromToml(text: string): Project | null {
   if (!instance || !slug) return null;
   const id = doc.project?.id ?? doc.space?.id;
   const owner = doc.project?.owner ?? doc.space?.owner;
+  const paused =
+    typeof doc.project?.paused === "boolean"
+      ? doc.project.paused
+      : typeof doc.paused === "boolean"
+        ? doc.paused
+        : undefined;
   return {
     instance,
     owner,
@@ -60,6 +69,7 @@ function fromToml(text: string): Project | null {
     projectId: id,
     space: slug,
     spaceId: id,
+    ...(typeof paused === "boolean" ? { paused } : {}),
   };
 }
 
@@ -67,6 +77,23 @@ function toToml(project: Project, existingDoc?: Doc): string {
   const slug = project.project || project.space;
   const id = project.projectId || project.spaceId;
   const owner = project.owner;
+  const paused = project.paused;
+  const projectTable = {
+    ...(typeof existingDoc?.project === "object" && existingDoc?.project
+      ? existingDoc.project
+      : {}),
+    ...(id ? { id } : {}),
+    ...(owner ? { owner } : {}),
+    slug,
+  };
+  if (typeof paused === "boolean") {
+    if (paused) {
+      projectTable.paused = true;
+    } else {
+      delete projectTable.paused;
+    }
+  }
+
   const doc: Doc = {
     ...(existingDoc ?? {}),
     instance: {
@@ -75,14 +102,7 @@ function toToml(project: Project, existingDoc?: Doc): string {
         : {}),
       url: project.instance,
     },
-    project: {
-      ...(typeof existingDoc?.project === "object" && existingDoc?.project
-        ? existingDoc.project
-        : {}),
-      ...(id ? { id } : {}),
-      ...(owner ? { owner } : {}),
-      slug,
-    },
+    project: projectTable,
     space: {
       ...(typeof existingDoc?.space === "object" && existingDoc?.space ? existingDoc.space : {}),
       ...(id ? { id } : {}),
@@ -90,6 +110,7 @@ function toToml(project: Project, existingDoc?: Doc): string {
       slug,
     },
   };
+  delete doc.paused;
   return stringify(doc);
 }
 
@@ -224,4 +245,19 @@ export async function saveProject(project: Project, at?: string): Promise<string
 
 export async function removeProject(at: string): Promise<void> {
   await rm(at, { force: true });
+}
+
+/**
+ * Toggles the paused status of the project.
+ * When paused, background hooks short-circuit immediately without contacting the instance.
+ */
+export async function setProjectPaused(
+  paused: boolean,
+  at?: string,
+): Promise<{ project: Project; at: string } | null> {
+  const found = at ? { project: (await findProject(at))?.project, at } : await findProject();
+  if (!found || !found.project) return null;
+  const updated: Project = { ...found.project, paused };
+  await saveProject(updated, found.at);
+  return { project: updated, at: found.at };
 }

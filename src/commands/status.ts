@@ -72,6 +72,13 @@ export async function status(instance: string, _from: string): Promise<number> {
         row(0, [badge("memcell"), place(instance)], [instanceScope]),
         row(1, [label("Account".padEnd(11, " ")), value(accountDisplay)]),
         row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]),
+        found.project.paused
+          ? row(
+              1,
+              [label("Status".padEnd(11, " ")), warn("paused")],
+              [label("hooks inactive · run memcell resume")],
+            )
+          : null,
         row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
         keyRow,
       );
