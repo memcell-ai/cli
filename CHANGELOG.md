@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.11](https://github.com/memcell-ai/cli/compare/memcell-v0.10.10...memcell-v0.10.11) (2026-09-30)
+
+
+### Features
+
+* **hooks:** add pause and resume commands and fix sdk client node24 proxy ([#52](https://github.com/memcell-ai/cli/issues/52)) ([5f04064](https://github.com/memcell-ai/cli/commit/5f040641ac1e49a3ccf912eb65a4a4d5939f47b6))
+
 ## [0.10.10](https://github.com/memcell-ai/cli/compare/memcell-v0.10.9...memcell-v0.10.10) (2026-09-29)
 
 
