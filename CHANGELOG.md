@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.12](https://github.com/memcell-ai/cli/compare/memcell-v0.10.11...memcell-v0.10.12) (2026-09-30)
+
+
+### Features
+
+* **sweep:** add memcell sweep consolidate command and epistemic relations CLI surface ([#54](https://github.com/memcell-ai/cli/issues/54)) ([87a714f](https://github.com/memcell-ai/cli/commit/87a714f0cca590f87ab52b35774b5a3f6c0c954a))
+
 ## [0.10.11](https://github.com/memcell-ai/cli/compare/memcell-v0.10.10...memcell-v0.10.11) (2026-09-30)
 
 
