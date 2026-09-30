@@ -9,6 +9,7 @@ import {
   revokeAgent,
   revokeAgentKey,
   updateAgent,
+  verifyAgents,
   whoamiAgent,
 } from "./agents.js";
 import {
@@ -457,20 +458,31 @@ export const COMMANDS: Command[] = [
   {
     path: ["agents"],
     what: "list agents and access keys",
-    takes: ["url", "project"],
-    run: ({ instance, flags }) => listAgents(instance, flags),
+    args: [{ name: "agent", required: false, what: "optional agent name to verify" }],
+    takes: ["url", "project", "verify", "json"],
+    run: ({ instance, args, flags }) => listAgents(instance, flags, args.agent),
   },
   {
     path: ["agents", "ls"],
     what: "list agents and access keys",
-    takes: ["url", "project"],
-    run: ({ instance, flags }) => listAgents(instance, flags),
+    args: [{ name: "agent", required: false, what: "optional agent name to verify" }],
+    takes: ["url", "project", "verify", "json"],
+    run: ({ instance, args, flags }) => listAgents(instance, flags, args.agent),
   },
   {
     path: ["agents", "list"],
     what: "list agents and access keys",
-    takes: ["url", "project"],
-    run: ({ instance, flags }) => listAgents(instance, flags),
+    args: [{ name: "agent", required: false, what: "optional agent name to verify" }],
+    takes: ["url", "project", "verify", "json"],
+    run: ({ instance, args, flags }) => listAgents(instance, flags, args.agent),
+  },
+  {
+    path: ["agents", "verify"],
+    what: "verify agent hook and MCP wiring in this workspace",
+    args: [{ name: "agent", required: false, what: "optional agent name to verify" }],
+    takes: ["url", "project", "json"],
+    run: ({ instance, args, flags }) =>
+      verifyAgents(instance, { ...flags, verify: true }, args.agent),
   },
   {
     path: ["agents", "get"],

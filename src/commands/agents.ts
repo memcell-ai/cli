@@ -1,5 +1,7 @@
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { MemCellError } from "@memcell/sdk";
+import { adapterFor, allAdapters, verifySkill } from "../adapters/index.js";
+import { agentNamed } from "../agents.js";
 import { agentStanding, call, MemcellError } from "../client.js";
 import { credentialFor } from "../instance.js";
 import { agentKeyForProject } from "../keyring.js";
@@ -10,9 +12,11 @@ import {
   badge,
   bad,
   cmd,
+  emit,
   good,
   id as idSeg,
   label,
+  list,
   place,
   row,
   say,
@@ -45,10 +49,149 @@ function refused(instance: string, failure: Error): number {
   return 1;
 }
 
+const toTitleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+
+export async function verifyAgents(
+  _instance: string,
+  flags: Record<string, string | true> = {},
+  targetAgent?: string,
+): Promise<number> {
+  let root: string;
+  if (
+    typeof flags.project === "string" &&
+    (flags.project.includes("/") || flags.project.includes("\\") || flags.project === ".")
+  ) {
+    root = resolve(flags.project);
+  } else {
+    const found = await findProject();
+    root = found ? dirname(found.at) : process.cwd();
+  }
+
+  const specific = targetAgent?.toLowerCase();
+  if (specific && !adapterFor(specific)) {
+    say(
+      row(0, [badge("memcell"), label("agent verification")]),
+      row(1, [bad(`unknown agent: ${specific}`)]),
+      row(2, [label("available:"), list(allAdapters().map((a) => a.name))]),
+    );
+    return 1;
+  }
+
+  const adaptersToTest = specific ? [adapterFor(specific)!] : allAdapters();
+
+  const found = await findProject(root);
+  const held = found ? await agentKeyForProject(found.project.instance, root) : null;
+
+  const results: {
+    name: string;
+    label: string;
+    wirings: { moment: string; event: string; ok: boolean }[];
+    total: number;
+    okCount: number;
+    wired: boolean;
+  }[] = [];
+
+  for (const adapter of adaptersToTest) {
+    const wirings = await adapter.verify(root).catch(() => []);
+    const okCount = wirings.filter((w) => w.ok).length;
+    const isProjectAgent = Boolean(
+      held?.agent && held.agent.toLowerCase() === adapter.name.toLowerCase(),
+    );
+    const isWired = okCount > 0 || isProjectAgent;
+
+    results.push({
+      name: adapter.name,
+      label: toTitleCase(agentNamed(adapter.name)?.label ?? adapter.name),
+      wirings,
+      total: wirings.length,
+      okCount,
+      wired: isWired,
+    });
+  }
+
+  const skill = verifySkill(root);
+
+  const displayed = specific ? results : results.filter((r) => r.wired);
+
+  if (flags.json) {
+    const anyFailed = displayed.some((r) => r.okCount < r.total);
+    const skillFailed = skill.present && !skill.current;
+    const payload = {
+      root,
+      agents: (specific ? results : displayed).map((r) => ({
+        name: r.name,
+        label: r.label,
+        wired: r.wired,
+        totalEvents: r.total,
+        okEvents: r.okCount,
+        wirings: r.wirings,
+      })),
+      skill,
+    };
+    emit(JSON.stringify(payload, null, 2) + "\n");
+    return anyFailed || skillFailed || (specific && !displayed[0]?.wired) ? 1 : 0;
+  }
+
+  say(row(0, [badge("memcell"), label("agent verification"), place(root)]));
+
+  if (displayed.length === 0 && !skill.present) {
+    say(
+      row(1, [warn("no agents wired here")]),
+      row(2, [label("connect an agent with"), cmd("memcell connect")]),
+    );
+    return 1;
+  }
+
+  let hasErrors = false;
+
+  for (const item of displayed) {
+    const allOk = item.okCount === item.total && item.total > 0;
+    if (!allOk) hasErrors = true;
+
+    say(
+      row(
+        1,
+        [value(item.label)],
+        [
+          allOk
+            ? good(`${item.okCount} of ${item.total} events wired`)
+            : bad(`${item.okCount} of ${item.total} events wired`),
+        ],
+      ),
+      ...item.wirings.map((w) =>
+        row(
+          2,
+          [w.ok ? good(w.event) : bad(w.event)],
+          [label(w.ok ? `(${w.moment})` : `missing (${w.moment})`)],
+        ),
+      ),
+    );
+  }
+
+  if (skill.present) {
+    say(
+      row(
+        1,
+        [value("Skill")],
+        [skill.current ? good("present & current") : warn("stale")],
+        [place(".agents/skills/memcell/SKILL.md")],
+      ),
+    );
+    if (!skill.current) hasErrors = true;
+  }
+
+  return hasErrors ? 1 : 0;
+}
+
 export async function listAgents(
   instance: string,
   flags: Record<string, string | true> = {},
+  targetAgent?: string,
 ): Promise<number> {
+  if (flags.verify) {
+    return verifyAgents(instance, flags, targetAgent);
+  }
+
   if (!(await credentialFor(instance))) {
     needsSession(instance);
     return 1;
