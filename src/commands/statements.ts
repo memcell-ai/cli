@@ -18,6 +18,15 @@ import {
   warn,
 } from "../ui.js";
 
+function getTargetProject(flags: Record<string, string | true>): string | undefined {
+  if (typeof flags.project !== "string") return undefined;
+  const proj = flags.project.trim();
+  if (typeof flags.owner === "string" && !proj.includes("/")) {
+    return `${flags.owner.trim()}/${proj}`;
+  }
+  return proj;
+}
+
 function refused(instance: string, failure: Error): number {
   say(
     row(0, [badge("memcell"), place(instance)]),
@@ -32,7 +41,7 @@ export async function listStatements(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const typeFilter =
@@ -100,10 +109,28 @@ export async function getStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const s = await sdk.statements.get(namespace, statementId);
+
+    let rels: { incoming: any[]; outgoing: any[] } = { incoming: [], outgoing: [] };
+    try {
+      const relNamespace = (sdk.statements as any).relations;
+      if (relNamespace?.list) {
+        rels = await relNamespace.list(namespace, statementId);
+      } else {
+        const parts = namespace.split("/");
+        rels = await (sdk as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/statements/${encodeURIComponent(statementId)}/relations`,
+          { method: "GET" },
+        );
+      }
+    } catch {
+      // Non-blocking on statement get
+    }
+
+    const hasRelations = (rels.incoming?.length || 0) > 0 || (rels.outgoing?.length || 0) > 0;
 
     say(
       row(0, [badge("memcell"), label("statement"), place(namespace)], [idSeg(s.id)]),
@@ -117,6 +144,29 @@ export async function getStatement(
       row(1, [label("statement:"), value(s.title)]),
       s.context ? row(2, [label("context:"), label(s.context)]) : null,
       s.createdAt ? row(2, [label("created:"), time(String(s.createdAt))]) : null,
+      ...(hasRelations
+        ? [
+            row(1, [label("relations:")]),
+            ...(rels.outgoing || []).map((r: any) =>
+              row(
+                2,
+                [variant("→")],
+                [variant(r.relationType || r.relation_type)],
+                [idSeg(r.targetId || r.target_id)],
+                r.targetStatement?.title ? [label(r.targetStatement.title)] : null,
+              ),
+            ),
+            ...(rels.incoming || []).map((r: any) =>
+              row(
+                2,
+                [variant("←")],
+                [variant(r.relationType || r.relation_type)],
+                [idSeg(r.sourceId || r.source_id)],
+                r.sourceStatement?.title ? [label(r.sourceStatement.title)] : null,
+              ),
+            ),
+          ]
+        : []),
     );
     return 0;
   } catch (error) {
@@ -131,7 +181,7 @@ export async function createStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const type =
@@ -180,7 +230,7 @@ export async function updateStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const statementText = typeof flags.text === "string" ? flags.text : undefined;
@@ -222,7 +272,7 @@ export async function deleteStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     await sdk.statements.delete(namespace, statementId);
@@ -244,7 +294,7 @@ export async function starStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const res = await sdk.statements.star(namespace, statementId);
@@ -266,7 +316,7 @@ export async function historyStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const res = await sdk.statements.history(namespace, statementId);
@@ -299,7 +349,7 @@ export async function adoptStatement(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = typeof flags.project === "string" ? flags.project : undefined;
+    const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
 
     const into = typeof flags.into === "string" ? flags.into : (flags.to as string | undefined);
@@ -315,6 +365,169 @@ export async function adoptStatement(
       row(0, [badge("memcell"), label("statements adopt"), place(namespace)]),
       row(1, [good("adopted into")], [value(into)]),
       row(2, [idSeg(targetInfo?.statementId || statementId)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function relateStatements(
+  instance: string,
+  sourceId: string,
+  targetId: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  try {
+    const sdk = await getSdkClient(instance);
+    const targetProject = getTargetProject(flags);
+    const namespace = await resolveNamespace(sdk, targetProject);
+
+    const relationType = typeof flags.type === "string" ? flags.type : "constrains";
+    const confidence = typeof flags.confidence === "string" ? parseFloat(flags.confidence) : 0.9;
+
+    const relNamespace = (sdk.statements as any).relations;
+    let rel: any;
+
+    if (relNamespace?.create) {
+      rel = await relNamespace.create(namespace, sourceId, {
+        targetId,
+        relationType,
+        confidence,
+      });
+    } else {
+      const parts = namespace.split("/");
+      const json = await (sdk as any).request(
+        `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/statements/${encodeURIComponent(sourceId)}/relations`,
+        {
+          method: "POST",
+          body: JSON.stringify({ targetId, relationType, confidence }),
+        },
+      );
+      rel = json.relation;
+    }
+
+    say(
+      row(0, [badge("memcell"), label("statements relate"), place(namespace)]),
+      row(
+        1,
+        [good("connected")],
+        [idSeg(sourceId)],
+        [variant(`--${rel.relationType || relationType}-->`)],
+        [idSeg(targetId)],
+      ),
+      row(2, [idSeg(rel.id)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function unrelateStatements(
+  instance: string,
+  arg1: string,
+  arg2?: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  try {
+    const sdk = await getSdkClient(instance);
+    const targetProject = getTargetProject(flags);
+    const namespace = await resolveNamespace(sdk, targetProject);
+
+    const statementId = arg2 ? arg1 : "_";
+    const relationId = arg2 ? arg2 : arg1;
+
+    const relNamespace = (sdk.statements as any).relations;
+    if (relNamespace?.delete) {
+      await relNamespace.delete(namespace, statementId, relationId);
+    } else {
+      const parts = namespace.split("/");
+      await (sdk as any).request(
+        `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/statements/${encodeURIComponent(statementId)}/relations/${encodeURIComponent(relationId)}`,
+        { method: "DELETE" },
+      );
+    }
+
+    say(
+      row(0, [badge("memcell"), label("statements unrelate"), place(namespace)]),
+      row(1, [good("unrelated")], [idSeg(relationId)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function statementRelations(
+  instance: string,
+  statementId: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  try {
+    const sdk = await getSdkClient(instance);
+    const targetProject = getTargetProject(flags);
+    const namespace = await resolveNamespace(sdk, targetProject);
+
+    const relNamespace = (sdk.statements as any).relations;
+    let res: { incoming: any[]; outgoing: any[] };
+
+    if (relNamespace?.list) {
+      res = await relNamespace.list(namespace, statementId);
+    } else {
+      const parts = namespace.split("/");
+      res = await (sdk as any).request(
+        `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/statements/${encodeURIComponent(statementId)}/relations`,
+        { method: "GET" },
+      );
+    }
+
+    const incoming = res.incoming || [];
+    const outgoing = res.outgoing || [];
+
+    if (incoming.length === 0 && outgoing.length === 0) {
+      say(
+        row(
+          0,
+          [badge("memcell"), label("statement relations"), place(namespace)],
+          [idSeg(statementId)],
+        ),
+        row(1, [label("no relations declared for this statement")]),
+        row(2, [
+          label("relate to another with"),
+          cmd(`memcell statements relate ${statementId} <targetId> --type <type>`),
+        ]),
+      );
+      return 0;
+    }
+
+    say(
+      row(
+        0,
+        [badge("memcell"), label("statement relations"), place(namespace)],
+        [idSeg(statementId)],
+        [variant(`${incoming.length + outgoing.length} total`)],
+      ),
+      ...outgoing.map((r: any) =>
+        row(
+          1,
+          [variant("→")],
+          [variant(r.relationType || r.relation_type)],
+          [idSeg(r.targetId || r.target_id)],
+          [value(r.confidence !== undefined ? r.confidence.toFixed(2) : "0.90")],
+          r.targetStatement?.title ? [label(r.targetStatement.title)] : null,
+        ),
+      ),
+      ...incoming.map((r: any) =>
+        row(
+          1,
+          [variant("←")],
+          [variant(r.relationType || r.relation_type)],
+          [idSeg(r.sourceId || r.source_id)],
+          [value(r.confidence !== undefined ? r.confidence.toFixed(2) : "0.90")],
+          r.sourceStatement?.title ? [label(r.sourceStatement.title)] : null,
+        ),
+      ),
     );
     return 0;
   } catch (error) {

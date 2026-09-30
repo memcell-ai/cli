@@ -110,6 +110,26 @@ describe("memcell import command", () => {
     expect(rememberedCalls[0].metadata?.origin).toBeDefined();
   });
 
+  it("imports into explicit project when directory is not wired locally", async () => {
+    mockWiredState.current = null;
+    const testFile = join(tempDir, "policy.md");
+    await writeFile(testFile, "# Core Invariant\nAll operations must be audited.");
+
+    const res = await importFiles({
+      files: [testFile],
+      project: "remote-org/remote-proj",
+      type: "guard",
+    });
+
+    expect(res).toBe(0);
+    expect(mockSdk.remember).toHaveBeenCalledTimes(1);
+    expect(rememberedCalls[0]).toMatchObject({
+      namespace: "remote-org/remote-proj",
+      raw: "# Core Invariant\nAll operations must be audited.",
+      type: "guard",
+    });
+  });
+
   it("handles unreadable files gracefully without crashing", async () => {
     const missingFile = join(tempDir, "does-not-exist.md");
 

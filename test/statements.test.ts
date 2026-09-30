@@ -118,7 +118,7 @@ describe("statements get", () => {
       console.log = log;
     }
 
-    expect(calls).toHaveLength(1);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(calls[0]!.url).toBe("http://memcell.test/api/v1/acme/research/statements/stmt_1");
     const out = printed.join("\n");
     expect(out).toContain("Operating temperature threshold is 45C.");

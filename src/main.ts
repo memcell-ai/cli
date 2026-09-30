@@ -1,5 +1,6 @@
 import { migrateWiring } from "./adapters/index.js";
 import { COMMANDS } from "./commands/index.js";
+import { resolveContext, enforceRequirements } from "./context.js";
 import { detail, overview, refusal } from "./help.js";
 import { badInstance, whereInstance } from "./instance.js";
 import { parse } from "./parse.js";
@@ -61,12 +62,19 @@ export async function main(argv: string[], version: string): Promise<number> {
       const found = await findProject().catch(() => null);
       if (found) await migrateWiring(dirname(found.at)).catch(() => []);
 
+      const context = await resolveContext(instance, parsed.flags, from);
+      const gate = enforceRequirements(parsed.command, context);
+      if (!gate.ok) {
+        return gate.exitCode;
+      }
+
       const exitCode = await parsed.command.run({
         instance,
         from,
         args: parsed.args,
         flags: parsed.flags,
         many: parsed.many,
+        context,
       });
 
       const newerVersion = await updateCheck;

@@ -61,7 +61,12 @@ export const FLAGS: Record<string, FlagSpec> = {
     env: "MEMCELL_INSTANCE",
   },
   agent: { name: "agent", takes: "id", what: "the wired agent's id" },
-  project: { name: "project", takes: "slug", what: "which project to connect to, by slug" },
+  project: {
+    name: "project",
+    short: "p",
+    takes: "slug",
+    what: "which project to target, by slug or owner/slug",
+  },
   space: { name: "space", takes: "slug", what: "which space to connect to, by slug" },
   force: { name: "force", short: "f", what: "do it again even if it is already done" },
   "no-browser": {
@@ -125,7 +130,66 @@ export const FLAGS: Record<string, FlagSpec> = {
     name: "json",
     what: "output results as JSON",
   },
+  "min-similarity": {
+    name: "min-similarity",
+    takes: "float",
+    what: "minimum cosine similarity threshold for clustering (default: 0.80)",
+  },
+  "min-cluster-size": {
+    name: "min-cluster-size",
+    takes: "count",
+    what: "minimum statements per cluster (default: 2)",
+  },
+  "max-cluster-size": {
+    name: "max-cluster-size",
+    takes: "count",
+    what: "maximum statements per cluster (default: 8)",
+  },
+  wait: {
+    name: "wait",
+    what: "wait for background job completion and stream progress (default: true)",
+  },
+  "no-wait": {
+    name: "no-wait",
+    what: "submit consolidation job asynchronously without waiting",
+  },
 };
+
+/** Universal flags accepted across all commands without throwing unknown flag errors. */
+export const GLOBAL_FLAGS = new Set(["url", "project", "owner", "json"]);
+
+export interface ResolvedProject {
+  owner?: string;
+  project: string;
+  namespace: string;
+  projectId?: string;
+  at?: string;
+  source: "flag" | "file" | "config" | "active";
+}
+
+export interface ResolvedContext {
+  instance: string;
+  from: string;
+  credential: { token: string; obtainedAt?: string } | null;
+  project: ResolvedProject | null;
+  owner: string | null;
+}
+
+export interface CommandRequirements {
+  /** Whether the user must be authenticated with the instance.
+   *  - "required": Command halts if not logged in.
+   *  - "optional": Auth token passed if present, but unauthenticated execution is allowed.
+   *  - "none": Auth is completely irrelevant (e.g. login, help, version, reset).
+   */
+  auth?: "required" | "optional" | "none";
+
+  /** Whether the command requires an active project / namespace context.
+   *  - "required": Command halts if no project can be resolved.
+   *  - "optional": Resolves project if possible, but command can proceed without it.
+   *  - "none": No project needed (e.g. projects list, orgs list, account).
+   */
+  project?: "required" | "optional" | "none";
+}
 
 export interface Invocation {
   instance: string;
@@ -138,6 +202,7 @@ export interface Invocation {
   flags: Record<string, string | true>;
   /** Every value given for a repeatable flag or a rest argument, in order. */
   many: Record<string, string[]>;
+  context?: ResolvedContext;
 }
 
 export interface Command {
@@ -152,6 +217,7 @@ export interface Command {
   takes?: string[];
   /** Shown on the bare `memcell` screen. Three, so it tells a story. */
   landing?: boolean;
+  require?: CommandRequirements;
   run(invocation: Invocation): Promise<number>;
 }
 

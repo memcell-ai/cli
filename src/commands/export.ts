@@ -85,7 +85,12 @@ export function renderCursorrules(doc: ExportDoc): string {
   );
 }
 
-export async function exportSpace(format: string, out?: string, url?: string): Promise<number> {
+export async function exportSpace(
+  format: string,
+  out?: string,
+  url?: string,
+  targetProject?: string,
+): Promise<number> {
   if (!(EXPORT_FORMATS as readonly string[]).includes(format)) {
     say(
       row(0, [badge("memcell"), label("export")]),
@@ -94,14 +99,31 @@ export async function exportSpace(format: string, out?: string, url?: string): P
     return 1;
   }
 
-  const here = await wired("export", url);
-  if (!here) return 1;
+  const hasProject = Boolean(targetProject);
+  const here = await wired("export", url, { silent: hasProject });
+
+  let targetSpace: string;
+  let targetInstance = url ?? "http://localhost:3000";
+  let targetBearer: string | undefined;
+
+  if (here) {
+    targetSpace = here.space;
+    targetInstance = here.instance;
+    targetBearer = here.key;
+  } else if (targetProject) {
+    targetSpace = targetProject;
+  } else {
+    return 1;
+  }
 
   let doc: ExportDoc;
   try {
-    doc = await call<ExportDoc>(here.instance, "/api/v1/export", {
+    const exportPath = targetBearer
+      ? "/api/v1/export"
+      : `/api/v1/export?project=${encodeURIComponent(targetSpace)}`;
+    doc = await call<ExportDoc>(targetInstance, exportPath, {
       method: "GET",
-      bearer: here.key,
+      bearer: targetBearer,
     });
   } catch (error) {
     if (error instanceof MemcellError) {
@@ -127,14 +149,14 @@ export async function exportSpace(format: string, out?: string, url?: string): P
   if (out) {
     await writeFile(out, rendered);
     say(
-      row(0, [badge("memcell"), label("export"), place(here.space)]),
+      row(0, [badge("memcell"), label("export"), place(targetSpace)]),
       row(1, [good(`${doc.statements.length} statements`)], [value(format)], [place(out)]),
     );
   } else {
     // The document itself, piped clean; the receipt rides beside it.
     emit(rendered);
     aside(
-      row(0, [badge("memcell"), label("export"), place(here.space)]),
+      row(0, [badge("memcell"), label("export"), place(targetSpace)]),
       row(1, [good(`${doc.statements.length} statements`)], [value(format)]),
     );
   }
