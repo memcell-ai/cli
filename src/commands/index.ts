@@ -18,27 +18,43 @@ import {
   revokeCollaboratorInvite,
   updateCollaboratorRole,
 } from "./collaborators.js";
+import { exportAuditLogs, listAuditLogs } from "./audit.js";
 import { configGet, configSet } from "./config.js";
 import { connect } from "./connect.js";
 import { exportSpace } from "./export.js";
+import {
+  getFleetAgent,
+  grantFleetProject,
+  listFleet,
+  registerFleetAgent,
+  resumeFleetAgent,
+  revokeFleetProject,
+  suspendFleetAgent,
+} from "./fleet.js";
 import { hook, hookRemove } from "./hook.js";
 import { importFiles } from "./import.js";
+import { getEnterpriseInsights } from "./insights.js";
 import { login } from "./login.js";
 import { logout } from "./logout.js";
 import { mcp } from "./mcp.js";
 import {
+  configureOrgSSO,
   createOrganization,
   deleteOrganization,
+  deleteOrgSSO,
+  enforceOrgSSO,
   getOrganization,
   inviteOrgMember,
   listOrganizations,
   listOrgInvitations,
   listOrgMembers,
+  listOrgSSO,
   removeOrgMember,
   revokeOrgInvitation,
   switchOrganization,
   updateOrganization,
   updateOrgMember,
+  verifyOrgSSO,
 } from "./orgs.js";
 import {
   deleteProject,
@@ -50,6 +66,7 @@ import {
   useProject,
 } from "./projects.js";
 import { promote } from "./promote.js";
+import { approvePromotion, listPromotions, rejectPromotion } from "./promotions.js";
 import { recall } from "./recall.js";
 import { remember } from "./remember.js";
 import { report } from "./report.js";
@@ -78,6 +95,7 @@ import { getUsage } from "./usage.js";
 /** The nouns, so help groups by resource instead of listing every verb. */
 export const RESOURCES: Resource[] = [
   { name: "statements", what: "atomic units of memory, lifecycle and exploration" },
+  { name: "promotions", what: "scope promotion requests and governance review" },
   { name: "projects", what: "what you work on, and which one is active" },
   { name: "collaborators", what: "people with access to this project" },
   { name: "agents", what: "registered agents and access keys" },
@@ -94,10 +112,14 @@ export const COMMANDS: Command[] = [
   {
     path: ["login"],
     what: "sign this machine in",
-    takes: ["url", "force", "no-browser"],
+    takes: ["url", "force", "no-browser", "sso"],
     landing: true,
     run: ({ instance, flags }) =>
-      login(instance, { force: flags.force === true, noBrowser: flags["no-browser"] === true }),
+      login(instance, {
+        force: flags.force === true,
+        noBrowser: flags["no-browser"] === true,
+        sso: typeof flags.sso === "string" ? flags.sso : undefined,
+      }),
   },
   {
     path: ["logout"],
@@ -169,7 +191,7 @@ export const COMMANDS: Command[] = [
     path: ["recall"],
     what: "what memory serves before you act",
     args: [{ name: "intent", required: true, what: "what you are trying to do or know" }],
-    takes: ["limit", "url", "scope", "scopes"],
+    takes: ["limit", "url", "scope", "scopes", "my-memory", "my"],
     landing: true,
     run: ({ args, flags }) =>
       recall(
@@ -178,13 +200,14 @@ export const COMMANDS: Command[] = [
         typeof flags.url === "string" ? flags.url : undefined,
         typeof flags.scope === "string" ? flags.scope : undefined,
         typeof flags.scopes === "string" ? flags.scopes : undefined,
+        flags["my-memory"] === true || flags.my === true,
       ),
   },
   {
     path: ["remember"],
     what: "file one thing this project has established — --at names when a directive applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
-    takes: ["type", "kind", "at", "url", "scope", "meta"],
+    takes: ["type", "kind", "at", "url", "scope", "meta", "subject", "target", "roles"],
     run: ({ args, flags }) =>
       remember(
         args.text!,
@@ -197,6 +220,12 @@ export const COMMANDS: Command[] = [
         typeof flags.url === "string" ? flags.url : undefined,
         typeof flags.scope === "string" ? flags.scope : undefined,
         typeof flags.meta === "string" ? flags.meta : undefined,
+        typeof flags.subject === "string"
+          ? flags.subject
+          : typeof flags.target === "string"
+            ? flags.target
+            : undefined,
+        typeof flags.roles === "string" ? flags.roles : undefined,
       ),
   },
   {
@@ -217,15 +246,55 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["promote"],
-    what: "elevate a statement to common baseline or target scope",
+    what: "elevate a statement to project, team, or organization scope",
     args: [{ name: "statement", required: true, what: "the statement's id" }],
     takes: ["to", "reason", "url"],
     run: ({ args, flags }) =>
       promote(
         args.statement!,
-        typeof flags.to === "string" ? flags.to : "common",
+        typeof flags.to === "string" ? flags.to : "project",
         typeof flags.reason === "string" ? flags.reason : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
+      ),
+  },
+  {
+    path: ["promotions"],
+    what: "list pending scope promotion requests for review",
+    takes: ["url", "status", "project"],
+    landing: true,
+    run: ({ instance, flags }) => listPromotions(instance, flags),
+  },
+  {
+    path: ["promotions", "list"],
+    what: "list scope promotion requests for review",
+    takes: ["url", "status", "project"],
+    landing: true,
+    run: ({ instance, flags }) => listPromotions(instance, flags),
+  },
+  {
+    path: ["promotions", "approve"],
+    what: "approve a pending scope promotion request",
+    args: [{ name: "request", required: true, what: "the promotion request's id" }],
+    takes: ["url", "reason", "project"],
+    run: ({ instance, args, flags }) =>
+      approvePromotion(
+        instance,
+        args.request!,
+        typeof flags.reason === "string" ? flags.reason : undefined,
+        flags,
+      ),
+  },
+  {
+    path: ["promotions", "reject"],
+    what: "reject a pending scope promotion request",
+    args: [{ name: "request", required: true, what: "the promotion request's id" }],
+    takes: ["url", "reason", "project"],
+    run: ({ instance, args, flags }) =>
+      rejectPromotion(
+        instance,
+        args.request!,
+        typeof flags.reason === "string" ? flags.reason : undefined,
+        flags,
       ),
   },
   {
@@ -280,6 +349,19 @@ export const COMMANDS: Command[] = [
 
   // ── Statements Resource ────────────────────────────────────────────────
   {
+    path: ["list"],
+    what: "list statements in the active project",
+    takes: ["url", "project", "type", "kind", "status", "scope", "query", "limit", "page"],
+    landing: true,
+    run: ({ instance, flags }) => listStatements(instance, flags),
+  },
+  {
+    path: ["ls"],
+    what: "list statements in the active project",
+    takes: ["url", "project", "type", "kind", "status", "scope", "query", "limit", "page"],
+    run: ({ instance, flags }) => listStatements(instance, flags),
+  },
+  {
     path: ["statements"],
     what: "list statements in the active project",
     takes: ["url", "project", "type", "kind", "status", "scope", "query", "limit", "page"],
@@ -308,14 +390,38 @@ export const COMMANDS: Command[] = [
     path: ["statements", "create"],
     what: "create a statement directly in the project",
     args: [{ name: "text", required: true, what: "the statement text" }],
-    takes: ["url", "project", "name", "type", "kind", "scope", "status", "meta"],
+    takes: [
+      "url",
+      "project",
+      "name",
+      "type",
+      "kind",
+      "scope",
+      "status",
+      "meta",
+      "roles",
+      "subject",
+      "target",
+    ],
     run: ({ instance, args, flags }) => createStatement(instance, args.text!, flags),
   },
   {
     path: ["statements", "new"],
     what: "create a statement directly in the project",
     args: [{ name: "text", required: true, what: "the statement text" }],
-    takes: ["url", "project", "name", "type", "kind", "scope", "status", "meta"],
+    takes: [
+      "url",
+      "project",
+      "name",
+      "type",
+      "kind",
+      "scope",
+      "status",
+      "meta",
+      "roles",
+      "subject",
+      "target",
+    ],
     run: ({ instance, args, flags }) => createStatement(instance, args.text!, flags),
   },
   {
@@ -355,13 +461,13 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["statements", "promote"],
-    what: "elevate a statement to common baseline or target scope",
+    what: "elevate a statement to project, team, or organization scope",
     args: [{ name: "statement", required: true, what: "statement ID" }],
     takes: ["to", "reason", "url"],
     run: ({ args, flags }) =>
       promote(
         args.statement!,
-        typeof flags.to === "string" ? flags.to : "common",
+        typeof flags.to === "string" ? flags.to : "project",
         typeof flags.reason === "string" ? flags.reason : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
       ),
@@ -742,6 +848,63 @@ export const COMMANDS: Command[] = [
     takes: ["url"],
     run: ({ instance, args }) => revokeOrgInvitation(instance, args.slug!, args.invitation!),
   },
+  {
+    path: ["orgs", "sso"],
+    what: "list configured SSO identity providers for an organization",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url"],
+    run: ({ instance, args }) => listOrgSSO(instance, args.slug!),
+  },
+  {
+    path: ["orgs", "sso", "list"],
+    what: "list configured SSO identity providers for an organization",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url"],
+    run: ({ instance, args }) => listOrgSSO(instance, args.slug!),
+  },
+  {
+    path: ["orgs", "sso", "configure"],
+    what: "configure or update a SAML or OIDC provider for an organization",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: [
+      "url",
+      "provider-id",
+      "provider",
+      "type",
+      "domain",
+      "metadata-url",
+      "metadata-xml",
+      "client-id",
+      "client-secret",
+      "issuer",
+      "authorization-endpoint",
+      "token-endpoint",
+      "user-info-endpoint",
+      "jwks-uri",
+    ],
+    run: ({ instance, args, flags }) => configureOrgSSO(instance, args.slug!, flags),
+  },
+  {
+    path: ["orgs", "sso", "verify"],
+    what: "verify DNS TXT record for an organization SSO domain",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url", "provider-id", "provider"],
+    run: ({ instance, args, flags }) => verifyOrgSSO(instance, args.slug!, flags),
+  },
+  {
+    path: ["orgs", "sso", "enforce"],
+    what: "enable or disable strict SSO enforcement for an organization",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url", "enable", "disable", "off"],
+    run: ({ instance, args, flags }) => enforceOrgSSO(instance, args.slug!, flags),
+  },
+  {
+    path: ["orgs", "sso", "delete"],
+    what: "delete an organization SSO provider configuration",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url", "provider-id", "provider"],
+    run: ({ instance, args, flags }) => deleteOrgSSO(instance, args.slug!, flags),
+  },
 
   // ── Usage & Telemetry Resource ─────────────────────────────────────────
   {
@@ -905,5 +1068,162 @@ export const COMMANDS: Command[] = [
         reason: typeof flags.reason === "string" ? flags.reason : undefined,
         watch: flags["no-watch"] !== true,
       }),
+  },
+
+  // ── Fleet Resource ─────────────────────────────────────────────────────
+  {
+    path: ["fleet"],
+    what: "list autonomous agent fleet across the organization",
+    takes: ["url", "org", "scope", "status", "health", "team", "project", "json"],
+    run: ({ instance, flags }) => listFleet(instance, flags),
+  },
+  {
+    path: ["fleet", "list"],
+    what: "list autonomous agent fleet across the organization",
+    takes: ["url", "org", "scope", "status", "health", "team", "project", "json"],
+    run: ({ instance, flags }) => listFleet(instance, flags),
+  },
+  {
+    path: ["fleet", "ls"],
+    what: "list autonomous agent fleet across the organization",
+    takes: ["url", "org", "scope", "status", "health", "team", "project", "json"],
+    run: ({ instance, flags }) => listFleet(instance, flags),
+  },
+  {
+    path: ["fleet", "get"],
+    what: "inspect agent configuration, credentials, and cross-project grants",
+    args: [{ name: "agentId", required: true, what: "agent id" }],
+    takes: ["url", "org", "json"],
+    run: ({ instance, args, flags }) => getFleetAgent(instance, args.agentId!, flags),
+  },
+  {
+    path: ["fleet", "register"],
+    what: "register a new autonomous agent in the organizational fleet",
+    args: [{ name: "name", required: true, what: "display name for the agent" }],
+    takes: [
+      "url",
+      "org",
+      "slug",
+      "scope",
+      "framework",
+      "model",
+      "description",
+      "team",
+      "project",
+      "no-key",
+      "json",
+    ],
+    run: ({ instance, args, flags }) => registerFleetAgent(instance, args.name!, flags),
+  },
+  {
+    path: ["fleet", "suspend"],
+    what: "emergency kill-switch to immediately block gateway access for an agent",
+    args: [{ name: "agentId", required: true, what: "agent id" }],
+    takes: ["url", "org", "reason"],
+    run: ({ instance, args, flags }) => suspendFleetAgent(instance, args.agentId!, flags),
+  },
+  {
+    path: ["fleet", "kill"],
+    what: "emergency kill-switch to immediately block gateway access for an agent",
+    args: [{ name: "agentId", required: true, what: "agent id" }],
+    takes: ["url", "org", "reason"],
+    run: ({ instance, args, flags }) => suspendFleetAgent(instance, args.agentId!, flags),
+  },
+  {
+    path: ["fleet", "resume"],
+    what: "reactivate a suspended agent and restore gateway access",
+    args: [{ name: "agentId", required: true, what: "agent id" }],
+    takes: ["url", "org"],
+    run: ({ instance, args, flags }) => resumeFleetAgent(instance, args.agentId!, flags),
+  },
+  {
+    path: ["fleet", "grant"],
+    what: "grant cross-project access for an agent to a specific project",
+    args: [{ name: "agentId", required: true, what: "agent id" }],
+    takes: ["url", "org", "project", "permission"],
+    run: ({ instance, args, flags }) => grantFleetProject(instance, args.agentId!, flags),
+  },
+  {
+    path: ["fleet", "revoke"],
+    what: "revoke cross-project access for an agent from a project",
+    args: [{ name: "agentId", required: true, what: "agent id" }],
+    takes: ["url", "org", "project"],
+    run: ({ instance, args, flags }) => revokeFleetProject(instance, args.agentId!, flags),
+  },
+
+  // ── Audit Resource ─────────────────────────────────────────────────────
+  {
+    path: ["audit"],
+    what: "list immutable enterprise audit events",
+    takes: [
+      "url",
+      "org",
+      "actor",
+      "actor-type",
+      "action",
+      "target-type",
+      "target-id",
+      "project",
+      "team",
+      "from",
+      "to",
+      "limit",
+      "json",
+    ],
+    run: ({ instance, flags }) => listAuditLogs(instance, flags),
+  },
+  {
+    path: ["audit", "list"],
+    what: "list immutable enterprise audit events",
+    takes: [
+      "url",
+      "org",
+      "actor",
+      "actor-type",
+      "action",
+      "target-type",
+      "target-id",
+      "project",
+      "team",
+      "from",
+      "to",
+      "limit",
+      "json",
+    ],
+    run: ({ instance, flags }) => listAuditLogs(instance, flags),
+  },
+  {
+    path: ["audit", "ls"],
+    what: "list immutable enterprise audit events",
+    takes: [
+      "url",
+      "org",
+      "actor",
+      "actor-type",
+      "action",
+      "target-type",
+      "target-id",
+      "project",
+      "team",
+      "from",
+      "to",
+      "limit",
+      "json",
+    ],
+    run: ({ instance, flags }) => listAuditLogs(instance, flags),
+  },
+  {
+    path: ["audit", "export"],
+    what: "export enterprise audit logs formatted for SIEM (CEF, JSON, or CSV)",
+    takes: ["url", "org", "format", "out", "from", "to", "action", "project"],
+    run: ({ instance, flags }) => exportAuditLogs(instance, flags),
+  },
+
+  // ── Insights Resource ──────────────────────────────────────────────────
+  {
+    path: ["insights"],
+    what: "view enterprise cognitive telemetry, savings economics, and latency KPIs",
+    takes: ["url", "org", "timeframe", "team", "project", "json"],
+    run: ({ instance, flags }) => getEnterpriseInsights(instance, flags),
   },
 ];

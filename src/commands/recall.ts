@@ -1,7 +1,7 @@
 import { MemCellError } from "@memcell/sdk";
 import { MemcellError } from "../client.js";
 import { getSdkClient } from "../sdk-client.js";
-import { badge, bad, id, label, place, row, say, value, variant } from "../ui.js";
+import { badge, bad, id, label, place, row, say, scopeBadge, value, variant } from "../ui.js";
 import { wired } from "./wired.js";
 
 // `memcell recall <intent>` — what memory serves before acting, from a
@@ -28,6 +28,7 @@ export async function recall(
   url?: string,
   scope?: string,
   scopes?: string,
+  myMemory?: boolean,
 ): Promise<number> {
   const here = await wired("recall", url);
   if (!here) return 1;
@@ -47,7 +48,9 @@ export async function recall(
       limit: Number.isFinite(asked) && asked > 0 ? asked : undefined,
       scope,
       scopes: parsedScopes,
-    });
+      my_memory: myMemory,
+      myMemory,
+    } as any);
 
     const ansAny = answer as any;
     const rawList: any[] = ansAny.results || ansAny.statements || [];
@@ -83,6 +86,7 @@ export async function recall(
           1,
           [value(s.confidence.toFixed(2))],
           s.type || s.kind ? [variant(s.type || s.kind!)] : null,
+          [scopeBadge(s.layer || "project")],
           s.pinned ? [variant("pinned")] : null,
           !(s.verified ?? s.vouched) ? [variant("unvouched")] : null,
           [label(s.text)],

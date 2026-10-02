@@ -51,6 +51,8 @@ const ROLE = {
   bad: paint("38;5;167"),
   faint: paint("38;5;242"),
   dim: paint("2"),
+  blue: paint("38;5;75"),
+  purple: paint("38;5;141"),
 } as const;
 
 /** The marks that say what KIND of reading follows. */
@@ -101,7 +103,9 @@ export type Seg =
    *  came to look like a single list of six. */
   | { k: "list"; items: string[] }
   /** Plain text in the default ink. */
-  | { k: "text"; t: string };
+  | { k: "text"; t: string }
+  /** Provenance scope badge: [org], [team], [project], [my] */
+  | { k: "scope"; scope: string };
 
 export interface Row {
   depth: number;
@@ -134,6 +138,7 @@ export const cmd = (t: string): Seg => ({
 export const text = (t: string): Seg => ({ k: "text", t });
 export const chip = (tone: Tone): Seg => ({ k: "chip", tone });
 export const list = (items: string[]): Seg => ({ k: "list", items });
+export const scopeBadge = (scope: string = "project"): Seg => ({ k: "scope", scope });
 
 export const state = (tone: Tone, t: string, glyph?: string): Seg => ({
   k: "state",
@@ -245,6 +250,19 @@ function segText(seg: Seg): string {
       return seg.items.map((i) => ROLE.value(i)).join(ROLE.dim(", "));
     case "text":
       return seg.t;
+    case "scope": {
+      const s = seg.scope.toLowerCase();
+      if (s === "org" || s === "organization") {
+        return ROLE.blue("[org]");
+      }
+      if (s === "team") {
+        return ROLE.purple("[team]");
+      }
+      if (s === "user" || s === "my" || s === "my-memory") {
+        return ROLE.good("[my]");
+      }
+      return ROLE.ember("[project]");
+    }
   }
 }
 

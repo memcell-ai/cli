@@ -9,9 +9,11 @@ import {
   good,
   id as idSeg,
   label,
+  list,
   place,
   row,
   say,
+  scopeBadge,
   time,
   value,
   variant,
@@ -54,7 +56,19 @@ export async function listStatements(
     const page = typeof flags.page === "string" ? parseInt(flags.page, 10) : undefined;
     const limit = typeof flags.limit === "string" ? parseInt(flags.limit, 10) : undefined;
     const status = typeof flags.status === "string" ? (flags.status as any) : undefined;
-    const scope = typeof flags.scope === "string" ? flags.scope : undefined;
+    let scope: string | undefined;
+    if (typeof flags.scope === "string") {
+      const s = flags.scope.trim().toLowerCase();
+      if (s === "all") {
+        scope = undefined;
+      } else if (s === "my-memory" || s === "my") {
+        scope = "user";
+      } else if (s === "org") {
+        scope = "organization";
+      } else {
+        scope = s;
+      }
+    }
     const q = typeof flags.query === "string" ? flags.query : undefined;
 
     const res = await sdk.statements.list(namespace, {
@@ -88,7 +102,7 @@ export async function listStatements(
           1,
           [value(s.confidence !== undefined ? s.confidence.toFixed(2) : "0.50")],
           s.type ? [variant(s.type)] : null,
-          s.scope ? [variant(s.scope)] : null,
+          [scopeBadge(s.scope || "project")],
           s.status === "pinned" ? [variant("pinned")] : null,
           [label(s.title)],
         ),
@@ -138,11 +152,22 @@ export async function getStatement(
         1,
         [value(s.confidence !== undefined ? s.confidence.toFixed(2) : "0.50")],
         s.type ? [variant(s.type)] : null,
-        s.scope ? [variant(s.scope)] : null,
+        [scopeBadge(s.scope || "project")],
         s.status ? [variant(s.status)] : null,
       ),
       row(1, [label("statement:"), value(s.title)]),
       s.context ? row(2, [label("context:"), label(s.context)]) : null,
+      (s as any).requiredRoles?.length
+        ? row(2, [label("required roles:"), list((s as any).requiredRoles)])
+        : null,
+      (s as any).scopePromotedAt
+        ? row(
+            2,
+            [label("promoted:")],
+            [time(String((s as any).scopePromotedAt))],
+            (s as any).scopePromotedBy ? [label(`by ${(s as any).scopePromotedBy}`)] : null,
+          )
+        : null,
       s.createdAt ? row(2, [label("created:"), time(String(s.createdAt))]) : null,
       ...(hasRelations
         ? [
@@ -191,7 +216,33 @@ export async function createStatement(
           ? flags.kind
           : undefined;
 
-    const scope = typeof flags.scope === "string" ? flags.scope : undefined;
+    let scope: string | undefined;
+    if (typeof flags.scope === "string") {
+      const s = flags.scope.trim().toLowerCase();
+      if (s === "my-memory" || s === "my") {
+        scope = "user";
+      } else if (s === "org") {
+        scope = "organization";
+      } else {
+        scope = s;
+      }
+    }
+
+    const roles =
+      typeof flags.roles === "string"
+        ? flags.roles
+            .split(",")
+            .map((r) => r.trim())
+            .filter(Boolean)
+        : undefined;
+
+    const subject =
+      typeof flags.subject === "string"
+        ? flags.subject
+        : typeof flags.target === "string"
+          ? flags.target
+          : undefined;
+
     const status = typeof flags.status === "string" ? (flags.status as any) : undefined;
 
     let metadata: Record<string, unknown> | undefined;
@@ -209,12 +260,19 @@ export async function createStatement(
       type: type as any,
       scope,
       status,
+      subject,
+      requiredRoles: roles,
       metadata,
-    });
+    } as any);
 
     say(
       row(0, [badge("memcell"), label("statements create"), place(namespace)]),
-      row(1, [good("created")], [value(created.id)]),
+      row(
+        1,
+        [good("created")],
+        [value(created.id)],
+        [scopeBadge(created.scope || scope || "project")],
+      ),
       row(2, [label(created.title || statementText)]),
     );
     return 0;
