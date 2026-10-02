@@ -33,6 +33,8 @@ interface CallOptions {
   headers?: Record<string, string>;
   /** Max retries on HTTP 429 Too Many Requests before failing. Default is 3. */
   retries?: number;
+  /** Accept raw text response rather than enforcing JSON */
+  raw?: boolean;
 }
 
 /** How long a person waits before an unanswered instance is a failure
@@ -69,6 +71,7 @@ export async function call<T>(
     timeoutMs,
     headers: customHeaders,
     retries = 3,
+    raw = false,
   }: CallOptions = {},
 ): Promise<T> {
   // An instance that accepts the connection and never answers would
@@ -178,6 +181,10 @@ export async function call<T>(
           : `${instance} answered ${response.status}, not memcell — check the address.`);
 
       throw new MemcellError(message, response.status, parsed);
+    }
+
+    if (raw) {
+      return text as unknown as T;
     }
 
     if (text && !isJson) {

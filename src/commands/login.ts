@@ -1,8 +1,22 @@
 import { deviceGrant } from "../grant.js";
-import { whoami } from "../client.js";
+import { call, whoami } from "../client.js";
 import { credentialFor } from "../instance.js";
 import { findProject } from "../project.js";
-import { badge, cmd, good, label, place, row, say, value, warn, type Row } from "../ui.js";
+import { getSdkClient } from "../sdk-client.js";
+import {
+  badge,
+  cmd,
+  good,
+  bad,
+  label,
+  place,
+  row,
+  say,
+  value,
+  variant,
+  warn,
+  type Row,
+} from "../ui.js";
 
 // This machine, and who is behind it. A terminal cannot hold a browser
 // session, so it takes the standard device grant (shared in ../grant): ask
@@ -31,8 +45,37 @@ async function hereNext(): Promise<Row[]> {
 
 export async function login(
   instance: string,
-  options: { force?: boolean; noBrowser?: boolean } = {},
+  options: { force?: boolean; noBrowser?: boolean; sso?: string } = {},
 ): Promise<number> {
+  if (options.sso) {
+    try {
+      let lookup: any;
+      const sdk = await getSdkClient(instance, { anonymous: true });
+      if (typeof (sdk.organizations as any)?.sso?.lookup === "function") {
+        lookup = await (sdk.organizations as any).sso.lookup(options.sso);
+      } else {
+        const param = options.sso.includes("@") ? "email" : "domain";
+        lookup = await call<any>(
+          instance,
+          `/api/v1/auth/sso/lookup?${param}=${encodeURIComponent(options.sso)}`,
+          { anonymous: true },
+        );
+      }
+
+      say(
+        row(0, [badge("memcell"), label("enterprise sso"), place(lookup.organization.name)]),
+        row(1, [good("domain verified")], [label(lookup.domain)]),
+        row(2, [label("authenticating via"), variant(lookup.provider.providerId)]),
+      );
+    } catch (error) {
+      say(
+        row(0, [badge("memcell"), label("enterprise sso"), place(options.sso)]),
+        row(1, [bad("sso lookup failed")], [label((error as Error).message)]),
+      );
+      return 1;
+    }
+  }
+
   // Already connected is worth saying rather than silently redoing.
   if (!options.force) {
     const existing = await credentialFor(instance);
@@ -52,7 +95,7 @@ export async function login(
 
   const granted = await deviceGrant(instance, {
     noBrowser: options.noBrowser,
-    retry: "memcell login",
+    retry: options.sso ? `memcell login --sso ${options.sso}` : "memcell login",
   });
   if (!granted) return 1;
 

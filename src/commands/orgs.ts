@@ -1,4 +1,5 @@
 import { MemCellError } from "@memcell/sdk";
+import { call } from "../client.js";
 import { get, set } from "../config.js";
 import { credentialFor } from "../instance.js";
 import { getSdkClient } from "../sdk-client.js";
@@ -390,6 +391,335 @@ export async function switchOrganization(instance: string, slug: string): Promis
     say(
       row(0, [badge("memcell"), place(instance)]),
       row(1, [good("Active organization set to")], [value(match.slug)], [label(".")]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function listOrgSSO(instance: string, slug: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    let res: any;
+    if (typeof (sdk.organizations as any)?.sso?.get === "function") {
+      res = await (sdk.organizations as any).sso.get(slug);
+    } else {
+      res = await call<any>(instance, `/api/v1/organizations/${encodeURIComponent(slug)}/sso`, {
+        method: "GET",
+      });
+    }
+
+    const org = res.organization || {};
+    const providers = res.providers || [];
+
+    say(
+      row(
+        0,
+        [badge("memcell"), label("org sso"), place(slug)],
+        [variant(org.ssoEnforced ? "enforced" : "optional")],
+        [variant(`${providers.length} provider${providers.length === 1 ? "" : "s"}`)],
+      ),
+      ...(providers.length === 0
+        ? [
+            row(1, [label("no sso providers configured")]),
+            row(2, [
+              label("configure one with"),
+              cmd(`memcell orgs sso configure ${slug} --provider-id <id> --domain <domain>`),
+            ]),
+          ]
+        : providers.map((p: any) =>
+            row(
+              1,
+              [good(p.providerId)],
+              [variant(p.type)],
+              [value(p.domain || "no domain")],
+              [variant(p.domainVerified ? "verified" : "unverified")],
+              [idSeg(p.id)],
+            ),
+          )),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function configureOrgSSO(
+  instance: string,
+  slug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const providerId =
+    typeof flags["provider-id"] === "string"
+      ? flags["provider-id"]
+      : typeof flags.provider === "string"
+        ? flags.provider
+        : undefined;
+
+  if (!providerId) {
+    say(
+      row(
+        0,
+        [bad("missing provider ID")],
+        [label("specify --provider-id <id> (e.g. okta, entra-id)")],
+      ),
+    );
+    return 1;
+  }
+
+  const type = flags.type === "oidc" ? "oidc" : "saml";
+  const domain = typeof flags.domain === "string" ? flags.domain : undefined;
+  const metadataUrl = typeof flags["metadata-url"] === "string" ? flags["metadata-url"] : undefined;
+  const metadataXml = typeof flags["metadata-xml"] === "string" ? flags["metadata-xml"] : undefined;
+  const clientId = typeof flags["client-id"] === "string" ? flags["client-id"] : undefined;
+  const clientSecret =
+    typeof flags["client-secret"] === "string" ? flags["client-secret"] : undefined;
+  const issuer = typeof flags.issuer === "string" ? flags.issuer : undefined;
+  const authorizationEndpoint =
+    typeof flags["authorization-endpoint"] === "string"
+      ? flags["authorization-endpoint"]
+      : undefined;
+  const tokenEndpoint =
+    typeof flags["token-endpoint"] === "string" ? flags["token-endpoint"] : undefined;
+  const userInfoEndpoint =
+    typeof flags["user-info-endpoint"] === "string" ? flags["user-info-endpoint"] : undefined;
+  const jwksUri = typeof flags["jwks-uri"] === "string" ? flags["jwks-uri"] : undefined;
+
+  const payload = {
+    providerId,
+    type,
+    domain,
+    metadataUrl,
+    metadataXml,
+    clientId,
+    clientSecret,
+    issuer,
+    authorizationEndpoint,
+    tokenEndpoint,
+    userInfoEndpoint,
+    jwksUri,
+  };
+
+  try {
+    const sdk = await getSdkClient(instance);
+    let provider: any;
+    if (typeof (sdk.organizations as any)?.sso?.configure === "function") {
+      provider = await (sdk.organizations as any).sso.configure(slug, payload);
+    } else {
+      const res = await call<any>(
+        instance,
+        `/api/v1/organizations/${encodeURIComponent(slug)}/sso`,
+        {
+          method: "POST",
+          body: payload,
+        },
+      );
+      provider = res.provider || res;
+    }
+
+    say(
+      row(0, [badge("memcell"), label("org sso configure"), place(slug)]),
+      row(1, [good("configured provider")], [value(provider.providerId)], [variant(provider.type)]),
+      provider.domain
+        ? row(
+            2,
+            provider.domainVerified
+              ? [good("domain verified"), value(provider.domain)]
+              : [
+                  label("domain"),
+                  value(provider.domain),
+                  variant("unverified"),
+                  label("— run"),
+                  cmd(`memcell orgs sso verify ${slug} --provider-id ${provider.providerId}`),
+                ],
+          )
+        : null,
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function verifyOrgSSO(
+  instance: string,
+  slug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const providerId =
+    typeof flags["provider-id"] === "string"
+      ? flags["provider-id"]
+      : typeof flags.provider === "string"
+        ? flags.provider
+        : undefined;
+
+  if (!providerId) {
+    say(row(0, [bad("missing provider ID")], [label("specify --provider-id <id>")]));
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    let verifyRes: any;
+    if (typeof (sdk.organizations as any)?.sso?.verifyDomain === "function") {
+      verifyRes = await (sdk.organizations as any).sso.verifyDomain(slug, providerId);
+    } else {
+      verifyRes = await call<any>(
+        instance,
+        `/api/v1/organizations/${encodeURIComponent(slug)}/sso/verify-domain`,
+        {
+          method: "POST",
+          body: { providerId },
+        },
+      );
+    }
+
+    if (verifyRes.verified) {
+      say(
+        row(0, [badge("memcell"), label("org sso verify"), place(slug)]),
+        row(1, [good("domain verified successfully")], [value(providerId)]),
+      );
+      return 0;
+    }
+
+    let token: any;
+    if (typeof (sdk.organizations as any)?.sso?.getVerificationToken === "function") {
+      token = await (sdk.organizations as any).sso.getVerificationToken(slug, providerId);
+    } else {
+      token = await call<any>(
+        instance,
+        `/api/v1/organizations/${encodeURIComponent(slug)}/sso/token`,
+        {
+          method: "POST",
+          body: { providerId },
+        },
+      );
+    }
+
+    say(
+      row(0, [badge("memcell"), label("org sso verify"), place(slug)]),
+      row(1, [warn("domain verification pending")], [value(providerId)]),
+      row(2, [
+        label("add DNS TXT record:"),
+        good(token.recordName),
+        label("="),
+        value(token.recordValue),
+      ]),
+      row(3, [
+        label("then re-run"),
+        cmd(`memcell orgs sso verify ${slug} --provider-id ${providerId}`),
+      ]),
+    );
+    return 1;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function enforceOrgSSO(
+  instance: string,
+  slug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const disabled = flags.disable === true || flags.off === true || flags.disabled === true;
+  const ssoEnforced = !disabled;
+
+  try {
+    const sdk = await getSdkClient(instance);
+    let res: any;
+    if (typeof (sdk.organizations as any)?.sso?.setEnforcement === "function") {
+      res = await (sdk.organizations as any).sso.setEnforcement(slug, ssoEnforced);
+    } else {
+      res = await call<any>(
+        instance,
+        `/api/v1/organizations/${encodeURIComponent(slug)}/sso/enforce`,
+        {
+          method: "PATCH",
+          body: { ssoEnforced },
+        },
+      );
+    }
+
+    say(
+      row(0, [badge("memcell"), label("org sso enforce"), place(slug)]),
+      row(
+        1,
+        [good(res.ssoEnforced ? "SSO enforcement enabled" : "SSO enforcement disabled")],
+        [
+          label(
+            res.ssoEnforced
+              ? "password logins disabled for domain members"
+              : "password logins allowed",
+          ),
+        ],
+      ),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function deleteOrgSSO(
+  instance: string,
+  slug: string,
+  flags: Record<string, string | true> = {},
+): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  const providerId =
+    typeof flags["provider-id"] === "string"
+      ? flags["provider-id"]
+      : typeof flags.provider === "string"
+        ? flags.provider
+        : undefined;
+
+  if (!providerId) {
+    say(row(0, [bad("missing provider ID")], [label("specify --provider-id <id>")]));
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    if (typeof (sdk.organizations as any)?.sso?.delete === "function") {
+      await (sdk.organizations as any).sso.delete(slug, providerId);
+    } else {
+      await call<any>(
+        instance,
+        `/api/v1/organizations/${encodeURIComponent(slug)}/sso?providerId=${encodeURIComponent(providerId)}`,
+        {
+          method: "DELETE",
+        },
+      );
+    }
+
+    say(
+      row(0, [badge("memcell"), label("org sso delete"), place(slug)]),
+      row(1, [good("deleted SSO provider")], [value(providerId)]),
     );
     return 0;
   } catch (error) {
