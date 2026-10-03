@@ -23,7 +23,7 @@ export async function resolveNamespace(
   const projectObj =
     foundProject !== undefined ? foundProject : await findProject().catch(() => null);
   const proj = projectObj?.project;
-  const slug = target || proj?.project || proj?.space;
+  const slug = target || proj?.workspace || proj?.project || proj?.space;
 
   if (!slug) {
     throw new Error("No project specified and no connected project found in this directory.");
