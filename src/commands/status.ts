@@ -27,7 +27,7 @@ export async function status(instance: string, _from: string): Promise<number> {
     say(
       row(0, [badge("memcell"), place(instance)], [instanceScope]),
       row(1, [label("Status".padEnd(11, " ")), warn("not signed in")]),
-      found ? row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]) : null,
+      found ? row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]) : null,
       found
         ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
         : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
@@ -47,7 +47,7 @@ export async function status(instance: string, _from: string): Promise<number> {
       say(
         row(0, [badge("memcell"), place(instance)], [instanceScope]),
         row(1, [label("Status".padEnd(11, " ")), warn("session expired")]),
-        found ? row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]) : null,
+        found ? row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]) : null,
         found
           ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
           : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
@@ -90,7 +90,7 @@ export async function status(instance: string, _from: string): Promise<number> {
     say(
       row(0, [badge("memcell"), place(instance)], [instanceScope]),
       row(1, [label("Account".padEnd(11, " ")), value(accountDisplay)]),
-      row(1, [label("Project".padEnd(11, " ")), warn("not connected in this directory")]),
+      row(1, [label("Workspace".padEnd(11, " ")), warn("not connected in this directory")]),
       row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
       ...connected.map((c) =>
         row(
@@ -106,7 +106,7 @@ export async function status(instance: string, _from: string): Promise<number> {
       row(0, [label("Next:")]),
       row(1, [
         cmd("memcell connect".padEnd(21, " ")),
-        label("Connect this directory to a project"),
+        label("Connect this directory to a workspace"),
       ]),
     );
     return 0;
@@ -115,7 +115,7 @@ export async function status(instance: string, _from: string): Promise<number> {
     say(
       row(0, [badge("memcell"), place(instance)], [instanceScope]),
       row(1, [label("Status".padEnd(11, " ")), warn("unverified")], [label(failure.message)]),
-      found ? row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]) : null,
+      found ? row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]) : null,
       found
         ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
         : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),

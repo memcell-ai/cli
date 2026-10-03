@@ -7,6 +7,7 @@ import { badge, cmd, label, place, row, say, warn } from "./ui.js";
 
 interface MeResponse {
   user?: { id: string; name?: string; handle?: string };
+  activeWorkspace?: { id?: string; slug: string; name?: string; owner?: string } | null;
   activeProject?: { id?: string; slug: string; name?: string; owner?: string } | null;
   activeSpace?: { id?: string; slug: string; name?: string; owner?: string } | null;
   activeOrganization?: { id?: string; slug: string; name?: string } | null;
@@ -14,10 +15,10 @@ interface MeResponse {
 
 /**
  * Resolves unified execution context across the 4-tier hierarchy:
- * 1. Explicit CLI flags (--project, --owner)
+ * 1. Explicit CLI flags (--workspace, --project, --owner)
  * 2. Local directory project file (.memcell / findProject())
- * 3. Active CLI config (memcell config get project / organization)
- * 4. User session profile & active project from instance
+ * 3. Active CLI config (memcell config get project / workspace / organization)
+ * 4. User session profile & active project/workspace from instance
  */
 export async function resolveContext(
   instance: string,
@@ -27,7 +28,9 @@ export async function resolveContext(
   const credential = await credentialFor(instance).catch(() => null);
 
   // 1. Check explicit flags
-  const flagProject = typeof flags.project === "string" ? flags.project.trim() : undefined;
+  const flagProject =
+    (typeof flags.workspace === "string" ? flags.workspace.trim() : undefined) ??
+    (typeof flags.project === "string" ? flags.project.trim() : undefined);
   const flagOwner = typeof flags.owner === "string" ? flags.owner.trim() : undefined;
 
   let owner: string | null = flagOwner ?? null;
@@ -40,6 +43,7 @@ export async function resolveContext(
       project = {
         owner: effectiveOwner,
         project: slugPart!,
+        workspace: slugPart!,
         namespace: `${effectiveOwner}/${slugPart}`,
         source: "flag",
       };
@@ -48,6 +52,7 @@ export async function resolveContext(
       project = {
         owner: flagOwner,
         project: flagProject,
+        workspace: flagProject,
         namespace: flagOwner ? `${flagOwner}/${flagProject}` : flagProject,
         source: "flag",
       };
@@ -64,8 +69,10 @@ export async function resolveContext(
       project = {
         owner: effectiveOwner,
         project: slug,
+        workspace: slug,
         namespace: effectiveOwner ? `${effectiveOwner}/${slug}` : slug,
         projectId: proj.projectId || proj.spaceId,
+        workspaceId: proj.projectId || proj.spaceId,
         at: found.at,
         source: "file",
       };
@@ -75,7 +82,9 @@ export async function resolveContext(
 
   // 3. Fall back to active CLI config
   if (!project) {
-    const configuredProject = (await get("project").catch(() => null))?.value as string | undefined;
+    const configuredProject =
+      ((await get("workspace").catch(() => null))?.value as string | undefined) ??
+      ((await get("project").catch(() => null))?.value as string | undefined);
     const configuredOrg = (await get("organization").catch(() => null))?.value as
       string | undefined;
     if (configuredProject) {
@@ -83,6 +92,7 @@ export async function resolveContext(
       project = {
         owner: effectiveOwner,
         project: configuredProject,
+        workspace: configuredProject,
         namespace: effectiveOwner ? `${effectiveOwner}/${configuredProject}` : configuredProject,
         source: "config",
       };
@@ -94,7 +104,7 @@ export async function resolveContext(
   if (credential && (!owner || !project)) {
     try {
       const me = await call<MeResponse>(instance, "/api/v1/me", { bearer: credential.token });
-      const activeProj = me.activeProject || me.activeSpace;
+      const activeProj = me.activeWorkspace || me.activeProject || me.activeSpace;
       const userHandle = me.user?.handle || me.user?.name;
       const activeOrg = me.activeOrganization?.slug;
 
@@ -107,8 +117,10 @@ export async function resolveContext(
         project = {
           owner: effectiveOwner,
           project: activeProj.slug,
+          workspace: activeProj.slug,
           namespace: effectiveOwner ? `${effectiveOwner}/${activeProj.slug}` : activeProj.slug,
           projectId: activeProj.id,
+          workspaceId: activeProj.id,
           source: "active",
         };
       }
@@ -122,6 +134,7 @@ export async function resolveContext(
     from: from ?? process.cwd(),
     credential,
     project,
+    workspace: project,
     owner,
   };
 }
@@ -142,8 +155,10 @@ export function enforceRequirements(
     return { ok: false, exitCode: 1 };
   }
 
-  // 2. Project requirement gate
-  if (command.require?.project === "required" && !context.project) {
+  // 2. Project / Workspace requirement gate
+  const requiresProject =
+    command.require?.workspace === "required" || command.require?.project === "required";
+  if (requiresProject && !context.project) {
     say(
       row(0, [badge("memcell"), label(command.path.join(" "))]),
       row(1, [warn("no project specified")]),

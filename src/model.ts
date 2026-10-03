@@ -67,6 +67,12 @@ export const FLAGS: Record<string, FlagSpec> = {
     takes: "slug",
     what: "which project to target, by slug or owner/slug",
   },
+  workspace: {
+    name: "workspace",
+    short: "w",
+    takes: "slug",
+    what: "which workspace to target, by slug or owner/slug",
+  },
   space: { name: "space", takes: "slug", what: "which space to connect to, by slug" },
   force: { name: "force", short: "f", what: "do it again even if it is already done" },
   "no-browser": {
@@ -156,22 +162,27 @@ export const FLAGS: Record<string, FlagSpec> = {
 };
 
 /** Universal flags accepted across all commands without throwing unknown flag errors. */
-export const GLOBAL_FLAGS = new Set(["url", "project", "owner", "json"]);
+export const GLOBAL_FLAGS = new Set(["url", "workspace", "project", "owner", "json"]);
 
 export interface ResolvedProject {
   owner?: string;
   project: string;
+  workspace?: string;
   namespace: string;
   projectId?: string;
+  workspaceId?: string;
   at?: string;
   source: "flag" | "file" | "config" | "active";
 }
+
+export type ResolvedWorkspace = ResolvedProject;
 
 export interface ResolvedContext {
   instance: string;
   from: string;
   credential: { token: string; obtainedAt?: string } | null;
   project: ResolvedProject | null;
+  workspace?: ResolvedProject | null;
   owner: string | null;
 }
 
@@ -183,12 +194,13 @@ export interface CommandRequirements {
    */
   auth?: "required" | "optional" | "none";
 
-  /** Whether the command requires an active project / namespace context.
-   *  - "required": Command halts if no project can be resolved.
-   *  - "optional": Resolves project if possible, but command can proceed without it.
-   *  - "none": No project needed (e.g. projects list, orgs list, account).
+  /** Whether the command requires an active project / workspace / namespace context.
+   *  - "required": Command halts if no project/workspace can be resolved.
+   *  - "optional": Resolves project/workspace if possible, but command can proceed without it.
+   *  - "none": No project/workspace needed (e.g. projects list, orgs list, account).
    */
   project?: "required" | "optional" | "none";
+  workspace?: "required" | "optional" | "none";
 }
 
 export interface Invocation {

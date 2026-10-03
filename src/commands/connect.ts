@@ -97,7 +97,7 @@ export async function connect(
         },
         {
           name: "switch_project",
-          label: "Switch project or organization",
+          label: "Switch workspace or organization",
         },
         {
           name: "switch_instance",
@@ -226,16 +226,16 @@ export async function connect(
         }),
         {
           name: "__new__",
-          label: "+ Create new project...",
+          label: "+ Create new workspace...",
         },
       ];
 
-      const pickedProj = await choose("Select project to connect:", projectChoices);
+      const pickedProj = await choose("Select workspace to connect:", projectChoices);
       if (!pickedProj) return 0;
 
       if (pickedProj === "__new__") {
         const defaultName = basename(process.cwd());
-        const newName = await ask("Project name", defaultName);
+        const newName = await ask("Workspace name", defaultName);
         if (!newName) return 0;
 
         const body: Record<string, unknown> = { name: newName };
@@ -533,8 +533,8 @@ export async function connect(
     row(1, [cmd("memcell hook remove".padEnd(21, " ")), label("Disconnect local agent hooks")]),
     !targetProject &&
       row(1, [
-        cmd("memcell connect --project <slug>".padEnd(21, " ")),
-        label("Switch connected project"),
+        cmd("memcell connect --workspace <slug>".padEnd(21, " ")),
+        label("Switch connected workspace"),
       ]),
     viaNpx() &&
       row(1, [cmd("npm install -g memcell".padEnd(21, " ")), label("Install CLI globally")]),
