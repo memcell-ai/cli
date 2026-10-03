@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.13](https://github.com/memcell-ai/cli/compare/memcell-v0.10.12...memcell-v0.10.13) (2026-10-03)
+
+
+### Features
+
+* **cli:** add fleet, audit, and insights commands with emergency kill-switch ([#56](https://github.com/memcell-ai/cli/issues/56)) ([dbc9981](https://github.com/memcell-ai/cli/commit/dbc9981a06884ed2290bdfb738516f39ea9a2ec3))
+
 ## [0.10.12](https://github.com/memcell-ai/cli/compare/memcell-v0.10.11...memcell-v0.10.12) (2026-09-30)
 
 
