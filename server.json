@@ -7,13 +7,13 @@
     "url": "https://github.com/memcell-ai/cli",
     "source": "github"
   },
-  "version": "0.10.12",
+  "version": "0.10.13",
   "websiteUrl": "https://memcell.ai",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "memcell",
-      "version": "0.10.12",
+      "version": "0.10.13",
       "transport": {
         "type": "stdio"
       },
