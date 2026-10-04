@@ -1,5 +1,5 @@
 import { MemCellError } from "@memcell/sdk";
-import { MemcellError } from "../client.js";
+import { MemcellError, call } from "../client.js";
 import { resolveNamespace } from "../namespace.js";
 import { getSdkClient } from "../sdk-client.js";
 import {
@@ -338,12 +338,23 @@ export async function deleteStatement(
     const sdk = await getSdkClient(instance);
     const targetProject = getTargetProject(flags);
     const namespace = await resolveNamespace(sdk, targetProject);
+    const allVersions = Boolean(flags.all);
+    const query = allVersions ? "?allVersions=true" : "";
 
-    await sdk.statements.delete(namespace, statementId);
+    const res = await call<any>(
+      instance,
+      `/api/v1/${namespace}/statements/${encodeURIComponent(statementId)}${query}`,
+      { method: "DELETE" },
+    );
+
+    const detail =
+      res?.deletedScope === "version"
+        ? `pruned latest version (restored v${res.restoredVersion})`
+        : "deleted";
 
     say(
       row(0, [badge("memcell"), label("statements delete"), place(namespace)]),
-      row(1, [good("deleted")], [idSeg(statementId)]),
+      row(1, [good(detail)], [idSeg(statementId)]),
     );
     return 0;
   } catch (error) {

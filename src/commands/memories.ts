@@ -1,5 +1,5 @@
 import { MemCellError } from "@memcell/sdk";
-import { MemcellError } from "../client.js";
+import { MemcellError, call } from "../client.js";
 import { resolveNamespace } from "../namespace.js";
 import { getSdkClient } from "../sdk-client.js";
 import {
@@ -348,15 +348,25 @@ export async function deleteMemory(
 ): Promise<number> {
   try {
     const sdk = await getSdkClient(instance);
-    const memClient = getMemoriesClient(sdk);
     const target = getTargetWorkspace(flags);
     const namespace = await resolveNamespace(sdk, target);
+    const allVersions = Boolean(flags.all);
+    const query = allVersions ? "?allVersions=true" : "";
 
-    await memClient.delete(namespace, memoryId);
+    const res = await call<any>(
+      instance,
+      `/api/v1/${namespace}/memories/${encodeURIComponent(memoryId)}${query}`,
+      { method: "DELETE" },
+    );
+
+    const detail =
+      res?.deletedScope === "version"
+        ? `pruned latest version (restored v${res.restoredVersion})`
+        : "deleted";
 
     say(
       row(0, [badge("memcell"), label("memories delete"), place(namespace)]),
-      row(1, [good("deleted")], [idSeg(memoryId)]),
+      row(1, [good(detail)], [idSeg(memoryId)]),
     );
     return 0;
   } catch (error) {

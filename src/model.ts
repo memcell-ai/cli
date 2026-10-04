@@ -159,6 +159,10 @@ export const FLAGS: Record<string, FlagSpec> = {
     name: "no-wait",
     what: "submit consolidation job asynchronously without waiting",
   },
+  all: {
+    name: "all",
+    what: "delete all versions instead of only the latest version",
+  },
 };
 
 /** Universal flags accepted across all commands without throwing unknown flag errors. */
