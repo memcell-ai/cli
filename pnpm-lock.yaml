@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@memcell/sdk':
         specifier: ^1.1.0
-        version: 1.1.0
+        version: 1.3.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.30.0(zod@4.4.3)
@@ -42,8 +42,8 @@ packages:
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
 
-  '@memcell/sdk@1.1.0':
-    resolution: {integrity: sha512-8bMrVJFcyEbcJy9zN4+Gif7JrNXa5g27RYsdg+lRIiFt3Xz4blUWDY3GYW3cuhm6XbbEe9xUzxyeg0v6gvqQGA==}
+  '@memcell/sdk@1.3.0':
+    resolution: {integrity: sha512-UIbMXU/PXPgjMOgxYbqtduG+EoWw1E28GX07/60D330h/bcdLD/TBKCUAh0Gwa3cLp7uIJ1GBF7oTSnQe2km7w==}
     engines: {node: '>=18'}
 
   '@modelcontextprotocol/sdk@1.30.0':
@@ -832,7 +832,7 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@memcell/sdk@1.1.0': {}
+  '@memcell/sdk@1.3.0': {}
 
   '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:

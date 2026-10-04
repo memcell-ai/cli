@@ -195,8 +195,14 @@ describe("statements update", () => {
 });
 
 describe("statements delete", () => {
-  it("deletes a statement by id", async () => {
-    answer = () => ({ ok: true });
+  it("deletes a statement by id (prunes latest version by default)", async () => {
+    answer = () => ({
+      status: "deleted",
+      deletedCount: 1,
+      deletedScope: "version",
+      nextId: "stmt_1",
+      restoredVersion: 1,
+    });
 
     const printed: string[] = [];
     const log = console.log;
@@ -210,6 +216,31 @@ describe("statements delete", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.method).toBe("DELETE");
     expect(calls[0]!.url).toBe("http://memcell.test/api/v1/acme/research/statements/stmt_2");
+    const out = printed.join("\n");
+    expect(out).toContain("pruned latest version (restored v1)");
+  });
+
+  it("deletes all versions with --all", async () => {
+    answer = () => ({
+      status: "deleted",
+      deletedCount: 3,
+      deletedScope: "memory",
+    });
+
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => printed.push(line);
+    try {
+      expect(await deleteStatement(instance, "stmt_2", { all: true })).toBe(0);
+    } finally {
+      console.log = log;
+    }
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("DELETE");
+    expect(calls[0]!.url).toBe(
+      "http://memcell.test/api/v1/acme/research/statements/stmt_2?allVersions=true",
+    );
     const out = printed.join("\n");
     expect(out).toContain("deleted");
   });

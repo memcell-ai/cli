@@ -479,9 +479,9 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["memories", "delete"],
-    what: "delete a memory",
+    what: "delete a memory or latest version",
     args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace", "project"],
+    takes: ["url", "workspace", "project", "all"],
     run: ({ instance, args, flags }) => deleteMemory(instance, args.id!, flags),
   },
   {
@@ -643,9 +643,9 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["memory", "delete"],
-    what: "delete a memory",
+    what: "delete a memory or latest version",
     args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace", "project"],
+    takes: ["url", "workspace", "project", "all"],
     run: ({ instance, args, flags }) => deleteMemory(instance, args.id!, flags),
   },
   {
@@ -787,9 +787,9 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["statements", "delete"],
-    what: "delete a statement",
+    what: "delete a statement or latest version",
     args: [{ name: "id", required: true, what: "statement ID" }],
-    takes: ["url", "project"],
+    takes: ["url", "project", "all"],
     run: ({ instance, args, flags }) => deleteStatement(instance, args.id!, flags),
   },
   {

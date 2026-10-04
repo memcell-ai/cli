@@ -32,7 +32,8 @@ vi.stubGlobal(
 const { COMMANDS } = await import("../src/commands/index.js");
 const { listWorkspaces, newWorkspace, useWorkspace, getWorkspace } =
   await import("../src/commands/workspaces.js");
-const { listMemories, createMemory, getMemory } = await import("../src/commands/memories.js");
+const { listMemories, createMemory, getMemory, deleteMemory } =
+  await import("../src/commands/memories.js");
 const { parse } = await import("../src/parse.js");
 const { saveCredential } = await import("../src/instance.js");
 const { saveProject } = await import("../src/project.js");
@@ -176,5 +177,57 @@ describe("memories commands execution", () => {
       type: "directive",
     });
     expect(code).toBe(0);
+  });
+
+  it("deletes latest version of a memory by default", async () => {
+    answer = () => ({
+      status: "deleted",
+      deletedCount: 1,
+      deletedScope: "version",
+      nextId: "mem-1",
+      restoredVersion: 1,
+    });
+
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => printed.push(line);
+    try {
+      const code = await deleteMemory(instance, "mem-2", {});
+      expect(code).toBe(0);
+    } finally {
+      console.log = log;
+    }
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("DELETE");
+    expect(calls[0]!.url).toBe("http://memcell.test/api/v1/acme/core/memories/mem-2");
+    const out = printed.join("\n");
+    expect(out).toContain("pruned latest version (restored v1)");
+  });
+
+  it("deletes all versions of a memory with --all", async () => {
+    answer = () => ({
+      status: "deleted",
+      deletedCount: 2,
+      deletedScope: "memory",
+    });
+
+    const printed: string[] = [];
+    const log = console.log;
+    console.log = (line: string) => printed.push(line);
+    try {
+      const code = await deleteMemory(instance, "mem-2", { all: true });
+      expect(code).toBe(0);
+    } finally {
+      console.log = log;
+    }
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("DELETE");
+    expect(calls[0]!.url).toBe(
+      "http://memcell.test/api/v1/acme/core/memories/mem-2?allVersions=true",
+    );
+    const out = printed.join("\n");
+    expect(out).toContain("deleted");
   });
 });

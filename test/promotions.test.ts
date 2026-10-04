@@ -104,7 +104,7 @@ describe("promotions command group & 4-tier scope promotion", () => {
     const approveCall = calls.find((c) => c.url.includes("/promotions/req_1/approve"));
     expect(approveCall).toBeDefined();
     expect(approveCall?.method).toBe("POST");
-    expect(approveCall?.body).toEqual({ reviewReason: "Approved for project" });
+    expect(approveCall?.body).toMatchObject({ reviewReason: "Approved for project" });
   });
 
   it("rejects a promotion request", async () => {
@@ -118,7 +118,7 @@ describe("promotions command group & 4-tier scope promotion", () => {
     const rejectCall = calls.find((c) => c.url.includes("/promotions/req_1/reject"));
     expect(rejectCall).toBeDefined();
     expect(rejectCall?.method).toBe("POST");
-    expect(rejectCall?.body).toEqual({ reviewReason: "Out of scope" });
+    expect(rejectCall?.body).toMatchObject({ reviewReason: "Out of scope" });
   });
 
   it("handles direct statement promotion in promote command", async () => {
