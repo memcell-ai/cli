@@ -1,5 +1,5 @@
 import { COMMANDS, RESOURCES } from "./commands/index.js";
-import { FLAGS, type Command } from "./model.js";
+import { FLAGS, type Command, type FlagSpec } from "./model.js";
 import { bad, cmd, label, render, row, text, value, variant, viaNpx, type Row } from "./ui.js";
 
 // Help, generated from the same declarations the parser reads, and rendered
@@ -62,13 +62,22 @@ export function overview(): string {
 
 /** One command, or one resource's verbs. */
 export function detail(topic: string): string {
-  const matching = COMMANDS.filter((c) => c.path[0] === topic && !c.hidden);
+  const parts = topic.trim().split(/\s+/);
+  let matching = COMMANDS.filter((c) => !c.hidden && parts.every((p, i) => c.path[i] === p));
+  if (matching.length === 0) {
+    matching = COMMANDS.filter((c) => c.path[0] === parts[0] && !c.hidden);
+  }
   if (matching.length === 0) return overview();
 
-  const flags = [...new Set(matching.flatMap((c) => c.takes ?? []))].map((name) => FLAGS[name]!);
+  const flags = [...new Set(matching.flatMap((c) => c.takes ?? []))]
+    .map((name) => FLAGS[name])
+    .filter((f): f is FlagSpec => Boolean(f));
   const width =
-    Math.max(...flags.map((f) => (f.takes ? `--${f.name} <${f.takes}>` : `--${f.name}`).length)) +
-    2;
+    flags.length > 0
+      ? Math.max(
+          ...flags.map((f) => (f.takes ? `--${f.name} <${f.takes}>` : `--${f.name}`).length),
+        ) + 2
+      : 2;
 
   return render([
     row(0, [text("")]),
