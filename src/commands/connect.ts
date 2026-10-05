@@ -48,6 +48,7 @@ interface Exchanged {
   key: string;
   keyId: string;
   agentId: string;
+  workspace?: { id: string; slug: string; name: string; ownerSlug?: string };
   project?: { id: string; slug: string; name: string; ownerSlug?: string };
   space: { id: string; slug: string; name: string; ownerSlug?: string };
   instance: string;
@@ -58,6 +59,7 @@ export async function connect(
   instance: string,
   options: {
     pair?: string;
+    workspace?: string;
     project?: string;
     space?: string;
     agent?: string;
@@ -67,16 +69,17 @@ export async function connect(
 ): Promise<number> {
   const pair = options.pair?.trim();
   const existing = await findWorkspace(process.cwd()).catch(() => null);
-  let targetProject = (options.project || options.space)?.trim();
+  let targetWorkspace = (options.workspace || options.project || options.space)?.trim();
 
-  const isInteractive = !pair && !options.project && !options.space && CAN_ASK();
+  const isInteractive = !pair && !targetWorkspace && CAN_ASK();
 
   if (isInteractive) {
     let action: string | null = null;
     if (existing) {
-      const currentSlug = existing.project.owner
-        ? `${existing.project.owner}/${existing.project.project || existing.project.space}`
-        : existing.project.project || existing.project.space;
+      const currentWs = existing.workspace || existing.project;
+      const currentSlug = currentWs.owner
+        ? `${currentWs.owner}/${currentWs.workspace || currentWs.project || currentWs.space}`
+        : currentWs.workspace || currentWs.project || currentWs.space;
 
       say(
         row(0, [badge("memcell"), label("workspace connection detected")]),
@@ -84,7 +87,7 @@ export async function connect(
           1,
           [label("connected to")],
           [good(currentSlug)],
-          [label("on"), place(existing.project.instance)],
+          [label("on"), place(currentWs.instance)],
         ),
         row(2, [label("file:")], [label(existing.at)]),
       );
@@ -96,13 +99,13 @@ export async function connect(
           note: currentSlug,
         },
         {
-          name: "switch_project",
+          name: "switch_workspace",
           label: "Switch workspace or organization",
         },
         {
           name: "switch_instance",
           label: "Switch target instance (Cloud / Local / Custom)",
-          note: existing.project.instance,
+          note: currentWs.instance,
         },
         {
           name: "cancel",
@@ -113,10 +116,10 @@ export async function connect(
       if (!action || action === "cancel") return 0;
 
       if (action === "keep") {
-        targetProject = currentSlug;
-        instance = existing.project.instance;
-      } else if (action === "switch_project") {
-        instance = existing.project.instance;
+        targetWorkspace = currentSlug;
+        instance = currentWs.instance;
+      } else if (action === "switch_workspace" || action === "switch_project") {
+        instance = currentWs.instance;
       }
     }
 
@@ -160,8 +163,8 @@ export async function connect(
       }
     }
 
-    // Owner & Project selection
-    if (!targetProject) {
+    // Owner & Workspace selection
+    if (!targetWorkspace) {
       let held = (await credentialFor(instance)) ? await whoami(instance).catch(() => null) : null;
       if (!held) {
         say(
@@ -205,23 +208,26 @@ export async function connect(
         selectedOwner = pickedOwner === "__personal__" ? null : pickedOwner;
       }
 
-      // Query projects for that owner
-      const projectsPath = selectedOwner ? `/api/v1/${selectedOwner}/projects` : "/api/v1/projects";
-      const projectsRes = await call<{
+      // Query workspaces for that owner
+      const workspacesPath = selectedOwner
+        ? `/api/v1/${selectedOwner}/workspaces`
+        : "/api/v1/workspaces";
+      const workspacesRes = await call<{
+        workspaces?: { id: string; name: string; slug: string; ownerSlug?: string }[];
         projects?: { id: string; name: string; slug: string; ownerSlug?: string }[];
-      }>(instance, projectsPath).catch(() => null);
-      const candidateProjects = projectsRes?.projects ?? [];
+      }>(instance, workspacesPath).catch(() => null);
+      const candidateWorkspaces = workspacesRes?.workspaces ?? workspacesRes?.projects ?? [];
 
-      const projectChoices: Choice[] = [
-        ...candidateProjects.map((p) => {
+      const workspaceChoices: Choice[] = [
+        ...candidateWorkspaces.map((w) => {
           const fullSlug =
-            p.ownerSlug && selectedOwner && p.ownerSlug !== selectedOwner
-              ? `${p.ownerSlug}/${p.slug}`
-              : p.slug;
+            w.ownerSlug && selectedOwner && w.ownerSlug !== selectedOwner
+              ? `${w.ownerSlug}/${w.slug}`
+              : w.slug;
           return {
             name: fullSlug,
             label: fullSlug,
-            note: p.name !== p.slug ? p.name : undefined,
+            note: w.name !== w.slug ? w.name : undefined,
           };
         }),
         {
@@ -230,10 +236,10 @@ export async function connect(
         },
       ];
 
-      const pickedProj = await choose("Select workspace to connect:", projectChoices);
-      if (!pickedProj) return 0;
+      const pickedWorkspace = await choose("Select workspace to connect:", workspaceChoices);
+      if (!pickedWorkspace) return 0;
 
-      if (pickedProj === "__new__") {
+      if (pickedWorkspace === "__new__") {
         const defaultName = basename(process.cwd());
         const newName = await ask("Workspace name", defaultName);
         if (!newName) return 0;
@@ -244,47 +250,53 @@ export async function connect(
         try {
           const res = await call<{
             ok?: boolean;
+            workspace?: { id?: string; slug: string; name: string; ownerSlug?: string };
             project?: { id?: string; slug: string; name: string; ownerSlug?: string };
             slug?: string;
             name?: string;
             ownerSlug?: string;
-          }>(instance, selectedOwner ? `/api/v1/${selectedOwner}/projects` : "/api/v1/projects", {
-            method: "POST",
-            body,
-          });
-          const proj = res.project ?? res;
-          const slug = proj.slug;
+          }>(
+            instance,
+            selectedOwner ? `/api/v1/${selectedOwner}/workspaces` : "/api/v1/workspaces",
+            {
+              method: "POST",
+              body,
+            },
+          );
+          const ws = res.workspace ?? res.project ?? res;
+          const slug = ws.slug;
           if (!slug) {
             say(
-              row(0, [badge("memcell"), warn("could not resolve project slug")]),
-              row(1, [label("Server responded without a project slug. Please try again.")]),
+              row(0, [badge("memcell"), warn("could not resolve workspace slug")]),
+              row(1, [label("Server responded without a workspace slug. Please try again.")]),
             );
             return 1;
           }
-          const finalOwner = proj.ownerSlug || selectedOwner;
-          targetProject = finalOwner ? `${finalOwner}/${slug}` : slug;
+          const finalOwner = ws.ownerSlug || selectedOwner;
+          targetWorkspace = finalOwner ? `${finalOwner}/${slug}` : slug;
         } catch (error) {
           const failure = error as MemcellError;
           say(
-            row(0, [badge("memcell"), warn("could not create project")]),
-            row(1, [label(failure.message || "Failed to create project.")]),
+            row(0, [badge("memcell"), warn("could not create workspace")]),
+            row(1, [label(failure.message || "Failed to create workspace.")]),
           );
           return 1;
         }
       } else {
-        targetProject =
-          selectedOwner && !pickedProj.includes("/")
-            ? `${selectedOwner}/${pickedProj}`
-            : pickedProj;
+        targetWorkspace =
+          selectedOwner && !pickedWorkspace.includes("/")
+            ? `${selectedOwner}/${pickedWorkspace}`
+            : pickedWorkspace;
       }
     }
   } else {
     // Non-interactive / Headless fallback
-    if (!targetProject) {
-      if (existing?.project?.owner && existing?.project?.project) {
-        targetProject = `${existing.project.owner}/${existing.project.project}`;
-      } else if (existing?.project?.project || existing?.project?.space) {
-        targetProject = existing.project.project || existing.project.space;
+    if (!targetWorkspace) {
+      const currentWs = existing?.workspace || existing?.project;
+      if (currentWs?.owner && (currentWs?.workspace || currentWs?.project)) {
+        targetWorkspace = `${currentWs.owner}/${currentWs.workspace || currentWs.project}`;
+      } else if (currentWs?.workspace || currentWs?.project || currentWs?.space) {
+        targetWorkspace = currentWs.workspace || currentWs.project || currentWs.space;
       }
     }
   }
@@ -328,12 +340,13 @@ export async function connect(
     if (pair) {
       exchanged = await call<Exchanged>(instance, "/api/v1/pair/claim", {
         method: "POST",
-        // names which project/space of the caller's to reach, by slug
+        // names which workspace/space of the caller's to reach, by slug
         body: {
           pair,
           ...identity,
-          project: targetProject || undefined,
-          space: targetProject || undefined,
+          workspace: targetWorkspace || undefined,
+          project: targetWorkspace || undefined,
+          space: targetWorkspace || undefined,
         },
       });
     } else {
@@ -353,9 +366,11 @@ export async function connect(
         method: "POST",
         body: {
           ...identity,
-          project: targetProject || undefined,
+          workspace: targetWorkspace || undefined,
+          preferredWorkspace: here,
+          project: targetWorkspace || undefined,
           preferredProject: here,
-          space: targetProject || undefined,
+          space: targetWorkspace || undefined,
           preferredSpace: here,
         },
       });
@@ -365,18 +380,20 @@ export async function connect(
     const body = failure.body as {
       error?: string;
       message?: string;
+      workspaces?: { id: string; slug: string; name: string; ownerSlug?: string }[];
       projects?: { id: string; slug: string; name: string; ownerSlug?: string }[];
     } | null;
 
+    const candidateList = body?.workspaces || body?.projects;
     if (
       failure.status === 409 &&
-      body?.error === "multiple_projects" &&
-      Array.isArray(body.projects)
+      (body?.error === "multiple_workspaces" || body?.error === "multiple_projects") &&
+      Array.isArray(candidateList)
     ) {
       say(
         row(0, [badge("memcell"), place(instance)]),
-        row(1, [warn("multiple projects found")], [label("choose which one to connect:")]),
-        ...body.projects.map((p) => {
+        row(1, [warn("multiple workspaces found")], [label("choose which one to connect:")]),
+        ...candidateList.map((p) => {
           const display = p.ownerSlug ? `${p.ownerSlug}/${p.slug}` : p.slug;
           return row(2, [good(display)], [label(p.name)]);
         }),
@@ -392,7 +409,7 @@ export async function connect(
     return 1;
   }
 
-  // The project file carries project truth only — safe to commit, identical
+  // The workspace file carries workspace truth only — safe to commit, identical
   // for every teammate. Identity (the agent, the key) is personal and goes to
   // the machine keyring, so a re-connect never rewrites a committed file.
   // Pinned to the host that was ASKED, not the one named in the answer. A
@@ -406,14 +423,17 @@ export async function connect(
     );
     return 1;
   }
-  const linked = exchanged.project || exchanged.space;
-  const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
+  const linked = exchanged.workspace || exchanged.project || exchanged.space;
+  const ownerSlug =
+    exchanged.workspace?.ownerSlug || exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
   const gitRoot = !existing ? await findGitRoot(process.cwd()) : null;
   const targetPath = existing?.at ?? (gitRoot ? join(gitRoot, WORKSPACE_FILE) : process.cwd());
   const at = await saveWorkspace(
     {
       instance,
       owner: ownerSlug,
+      workspace: linked.slug,
+      workspaceId: linked.id,
       project: linked.slug,
       projectId: linked.id,
       space: linked.slug,
@@ -531,7 +551,7 @@ export async function connect(
     row(0, [label("Next:")]),
     row(1, [cmd("memcell status".padEnd(21, " ")), label("Verify agent connections and quotas")]),
     row(1, [cmd("memcell hook remove".padEnd(21, " ")), label("Disconnect local agent hooks")]),
-    !targetProject &&
+    !targetWorkspace &&
       row(1, [
         cmd("memcell connect --workspace <slug>".padEnd(21, " ")),
         label("Switch connected workspace"),
