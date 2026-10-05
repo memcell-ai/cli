@@ -19,18 +19,19 @@ import {
   warn,
 } from "../ui.js";
 
-function getTargetProject(
+function getTargetWorkspace(
   flags: Record<string, string | true>,
   context?: ResolvedContext | null,
 ): string | undefined {
-  if (typeof flags.project === "string") {
-    const proj = flags.project.trim();
-    if (typeof flags.owner === "string" && !proj.includes("/")) {
-      return `${flags.owner.trim()}/${proj}`;
+  const wsRaw = typeof flags.workspace === "string" ? flags.workspace : undefined;
+  if (wsRaw) {
+    const ws = wsRaw.trim();
+    if (typeof flags.owner === "string" && !ws.includes("/")) {
+      return `${flags.owner.trim()}/${ws}`;
     }
-    return proj;
+    return ws;
   }
-  return context?.project?.namespace;
+  return context?.workspace?.namespace || context?.project?.namespace;
 }
 
 function refused(instance: string, failure: Error): number {
@@ -58,8 +59,8 @@ export async function sweepConsolidate(
   const isJson = Boolean(flags.json);
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = getTargetProject(flags, context);
-    const namespace = await resolveNamespace(sdk, targetProject);
+    const targetWorkspace = getTargetWorkspace(flags, context);
+    const namespace = await resolveNamespace(sdk, targetWorkspace);
 
     const minSimilarity =
       typeof flags["min-similarity"] === "string" ? parseFloat(flags["min-similarity"]) : undefined;
@@ -111,7 +112,7 @@ export async function sweepConsolidate(
     if (!isJson) {
       say(
         row(0, [badge("memcell"), label("consolidation sweep"), place(namespace)]),
-        row(1, [state("accent", "clustering statements")], [label("job"), idSeg(jobId)]),
+        row(1, [state("accent", "clustering memories")], [label("job"), idSeg(jobId)]),
       );
     }
 
@@ -151,7 +152,7 @@ export async function sweepConsolidate(
         [badge("memcell"), label("sweep complete"), place(namespace)],
         dur ? [time(dur)] : null,
       ),
-      row(1, [label("examined")], [value(String(result.examinedCount ?? 0)), label("statements")]),
+      row(1, [label("examined")], [value(String(result.examinedCount ?? 0)), label("memories")]),
       row(
         1,
         [label("clusters")],
@@ -160,7 +161,7 @@ export async function sweepConsolidate(
       row(
         1,
         [label("fusions")],
-        [value(String(result.fusionsCount ?? 0)), label("canonical statements created")],
+        [value(String(result.fusionsCount ?? 0)), label("canonical memories created")],
       ),
       row(
         1,
@@ -178,14 +179,14 @@ export async function sweepConsolidate(
     if ((result.tensionsCount ?? 0) > 0) {
       say(
         row(2, [state("warn", `${result.tensionsCount} tension(s) surfaced for human review`)]),
-        row(2, [label("inspect with"), cmd("memcell statements --status contested")]),
+        row(2, [label("inspect with"), cmd("memcell memories --status contested")]),
       );
     }
     if ((result.fusionsCount ?? 0) > 0) {
       say(
         row(2, [
-          label("inspect canonical statements with"),
-          cmd("memcell statements --type directive"),
+          label("inspect canonical memories with"),
+          cmd("memcell memories --type directive"),
         ]),
       );
     }

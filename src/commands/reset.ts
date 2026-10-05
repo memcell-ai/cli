@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { removeAllHooks } from "../adapters/index.js";
 import { agentKeys } from "../keyring.js";
 import { MACHINE_STATE, machineDir, machineFile } from "../machine.js";
-import { findProject, removeProject } from "../project.js";
+import { findWorkspace, removeWorkspace } from "../workspace.js";
 import { confirm } from "../select.js";
 import {
   badge,
@@ -74,7 +74,7 @@ async function unaccounted(): Promise<string[]> {
 export async function reset(force: boolean, at: string = process.cwd()): Promise<number> {
   const there = await held();
   const strays = await unaccounted();
-  const here = await findProject(at);
+  const here = await findWorkspace(at);
 
   if (there.length === 0 && strays.length === 0 && !here) {
     say(
@@ -133,7 +133,7 @@ export async function reset(force: boolean, at: string = process.cwd()): Promise
   // assume it meant the one they were standing in.
   if (here) {
     await removeAllHooks(dirname(here.at));
-    await removeProject(here.at);
+    await removeWorkspace(here.at);
   }
 
   const out: (Row | false | null)[] = [

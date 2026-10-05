@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { findProject, PROJECT_FILE, saveProject, setProjectPaused } from "../src/project.js";
+import { findProject, PROJECT_FILE, saveProject, setProjectPaused } from "../src/workspace.js";
 import { pause, resume } from "../src/commands/pause.js";
 import { resolveProjectWiring } from "../src/loop/hook.js";
 

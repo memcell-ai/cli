@@ -1,10 +1,10 @@
 import { actOf } from "./act.js";
 import { can } from "../adapters/surface.js";
 import { dirname } from "node:path";
-import { evaluatePreAct, stageStatementsFromRecall, type RawStatementInput } from "./pre-act.js";
+import { evaluatePreAct, stageMemoriesFromRecall, type RawMemoryInput } from "./pre-act.js";
 
 import { agentKeyForProject } from "../keyring.js";
-import { findProject, type Project } from "../project.js";
+import { findWorkspace, type Workspace } from "../workspace.js";
 import { PIPELINE_PHASES, LEGS, type LifecycleHook, type Moment } from "./moments.js";
 import {
   keepSessionCache,
@@ -157,12 +157,12 @@ async function incoming(): Promise<Incoming> {
  * somebody to check the link file that was sitting right in front of them.
  */
 export type ProjectWiring =
-  | { ok: true; project: Project; key: string; agentId?: string }
-  | { ok: false; why: string; project?: Project };
+  | { ok: true; project: Workspace; key: string; agentId?: string }
+  | { ok: false; why: string; project?: Workspace };
 export type Standing = ProjectWiring; // Backwards-compatible alias
 
 export async function resolveProjectWiring(cwd?: string, program?: string): Promise<ProjectWiring> {
-  const found = await findProject(cwd ?? process.cwd());
+  const found = await findWorkspace(cwd ?? process.cwd());
   if (!found) return { ok: false, why: "not wired · run memcell connect" };
 
   if (found.project.paused) {
@@ -320,7 +320,7 @@ export function formatApiError(answer: Answered<unknown>): string {
 export const doorTrouble = formatApiError; // Backwards-compatible alias
 
 export interface Recalled {
-  statementId: string;
+  memoryId: string;
   text: string;
   confidence: number;
   layer: string;
@@ -334,7 +334,7 @@ export interface Recalled {
   /** Served because this session already went against it. */
   diverged?: boolean;
   violated?: boolean;
-  /** Somebody asked this statement to STOP the act it bears on. */
+  /** Somebody asked this memory to STOP the act it bears on. */
   refuses?: boolean;
   pinned?: boolean;
   standing?: boolean;
@@ -342,7 +342,7 @@ export interface Recalled {
   verified?: boolean;
 }
 
-/** A statement is treated as an operational guard if it is explicitly typed as a
+/** A memory is treated as an operational guard if it is explicitly typed as a
  *  guard, tagged with 'guard', flagged as refusing the act, or if its text specifies a hard
  *  prohibition or mandatory trigger constraint. Standard directives and preferences are NOT guards. */
 export function isGuard(r: Recalled): boolean {
@@ -356,7 +356,7 @@ export function isGuard(r: Recalled): boolean {
 }
 
 interface TriggerViolation {
-  statement: Recalled;
+  memory: Recalled;
   trigger: string;
 }
 
@@ -365,8 +365,8 @@ function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViola
   const triggerPattern =
     /(?:only when (?:explicitly )?triggered by|requires (?:explicit )?)\s+(\[[\w-]+\])/i;
 
-  for (const statement of guards) {
-    const match = statement.text.match(triggerPattern);
+  for (const memory of guards) {
+    const match = memory.text.match(triggerPattern);
     if (!match || !match[1]) continue;
     const trigger = match[1];
     const keyword = trigger.slice(1, -1).toLowerCase();
@@ -374,7 +374,7 @@ function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViola
     const promptLower = prompt.toLowerCase();
     const keywordRegex = new RegExp(`\\b${keyword.replace(/-/g, "[ -]?")}\\b`, "i");
     if (keywordRegex.test(promptLower) && !prompt.includes(trigger)) {
-      violations.push({ statement, trigger });
+      violations.push({ memory, trigger });
     }
   }
 
@@ -406,8 +406,8 @@ export function asContext(results: Recalled[], space: string, prompt?: string): 
       sections.push(
         [
           `🚨 OPERATIONAL GUARD TRIGGER REQUIRED:`,
-          `Directive [${v.statement.statementId.slice(0, 8)}] requires the explicit trigger '${v.trigger}' to execute this flow:`,
-          `"${v.statement.text}"`,
+          `Directive [${(v.memory.memoryId || "").slice(0, 8)}] requires the explicit trigger '${v.trigger}' to execute this flow:`,
+          `"${v.memory.text}"`,
           `The current prompt does NOT contain '${v.trigger}'.`,
           `You MUST HALT and refuse to proceed with this operation until the user explicitly provides the '${v.trigger}' trigger token.`,
           "",
@@ -422,7 +422,7 @@ export function asContext(results: Recalled[], space: string, prompt?: string): 
         "You have already gone against these this session — re-read them before continuing:",
         ...against.map(
           (r) =>
-            `- ${r.text}  [id: ${r.statementId.slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}]`,
+            `- ${r.text}  [id: ${(r.memoryId || "").slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}]`,
         ),
         "",
         "If you believe one no longer applies, say so plainly rather than",
@@ -438,7 +438,7 @@ export function asContext(results: Recalled[], space: string, prompt?: string): 
         "OPERATIONAL GUARDS & INVARIANTS (Enforce strictly — halt or refuse if required triggers/conditions are missing):",
         ...guards.map(
           (r) =>
-            `- [GUARD] ${r.text}  [id: ${r.statementId.slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
+            `- [GUARD] ${r.text}  [id: ${(r.memoryId || "").slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
         ),
         "",
         "Do NOT bypass, rationalize around, or treat these guards as optional.",
@@ -451,10 +451,10 @@ export function asContext(results: Recalled[], space: string, prompt?: string): 
   if (conventions.length > 0) {
     sections.push(
       [
-        `From this project's memory (${space}) — already learned here:`,
+        `From this workspace's memory (${space}) — already learned here:`,
         ...conventions.map(
           (r) =>
-            `- ${r.text}  [id: ${r.statementId.slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
+            `- ${r.text}  [id: ${(r.memoryId || "").slice(0, 8)} · ${r.confidence.toFixed(2)} · ${r.layer}${r.contested ? " · contested" : ""}]`,
         ),
         "",
         "These carry earned confidence, not certainty. If one proves wrong or out",
@@ -581,7 +581,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       tool,
       input: (payload.tool_input ?? payload.toolInput) as Record<string, unknown> | undefined,
       guard,
-      activeStatements: note.activeStatements ?? note.activeRules ?? note.standing ?? [],
+      activeMemories: note.activeMemories ?? [],
       firedMap: note.fired,
     });
 
@@ -592,7 +592,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
     const pairs = note.servedAt ?? (note.servedAt = []);
     for (const p of evalResult.pairs) {
       if (pairs.length >= SERVED_AT_LIMIT) break;
-      if (pairs.some((x) => x.statementId === p.statementId && x.act === p.act)) continue;
+      if (pairs.some((x) => x.memoryId === p.memoryId && x.act === p.act)) continue;
       pairs.push(p);
     }
 
@@ -657,7 +657,8 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         momentId?: string;
         recallId?: string;
         results?: Recalled[];
-        statements?: RawStatementInput[];
+        memories?: RawMemoryInput[];
+        statements?: RawMemoryInput[];
         guardMode?: "strict" | "advisory";
         profile?: string | null;
         note?: string;
@@ -678,31 +679,31 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         // what actually happened, not "0 served".
         await logEvent(`${tag} · recall · ${formatApiError(asked)}`);
       }
-      const rawStatements = (answer?.statements ?? answer?.results ?? []) as RawStatementInput[];
+      const rawMemories = (answer?.memories ??
+        answer?.results ??
+        answer?.statements ??
+        []) as RawMemoryInput[];
       const guardMode = (answer?.guardMode ?? note.guardMode ?? "strict") as "strict" | "advisory";
       note.guardMode = guardMode;
 
-      const staged = stageStatementsFromRecall(rawStatements, guardMode);
+      const staged = stageMemoriesFromRecall(rawMemories, guardMode);
       if (staged.length > 0) {
-        note.activeStatements = staged;
-        note.activeRules = staged;
-        note.standing = staged;
+        note.activeMemories = staged;
       }
 
-      const results: Recalled[] = rawStatements.map((r) => {
-        const statementId = (r.id ?? r.statementId ?? "") as string;
+      const results: Recalled[] = rawMemories.map((r) => {
+        const memoryId = (r.id ?? r.memoryId ?? "") as string;
         const text = r.title ? (r.context ? `${r.title}: ${r.context}` : r.title) : (r.text ?? "");
-        const isGuardStatement =
-          r.type === "guard" || r.tags?.includes("guard") || Boolean(r.refuses);
+        const isGuardMemory = r.type === "guard" || r.tags?.includes("guard") || Boolean(r.refuses);
         return {
-          statementId,
+          memoryId,
           text,
           confidence: r.confidence ?? 0.8,
-          layer: r.layer ?? (r.tags?.join(", ") || "project"),
+          layer: r.layer ?? (r.tags?.join(", ") || "workspace"),
           type: r.type,
           tags: r.tags,
           appliesAt: r.appliesAt,
-          refuses: guardMode === "strict" ? isGuardStatement : false,
+          refuses: guardMode === "strict" ? isGuardMemory : false,
           contested: Boolean(r.contested),
           diverged: Boolean(r.diverged || r.violated),
           violated: Boolean(r.diverged || r.violated),
@@ -774,11 +775,16 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       );
     } else if (enough) {
       const handed = await apiCall<{
-        created: { statementId: string }[];
-        reinforced: { statementId: string }[];
-        attributed: { statementId: string; outcome: "worked" | "failed" }[];
-        diverged?: { statementId: string; text: string }[];
-        superseded?: { statementId: string; byStatementId: string }[];
+        created: { memoryId?: string; statementId?: string }[];
+        reinforced: { memoryId?: string; statementId?: string }[];
+        attributed: { memoryId?: string; statementId?: string; outcome: "worked" | "failed" }[];
+        diverged?: { memoryId?: string; statementId?: string; text: string }[];
+        superseded?: {
+          memoryId?: string;
+          statementId?: string;
+          byMemoryId?: string;
+          byStatementId?: string;
+        }[];
         note?: string;
       }>(
         project.instance,

@@ -54,7 +54,7 @@ vi.stubGlobal(
 
 const { runMoment } = await import("../src/loop/hook.js");
 const { saveAgentKey } = await import("../src/keyring.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 
 function fed(payload: unknown) {
   const chunks = [Buffer.from(JSON.stringify(payload))];

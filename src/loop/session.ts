@@ -13,39 +13,28 @@ import { machineDir, machineFile } from "../machine.js";
 // one person's session on one computer, and it is deleted when the session
 // ends. A stale session cache is only ever the tail of a session that crashed.
 
-export interface ActiveStatement {
-  statementId: string;
+export interface ActiveMemory {
+  memoryId: string;
   text: string;
   appliesAt: string[];
   refuses?: boolean;
   title?: string;
   tags?: string[];
 }
-export type ActiveRule = ActiveStatement;
-export type StandingRule = ActiveStatement;
 
 export interface SessionCache {
   space: string;
   guardMode?: "strict" | "advisory";
-  /** Active statements staged for in-memory pre-act evaluation. Refreshed by every
+  /** Active memories staged for in-memory pre-act evaluation. Refreshed by every
    *  recall; a session that has not recalled yet guards nothing. */
-  activeStatements?: ActiveStatement[];
-  /** Backward-compatible alias for activeStatements. */
-  activeRules?: ActiveStatement[];
-  /** Legacy alias kept for compatibility. */
-  standing?: ActiveStatement[];
+  activeMemories?: ActiveMemory[];
   /**
-   * Statements SERVED immediately before an act, and which act.
+   * Memories SERVED immediately before an act, and which act.
    *
    * The pairing is a fact rather than an inference: the guard knows it put
-   * this directive in front of this act, at this moment. Judging afterwards from
-   * a transcript has to work out both halves from prose, and measurably does
-   * not — it is what catches a statement broken in the open and calls it nothing.
-   *
-   * Kept here and handed over with the turn payload, so judging costs one call
-   * on transcript data already being sent rather than a call per act.
+   * this directive in front of this act, at this moment.
    */
-  servedAt?: { statementId: string; act: string; tool: string; became: string }[];
+  servedAt?: { memoryId: string; act: string; tool: string; became: string }[];
   /** Characters of the transcript already processed, so a turn ships what
    *  is new rather than the whole conversation again. */
   read: number;
@@ -66,22 +55,32 @@ const EMPTY: SessionCache = {
   space: "",
   read: 0,
   fired: {},
-  activeStatements: [],
-  activeRules: [],
-  standing: [],
+  activeMemories: [],
   servedAt: [],
 };
 
 export async function sessionCacheFor(id: string): Promise<SessionCache> {
   try {
-    const raw = JSON.parse(await readFile(file(id), "utf8")) as SessionCache;
-    const statements = raw.activeStatements ?? raw.activeRules ?? raw.standing ?? [];
+    const raw = JSON.parse(await readFile(file(id), "utf8")) as any;
+    const rawMemories = raw.activeMemories || [];
+    const memories: ActiveMemory[] = rawMemories.map((m: any) => ({
+      memoryId: m.memoryId || "",
+      text: m.text,
+      appliesAt: m.appliesAt || [],
+      refuses: m.refuses,
+      title: m.title,
+      tags: m.tags,
+    }));
     return {
       ...EMPTY,
       ...raw,
-      activeStatements: statements,
-      activeRules: statements,
-      standing: statements,
+      activeMemories: memories,
+      servedAt: (raw.servedAt || []).map((s: any) => ({
+        memoryId: s.memoryId,
+        act: s.act,
+        tool: s.tool,
+        became: s.became,
+      })),
     };
   } catch {
     return { ...EMPTY };
@@ -98,9 +97,6 @@ export const noteFor = sessionCacheFor;
 export async function keepSessionCache(id: string, cache: SessionCache): Promise<void> {
   try {
     await mkdir(dir(), { recursive: true });
-    cache.activeStatements ??= cache.activeRules ?? cache.standing;
-    cache.activeRules ??= cache.activeStatements;
-    cache.standing ??= cache.activeStatements;
     await writeFile(file(id), `${JSON.stringify(cache)}\n`, { mode: 0o600 });
   } catch {
     // Nothing to say to anyone: the log lives on the same disk.

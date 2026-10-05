@@ -13,20 +13,20 @@ import {
 
 import { agentKeyForProject, listConnectedProjects } from "../keyring.js";
 import { detectActiveRuntimeModel } from "../model-detect.js";
-import { findProject, findProjectFromRoots, type Project } from "../project.js";
+import { findWorkspace, findWorkspaceFromRoots, type Workspace } from "../workspace.js";
 
 // `memcell mcp` — the stdio face of the paired instance's /mcp endpoint.
 //
 // Bridges IDEs and autonomous agent harnesses to MemCell over standard MCP stdio.
-// Dynamically resolves workspace projects via MCP client roots (roots/list),
-// CLI target directory, process.cwd(), or keyring-connected projects.
-// Maintains upstream HTTP client pooling per connected project/instance.
+// Dynamically resolves workspaces via MCP client roots (roots/list),
+// CLI target directory, process.cwd(), or keyring-connected workspaces.
+// Maintains upstream HTTP client pooling per connected workspace/instance.
 
 const DEFAULT_TOOLS = [
   {
     name: "recall",
     description:
-      "Ask the project's memory before acting. Evaluates intent against durable invariants and conventions. Zero conversation retention: query text is strictly ephemeral and never stored. Pass the recallId to 'report' so task outcomes sharpen what was recalled.",
+      "Ask the workspace's memory before acting. Evaluates intent against durable directives and facts. Zero conversation retention: query text is strictly ephemeral and never stored. Pass the recallId to 'report' so task outcomes sharpen what was recalled.",
     inputSchema: {
       type: "object",
       properties: {
@@ -40,12 +40,12 @@ const DEFAULT_TOOLS = [
         },
         limit: {
           type: "number",
-          description: "How many matched statements to serve (default 5, max 20)",
+          description: "How many matched memories to serve (default 5, max 20)",
         },
         type: {
           type: "string",
           description:
-            "Optional statement type filter: directive, fact, preference, or observation",
+            "Optional memory type filter: guard, directive, fact, preference, or observation",
         },
         tags: {
           type: "array",
@@ -61,19 +61,23 @@ const DEFAULT_TOOLS = [
           items: { type: "string" },
           description: "Array of authorized operational scopes to recall from",
         },
+        metadata: {
+          type: "object",
+          description: 'Optional metadata containment filter (e.g. {"threadId": "123"})',
+        },
       },
     },
   },
   {
     name: "remember",
     description:
-      "Form durable memory. Distills durable knowledge, conventions, and directives through the zero-trust pipeline. If the change contradicts an existing statement, the memory engine resolves it.",
+      "Form durable memory. Distills durable knowledge, directives, and facts through the zero-trust pipeline. If the change contradicts an existing memory, the memory engine resolves it.",
     inputSchema: {
       type: "object",
       properties: {
         learning: {
           type: "string",
-          description: "The concrete knowledge, invariant, preference, or convention to persist",
+          description: "The concrete knowledge, fact, preference, or directive to persist",
         },
         change: {
           type: "string",
@@ -81,7 +85,7 @@ const DEFAULT_TOOLS = [
         },
         type: {
           type: "string",
-          description: "Statement type: directive, fact, preference, or observation",
+          description: "Memory type: directive, fact, preference, or observation",
         },
         title: {
           type: "string",
@@ -101,7 +105,7 @@ const DEFAULT_TOOLS = [
   {
     name: "report",
     description:
-      "Close the recall loop. Reports whether a recalled statement worked, failed, or was avoided in practice. Strengthens what worked and surfaces what failed for correction.",
+      "Close the recall loop. Reports whether a recalled memory worked, failed, or was avoided in practice. Strengthens what worked and surfaces what failed for correction.",
     inputSchema: {
       type: "object",
       properties: {
@@ -138,16 +142,16 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
 
   async function resolveCurrentProject(
     workspaceHint?: string,
-  ): Promise<{ project: Project; at: string } | null> {
+  ): Promise<{ project: Workspace; at: string } | null> {
     // 1. Explicit workspace hint passed to tool call
     if (workspaceHint) {
-      const found = await findProject(workspaceHint).catch(() => null);
+      const found = await findWorkspace(workspaceHint).catch(() => null);
       if (found) return found;
     }
 
     // 2. Explicit targetDir passed via CLI argument
     if (targetDir) {
-      const found = await findProject(targetDir).catch(() => null);
+      const found = await findWorkspace(targetDir).catch(() => null);
       if (found) return found;
     }
 
@@ -158,7 +162,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
         const rootPaths = rootsResult.roots.map((r) =>
           r.uri.startsWith("file://") ? fileURLToPath(r.uri) : r.uri,
         );
-        const found = await findProjectFromRoots(rootPaths);
+        const found = await findWorkspaceFromRoots(rootPaths);
         if (found) return found;
       }
     } catch {
@@ -166,7 +170,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
     }
 
     // 4. Check process.cwd()
-    const foundCwd = await findProject(process.cwd()).catch(() => null);
+    const foundCwd = await findWorkspace(process.cwd()).catch(() => null);
     if (foundCwd) return foundCwd;
 
     // 5. Check workspace environment variables
@@ -176,7 +180,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
       process.env.PROJECT_DIR ||
       process.env.VSCODE_WORKSPACE;
     if (envDir) {
-      const foundEnv = await findProject(envDir).catch(() => null);
+      const foundEnv = await findWorkspace(envDir).catch(() => null);
       if (foundEnv) return foundEnv;
     }
 
@@ -185,7 +189,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
     if (connected.length === 1 && connected[0]) {
       const c = connected[0];
       if (c.projectPath) {
-        const found = await findProject(c.projectPath).catch(() => null);
+        const found = await findWorkspace(c.projectPath).catch(() => null);
         if (found) return found;
       }
       return {
@@ -203,7 +207,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
     return null;
   }
 
-  async function getUpstreamClient(project: Project, rootDir: string): Promise<Client | null> {
+  async function getUpstreamClient(project: Workspace, rootDir: string): Promise<Client | null> {
     const projectIdentifier =
       project.projectId ??
       (project.owner ? `${project.owner}/${project.project}` : project.project);

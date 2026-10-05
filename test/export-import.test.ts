@@ -14,10 +14,10 @@ import { deliveryOf, discover, importFiles, textsFromJson } from "../src/command
 
 const doc = {
   space: { slug: "payments", name: "payments", exportedAt: "2026-08-21T00:00:00.000Z" },
-  statements: [
+  memories: [
     {
       text: "Retries cap at five attempts.",
-      kind: "convention",
+      type: "preference",
       scope: "team",
       status: "active",
       confidence: 0.7,
@@ -27,7 +27,7 @@ const doc = {
     },
     {
       text: "The gateway keeps idempotency keys for a day.",
-      kind: "fact",
+      type: "fact",
       scope: "team",
       status: "active",
       confidence: 0.6,
@@ -37,7 +37,7 @@ const doc = {
     },
     {
       text: "Batch refunds through the ledger job.",
-      kind: "decision",
+      type: "directive",
       scope: "team",
       status: "active",
       confidence: 0.8,
@@ -47,7 +47,7 @@ const doc = {
     },
     {
       text: "Polling the gateway for capture status times out under load.",
-      kind: "dead_end",
+      type: "observation",
       scope: "team",
       status: "active",
       confidence: 0.75,
@@ -57,7 +57,7 @@ const doc = {
     },
     {
       text: "Refunds used to route through the old worker.",
-      kind: "fact",
+      type: "fact",
       scope: "team",
       status: "retired",
       confidence: 0.2,
@@ -69,40 +69,39 @@ const doc = {
 };
 
 describe("the markdown renderers", () => {
-  it("groups by kind in reading order, and only what is active", () => {
+  it("groups by type in reading order, and only what is active", () => {
     const md = renderMarkdown(doc, "Project memory");
     const at = (needle: string) => md.indexOf(needle);
-    expect(at("## Decisions")).toBeGreaterThan(-1);
-    expect(at("## Decisions")).toBeLessThan(at("## Conventions"));
-    expect(at("## Conventions")).toBeLessThan(at("## Dead ends — do not retry"));
-    expect(at("## Dead ends — do not retry")).toBeLessThan(at("## Facts"));
+    expect(at("## Directives & Guards")).toBeGreaterThan(-1);
+    expect(at("## Directives & Guards")).toBeLessThan(at("## Preferences"));
+    expect(at("## Preferences")).toBeLessThan(at("## Observations & Learnings"));
+    expect(at("## Observations & Learnings")).toBeLessThan(at("## Facts"));
     expect(md).toContain("Batch refunds through the ledger job.");
     expect(md).not.toContain("the old worker");
-    expect(md).toContain("4 statements");
+    expect(md).toContain("4 memories");
   });
 
-  it("carries a statement's condition beside its claim", () => {
+  it("carries a memory's condition beside its claim", () => {
     const md = renderMarkdown(doc, "Project memory");
     expect(md).toContain(
       "The gateway keeps idempotency keys for a day. *(applies when talking to the payment gateway)*",
     );
   });
 
-  it("cursorrules is the flat form of the same statements", () => {
+  it("cursorrules is the flat form of the same memories", () => {
     const rules = renderCursorrules(doc);
     expect(rules).toContain("Retries cap at five attempts.");
     expect(rules).not.toContain("## ");
     expect(rules).not.toContain("the old worker");
   });
 
-  it("groups guard kind and directive type under Decisions", () => {
+  it("groups guard and directive types under Directives & Guards", () => {
     const docWithGuard = {
       space: { slug: "ops", name: "ops", exportedAt: "2026-08-21T00:00:00.000Z" },
-      statements: [
+      memories: [
         {
           text: "Never push directly to main branch.",
-          kind: "guard",
-          type: "directive",
+          type: "guard",
           scope: "team",
           status: "active",
           confidence: 0.9,
@@ -113,7 +112,7 @@ describe("the markdown renderers", () => {
       ],
     };
     const md = renderMarkdown(docWithGuard, "Ops Memory");
-    expect(md).toContain("## Decisions");
+    expect(md).toContain("## Directives & Guards");
     expect(md).toContain("- Never push directly to main branch.");
   });
 });
@@ -135,7 +134,7 @@ describe("reading text out of a JSON export", () => {
   });
 
   it("reads our own export back — the round trip", () => {
-    expect(textsFromJson(doc)).toEqual(doc.statements.map((s) => s.text));
+    expect(textsFromJson(doc)).toEqual(doc.memories.map((s) => s.text));
   });
 
   it("answers null when the shape says nothing", () => {

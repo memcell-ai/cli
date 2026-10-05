@@ -101,8 +101,12 @@ export async function getEnterpriseInsights(
         1,
         [label("Memory Convergence:")],
         [value(`${kpis.memoryConvergenceRate.toFixed(1)}%`)],
-        [label("Converged Statements:")],
-        [value(`${metrics.convergedStatements} / ${metrics.totalStatements}`)],
+        [label("Converged Memories:")],
+        [
+          value(
+            `${metrics.convergedMemories ?? metrics.convergedStatements} / ${metrics.totalMemories ?? metrics.totalStatements}`,
+          ),
+        ],
       ),
       row(
         1,

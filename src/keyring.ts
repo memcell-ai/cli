@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import { machineDir, machineFile } from "./machine.js";
-import { findProject } from "./project.js";
+import { findWorkspace } from "./workspace.js";
 
 // Where identity lives, which is deliberately not where the wiring lives.
 //
@@ -190,7 +190,7 @@ export async function agentKeyForProject(
     }
     // If still not found, check findProject(projectDir)
     if (held.length === 0) {
-      const found = await findProject(projectDir).catch(() => null);
+      const found = await findWorkspace(projectDir).catch(() => null);
       if (found) {
         const foundId = found.project.projectId;
         const foundSlug = found.project.project || found.project.space;

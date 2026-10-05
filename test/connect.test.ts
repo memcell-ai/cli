@@ -39,7 +39,7 @@ vi.stubGlobal(
 
 const { connect } = await import("../src/commands/connect.js");
 const { saveCredential } = await import("../src/instance.js");
-const { saveProject, findProject } = await import("../src/project.js");
+const { saveProject, findProject } = await import("../src/workspace.js");
 const { agentKeys } = await import("../src/keyring.js");
 
 const instance = "http://memcell.test";

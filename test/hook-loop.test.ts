@@ -53,7 +53,7 @@ vi.stubGlobal(
 const { runMoment } = await import("../src/loop/hook.js");
 const { LEGS } = await import("../src/loop/moments.js");
 const { saveAgentKey } = await import("../src/keyring.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 
 const transcript = join(project, "t.jsonl");
 const projectLog = (space: string = "api") => join(home, ".memcell", "projects", space, "hook.log");
@@ -131,7 +131,7 @@ describe("recall", () => {
     reset();
     answer = () => ({
       momentId: "m1",
-      results: [{ statementId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" }],
+      results: [{ memoryId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" }],
     });
     fed({ session_id: "r1", cwd: project, prompt: "how do we handle money?" });
 
@@ -152,9 +152,9 @@ describe("recall", () => {
     answer = () => ({
       momentId: "m2",
       results: [
-        { statementId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" },
+        { memoryId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" },
         {
-          statementId: "s2",
+          memoryId: "s2",
           text: "Never call the gateway from a migration.",
           confidence: 0.7,
           layer: "team",
@@ -169,7 +169,7 @@ describe("recall", () => {
     expect(context).toContain("already gone against these this session");
     // It leads: the warning comes before the ordinary recall heading.
     expect(context.indexOf("Never call the gateway from a migration.")).toBeLessThan(
-      context.indexOf("From this project's memory"),
+      context.indexOf("From this workspace's memory"),
     );
     // And it is not repeated below as an ordinary statement.
     expect(context.split("Never call the gateway from a migration.")).toHaveLength(2);
@@ -181,7 +181,7 @@ describe("recall", () => {
     reset();
     answer = () => ({
       momentId: "m3",
-      results: [{ statementId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" }],
+      results: [{ memoryId: "s1", text: "Amounts are cents.", confidence: 0.8, layer: "team" }],
     });
     fed({ session_id: "r10", cwd: project, prompt: "how do we handle money?" });
 
@@ -195,14 +195,14 @@ describe("recall", () => {
       momentId: "m4",
       results: [
         {
-          statementId: "s1",
+          memoryId: "s1",
           text: "Amounts are cents.",
           confidence: 0.8,
           layer: "team",
           kind: "convention",
         },
         {
-          statementId: "s2",
+          memoryId: "s2",
           text: "Manual database mocks are prohibited — use seedSubjects().",
           confidence: 0.95,
           layer: "team",
@@ -217,7 +217,7 @@ describe("recall", () => {
     expect(context).toContain("OPERATIONAL GUARDS & INVARIANTS");
     expect(context).toContain("[GUARD] Manual database mocks are prohibited");
     expect(context.indexOf("OPERATIONAL GUARDS & INVARIANTS")).toBeLessThan(
-      context.indexOf("From this project's memory"),
+      context.indexOf("From this workspace's memory"),
     );
     expect(context).toContain("Amounts are cents.");
   });
@@ -228,7 +228,7 @@ describe("recall", () => {
       momentId: "m5",
       results: [
         {
-          statementId: "s-rel",
+          memoryId: "s-rel",
           text: "Release flow is executed only when explicitly triggered by [release] in a message; no automatic or standing release cadence.",
           confidence: 0.64,
           layer: "team",
@@ -251,7 +251,7 @@ describe("recall", () => {
       momentId: "m6",
       results: [
         {
-          statementId: "s-rel",
+          memoryId: "s-rel",
           text: "Release flow is executed only when explicitly triggered by [release] in a message; no automatic or standing release cadence.",
           confidence: 0.64,
           layer: "team",
@@ -358,13 +358,13 @@ describe("remember, and the report it justifies", () => {
       path === "recall"
         ? {
             momentId: "m9",
-            results: [{ statementId: "s9", text: "Cents.", confidence: 0.5, layer: "me" }],
+            results: [{ memoryId: "s9", text: "Cents.", confidence: 0.5, layer: "me" }],
           }
         : path.endsWith("remember")
           ? {
               created: [],
-              reinforced: [{ statementId: "s9" }],
-              attributed: [{ statementId: "s9", outcome: "worked" }],
+              reinforced: [{ memoryId: "s9" }],
+              attributed: [{ memoryId: "s9", outcome: "worked" }],
             }
           : {};
 
@@ -376,8 +376,8 @@ describe("remember, and the report it justifies", () => {
       path.endsWith("remember")
         ? {
             created: [],
-            reinforced: [{ statementId: "s9" }],
-            attributed: [{ statementId: "s9", outcome: "worked" }],
+            reinforced: [{ memoryId: "s9" }],
+            attributed: [{ memoryId: "s9", outcome: "worked" }],
           }
         : {};
     fed({ session_id: "loop", cwd: project, transcript_path: transcript });
@@ -402,7 +402,7 @@ describe("remember, and the report it justifies", () => {
     reset();
     answer = (path) =>
       path.endsWith("remember")
-        ? { created: [], reinforced: [{ statementId: "stranger" }], attributed: [] }
+        ? { created: [], reinforced: [{ memoryId: "stranger" }], attributed: [] }
         : {};
     fed({ session_id: "solo", cwd: project, transcript_path: transcript });
 
@@ -436,9 +436,9 @@ describe("the working session", () => {
       path === "recall"
         ? {
             momentId: "m9",
-            results: [{ statementId: "s9", text: "x", confidence: 0.8, layer: "team" }],
+            results: [{ memoryId: "s9", text: "x", confidence: 0.8, layer: "team" }],
           }
-        : { created: [], reinforced: [{ statementId: "s9" }], attributed: [] };
+        : { created: [], reinforced: [{ memoryId: "s9" }], attributed: [] };
     await writeFile(
       transcript,
       JSON.stringify({
@@ -511,7 +511,7 @@ describe("failing open", () => {
       answer = (path) =>
         path === "recall"
           ? { momentId: "m-r", results: [] }
-          : { created: [{ statementId: "st1" }], reinforced: [], attributed: [] };
+          : { created: [{ memoryId: "st1" }], reinforced: [], attributed: [] };
       fed({ session_id: "s-retry", cwd: project, prompt: "x", transcript_path: transcript });
       await runMoment("turn-end", "claude");
     } finally {
@@ -754,8 +754,9 @@ describe("the pairing survives the process", () => {
   // value was always right.
   const noteOf = async (id: string) =>
     JSON.parse(await readFile(join(home, ".memcell", "sessions", `${id}.json`), "utf8")) as {
+      activeMemories?: unknown[];
       standing?: unknown[];
-      servedAt?: { statementId: string; act: string; tool: string; became: string }[];
+      servedAt?: { memoryId: string; act: string; tool: string; became: string }[];
     };
 
   it("keeps what was put in front of an act, where the next process can read it", async () => {
@@ -764,7 +765,7 @@ describe("the pairing survives the process", () => {
       momentId: "m9",
       results: [
         {
-          statementId: "s-rule",
+          memoryId: "s-rule",
           text: "Never widen a consented scope.",
           confidence: 0.8,
           layer: "team",
@@ -774,7 +775,7 @@ describe("the pairing survives the process", () => {
     });
     fed({ session_id: "pair1", cwd: project, prompt: "widen the scope" });
     await runMoment("prompt-submit", "claude");
-    expect((await noteOf("pair1")).standing).toHaveLength(1);
+    expect((await noteOf("pair1")).activeMemories).toHaveLength(1);
 
     reset();
     fed({
@@ -787,7 +788,7 @@ describe("the pairing survives the process", () => {
 
     const kept = (await noteOf("pair1")).servedAt ?? [];
     expect(kept).toHaveLength(1);
-    expect(kept[0]).toMatchObject({ statementId: "s-rule", act: "change", became: "served" });
+    expect(kept[0]).toMatchObject({ memoryId: "s-rule", act: "change", became: "served" });
   });
 
   it("keeps it on the paths that say nothing, too", async () => {
@@ -800,7 +801,7 @@ describe("the pairing survives the process", () => {
       momentId: "m10",
       results: [
         {
-          statementId: "s-rule",
+          memoryId: "s-rule",
           text: "Never widen a consented scope.",
           confidence: 0.8,
           layer: "team",
@@ -893,7 +894,7 @@ describe("after-act delivering staged guidance and failure recovery", () => {
       guardMode: "advisory",
       results: [
         {
-          statementId: "s-advise",
+          memoryId: "s-advise",
           text: "Prefer using upsert helper over raw write.",
           confidence: 0.8,
           layer: "team",
@@ -955,7 +956,7 @@ describe("after-act delivering staged guidance and failure recovery", () => {
       guardMode: "strict",
       results: [
         {
-          statementId: "s-subagent",
+          memoryId: "s-subagent",
           text: "Never launch external subagents without approval.",
           confidence: 0.9,
           layer: "team",
@@ -985,7 +986,7 @@ describe("after-act delivering staged guidance and failure recovery", () => {
       guardMode: "strict",
       results: [
         {
-          statementId: "s-subagent-task",
+          memoryId: "s-subagent-task",
           text: "Never launch external subagents without approval.",
           confidence: 0.9,
           layer: "team",
@@ -1015,7 +1016,7 @@ describe("after-act delivering staged guidance and failure recovery", () => {
       guardMode: "strict",
       results: [
         {
-          statementId: "s-task-tool",
+          memoryId: "s-task-tool",
           text: "Never launch external subagents without approval.",
           confidence: 0.9,
           layer: "team",
@@ -1085,7 +1086,7 @@ describe("Claude Code hook loop integrations", () => {
       momentId: "m-subagent-start",
       results: [
         {
-          statementId: "s-sub-seed",
+          memoryId: "s-sub-seed",
           text: "Always sanitize input before calling APIs.",
           confidence: 0.95,
           layer: "project",
@@ -1123,7 +1124,7 @@ describe("Claude Code hook loop integrations", () => {
       guardMode: "strict",
       results: [
         {
-          statementId: "s-claude-agent",
+          memoryId: "s-claude-agent",
           text: "Never spawn subagents without user approval.",
           confidence: 0.95,
           layer: "team",
@@ -1168,7 +1169,7 @@ describe("Claude Code hook loop integrations", () => {
       guardMode: "strict",
       results: [
         {
-          statementId: "s-claude-workflow",
+          memoryId: "s-claude-workflow",
           text: "Never spawn workflows without user approval.",
           confidence: 0.95,
           layer: "team",

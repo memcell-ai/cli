@@ -36,7 +36,7 @@ const { recall } = await import("../src/commands/recall.js");
 const { remember } = await import("../src/commands/remember.js");
 const { report } = await import("../src/commands/report.js");
 const { saveAgentKey } = await import("../src/keyring.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 
 const cwd = process.cwd;
 
@@ -94,6 +94,28 @@ describe("recall", () => {
     calls.length = 0;
     await recall("anything");
     expect(calls[0]!.body).not.toHaveProperty("limit");
+  });
+
+  it("carries metadata containment filter when valid JSON is provided", async () => {
+    answer = () => ({ momentId: "m1", results: [] });
+
+    await recall(
+      "anything",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      '{"threadId":"thr_123"}',
+    );
+    expect(calls[0]!.body.metadata).toEqual({ threadId: "thr_123" });
+
+    // Invalid JSON returns exit code 1
+    calls.length = 0;
+    expect(
+      await recall("anything", undefined, undefined, undefined, undefined, false, "not-json"),
+    ).toBe(1);
+    expect(calls).toHaveLength(0);
   });
 
   it("marks a pinned statement, so presence is never read as relevance", async () => {
@@ -163,7 +185,7 @@ describe("report", () => {
 
     expect(await report("s1", "worked")).toBe(0);
     expect(calls[0]!.url).toBe("http://memcell.test/api/v1/feedback");
-    expect(calls[0]!.body.statementId).toBe("s1");
+    expect(calls[0]!.body.memory_id).toBe("s1");
     expect(calls[0]!.body.outcome).toBe("worked");
     expect(calls[0]!.body).not.toHaveProperty("note");
   });
@@ -185,7 +207,7 @@ describe("report", () => {
     answer = () => ({ from: 0.5, to: 0.6 });
     await report("7f3e-with/slash", "worked");
     expect(calls[0]!.url).toBe("http://memcell.test/api/v1/feedback");
-    expect(calls[0]!.body.statementId).toBe("7f3e-with/slash");
+    expect(calls[0]!.body.memory_id).toBe("7f3e-with/slash");
   });
 });
 

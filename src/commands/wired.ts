@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { agentStanding } from "../client.js";
 import { agentKeyForProject, saveAgentKey } from "../keyring.js";
 import { normalize } from "../instance.js";
-import { findProject } from "../project.js";
+import { findWorkspace } from "../workspace.js";
 import { badge, cmd, label, place, row, say, warn } from "../ui.js";
 
 // What every command that acts on a space needs: the directory's wiring and
@@ -34,7 +34,7 @@ export async function wired(
   url?: string,
   options: { silent?: boolean } = {},
 ): Promise<Wired | null> {
-  const found = await findProject(process.cwd());
+  const found = await findWorkspace(process.cwd());
   if (!found) {
     if (!options.silent) {
       say(

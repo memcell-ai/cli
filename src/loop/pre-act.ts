@@ -1,6 +1,6 @@
 import type { Guard, ActClass } from "../adapters/surface.js";
 import { actOf } from "./act.js";
-import type { ActiveStatement } from "./session.js";
+import type { ActiveMemory } from "./session.js";
 
 const VALID_ACTS: ActClass[] = ["read", "change", "record", "send", "answer"];
 
@@ -8,9 +8,9 @@ export function isActClass(val: string): val is ActClass {
   return VALID_ACTS.includes(val as ActClass);
 }
 
-export interface RawStatementInput {
+export interface RawMemoryInput {
   id?: string;
-  statementId?: string;
+  memoryId?: string;
   title?: string;
   text?: string;
   context?: string | null;
@@ -22,7 +22,6 @@ export interface RawStatementInput {
   appliesAt?: string[];
   refuses?: boolean;
   type?: string;
-  kind?: string;
   layer?: string;
   contested?: boolean;
   diverged?: boolean;
@@ -32,39 +31,35 @@ export interface RawStatementInput {
 }
 
 /**
- * Normalizes statements from recall
- * and stages statements bearing on actions for pre-act gating.
+ * Normalizes memories from recall
+ * and stages memories bearing on actions for pre-act gating.
  */
-export function stageStatementsFromRecall(
-  statements: RawStatementInput[],
+export function stageMemoriesFromRecall(
+  memories: RawMemoryInput[],
   guardMode: "strict" | "advisory" = "strict",
-): ActiveStatement[] {
-  const staged: ActiveStatement[] = [];
+): ActiveMemory[] {
+  const staged: ActiveMemory[] = [];
 
-  for (const stmt of statements) {
-    const statementId = stmt.id ?? stmt.statementId;
-    if (!statementId) continue;
+  for (const mem of memories) {
+    const memoryId = mem.id ?? mem.memoryId;
+    if (!memoryId) continue;
 
-    const title = stmt.title ?? stmt.text ?? "";
-    const context = stmt.context ?? "";
-    const text = stmt.title
-      ? context
-        ? `${stmt.title}: ${context}`
-        : stmt.title
-      : (stmt.text ?? "");
-    const tags = Array.isArray(stmt.tags) ? stmt.tags.map((t) => t.toLowerCase()) : [];
+    const title = mem.title ?? mem.text ?? "";
+    const context = mem.context ?? "";
+    const text = mem.title ? (context ? `${mem.title}: ${context}` : mem.title) : (mem.text ?? "");
+    const tags = Array.isArray(mem.tags) ? mem.tags.map((t) => t.toLowerCase()) : [];
 
-    // 1. Determine if this statement is a Guard vs. Directive vs. Convention vs. General Knowledge
+    // 1. Determine if this memory is a Guard vs. Directive vs. Convention vs. General Knowledge
     const isGuard =
-      stmt.type === "guard" ||
+      mem.type === "guard" ||
       tags.includes("guard") ||
       tags.includes("security") ||
-      stmt.refuses === true;
+      mem.refuses === true;
 
-    const isDirective = stmt.type === "directive";
+    const isDirective = mem.type === "directive";
 
     const isConvention =
-      stmt.type === "preference" ||
+      mem.type === "preference" ||
       tags.includes("convention") ||
       tags.includes("style") ||
       tags.includes("guideline");
@@ -73,8 +68,8 @@ export function stageStatementsFromRecall(
     let appliesAt: ActClass[] = [];
 
     // Check explicit appliesAt field
-    if (Array.isArray(stmt.appliesAt) && stmt.appliesAt.length > 0) {
-      appliesAt = stmt.appliesAt.filter(isActClass);
+    if (Array.isArray(mem.appliesAt) && mem.appliesAt.length > 0) {
+      appliesAt = mem.appliesAt.filter(isActClass);
     }
 
     // Check tags for act classes (e.g. #change, #send, #read, #record, #answer)
@@ -83,7 +78,7 @@ export function stageStatementsFromRecall(
       appliesAt = Array.from(new Set([...appliesAt, ...actsFromTags]));
     }
 
-    // If no explicit acts declared, apply intelligent defaults based on statement category
+    // If no explicit acts declared, apply intelligent defaults based on memory category
     if (appliesAt.length === 0) {
       if (isGuard) {
         // Guard defaults to modifying / durable / external acts
@@ -94,21 +89,21 @@ export function stageStatementsFromRecall(
       }
     }
 
-    // If statement doesn't bear on any acts, it's general knowledge and not staged for tool-time
+    // If memory doesn't bear on any acts, it's general knowledge and not staged for tool-time
     if (appliesAt.length === 0) {
       continue;
     }
 
     // 3. Determine refusal behavior based on guardMode:
-    // A statement is a hard refusal gate ONLY if it is a Guard (type === 'guard', #guard tag, or stmt.refuses === true)
+    // A memory is a hard refusal gate ONLY if it is a Guard (type === 'guard', #guard tag, or mem.refuses === true)
     // AND guardMode is "strict".
     // In "advisory" mode, guards degrade to soft advisories (refuses: false).
-    // Directives, conventions, and other statements are ALWAYS soft advisories (refuses: false).
+    // Directives, conventions, and other memories are ALWAYS soft advisories (refuses: false).
     const refuses = isGuard && guardMode === "strict";
 
     staged.push({
-      statementId,
-      title: stmt.title ?? title,
+      memoryId,
+      title: mem.title ?? title,
       text,
       tags,
       appliesAt,
@@ -123,11 +118,7 @@ export interface PreActOptions {
   tool: string;
   input: Record<string, unknown> | undefined;
   guard: Guard;
-  activeStatements?: ActiveStatement[];
-  /** @deprecated Kept for backward compatibility */
-  standingRules?: ActiveStatement[];
-  /** @deprecated Kept for backward compatibility */
-  activeRules?: ActiveStatement[];
+  activeMemories?: ActiveMemory[];
   firedMap?: Record<string, number>;
 }
 
@@ -137,15 +128,15 @@ export type PreActResult =
       verdict: "refuse";
       act: ActClass;
       reason: string;
-      stops: ActiveStatement[];
-      pairs: { statementId: string; act: string; tool: string; became: string }[];
+      stops: ActiveMemory[];
+      pairs: { memoryId: string; act: string; tool: string; became: string }[];
     }
   | {
       verdict: "advise";
       act: ActClass;
       guidance: string;
-      bears: ActiveStatement[];
-      pairs: { statementId: string; act: string; tool: string; became: string }[];
+      bears: ActiveMemory[];
+      pairs: { memoryId: string; act: string; tool: string; became: string }[];
     };
 
 /**
@@ -154,7 +145,7 @@ export type PreActResult =
  */
 export function evaluatePreAct(options: PreActOptions): PreActResult {
   const { tool, input, guard, firedMap = {} } = options;
-  const statements = options.activeStatements ?? options.activeRules ?? options.standingRules ?? [];
+  const memories = options.activeMemories ?? [];
 
   if (!tool || !guard) {
     return { verdict: "pass" };
@@ -165,7 +156,7 @@ export function evaluatePreAct(options: PreActOptions): PreActResult {
     return { verdict: "pass" };
   }
 
-  const bears = statements.filter((r) => r.appliesAt.includes(act));
+  const bears = memories.filter((r) => r.appliesAt.includes(act));
   if (bears.length === 0) {
     return { verdict: "pass" };
   }
@@ -175,7 +166,7 @@ export function evaluatePreAct(options: PreActOptions): PreActResult {
   if (stops.length > 0) {
     const reason = stops.map((r) => r.text || r.title).join(" · ");
     const pairs = stops.map((r) => ({
-      statementId: r.statementId,
+      memoryId: r.memoryId,
       act,
       tool,
       became: "refused",
@@ -203,7 +194,7 @@ export function evaluatePreAct(options: PreActOptions): PreActResult {
   ].join("\n");
 
   const pairs = bears.map((r) => ({
-    statementId: r.statementId,
+    memoryId: r.memoryId,
     act,
     tool,
     became: "served",

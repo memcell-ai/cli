@@ -5,7 +5,7 @@ import { agentKeyForProject, forgetAgentKey } from "../keyring.js";
 import { runMoment } from "../loop/hook.js";
 import { isMoment, MOMENTS } from "../loop/moments.js";
 import { log } from "../loop/session.js";
-import { findProject, removeProject } from "../project.js";
+import { findWorkspace, removeWorkspace } from "../workspace.js";
 import { badge, cmd, good, label, list, place, row, say, value } from "../ui.js";
 
 // `memcell hook <moment> <program> --agent <id>` — what an installed hook runs.
@@ -40,7 +40,7 @@ export async function hook(moment: string, program: string): Promise<number> {
   try {
     result = await runMoment(moment, program);
   } catch (trouble) {
-    const found = await findProject(process.cwd()).catch(() => null);
+    const found = await findWorkspace(process.cwd()).catch(() => null);
     await log(
       `${moment} ${program} · fell over · ${(trouble as Error)?.message ?? trouble}`,
       found?.project,
@@ -92,7 +92,7 @@ export async function hook(moment: string, program: string): Promise<number> {
 // surviving key is said out loud, with the one command that kills it, rather
 // than left silent.
 export async function hookRemove(): Promise<number> {
-  const found = await findProject();
+  const found = await findWorkspace();
   if (!found) {
     say(
       row(0, [badge("memcell"), place(process.cwd())]),
@@ -108,7 +108,7 @@ export async function hookRemove(): Promise<number> {
   // pointer to it goes.
   const held = await agentKeyForProject(project.instance, here);
   if (held) await forgetAgentKey(held.instance, held.keyId);
-  await removeProject(at);
+  await removeWorkspace(at);
 
   say(
     row(0, [badge("memcell"), value(project.space)]),

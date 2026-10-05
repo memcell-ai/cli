@@ -19,8 +19,9 @@ vi.mock("../src/instance.js", async (original) => ({
   ...(await original<typeof import("../src/instance.js")>()),
   credentialFor: async () => store.credential,
 }));
-vi.mock("../src/project.js", async (original) => ({
-  ...(await original<typeof import("../src/project.js")>()),
+vi.mock("../src/workspace.js", async (original) => ({
+  ...(await original<typeof import("../src/workspace.js")>()),
+  findWorkspace: async () => wired.project,
   findProject: async () => wired.project,
 }));
 

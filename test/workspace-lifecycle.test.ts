@@ -10,7 +10,7 @@ import {
   PROJECT_FILE,
   PROJECT_FILE_ASIDE,
   saveProject,
-} from "../src/project.js";
+} from "../src/workspace.js";
 import {
   agentKeyForProject,
   listConnectedProjects,

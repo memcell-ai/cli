@@ -2,7 +2,7 @@ import { call } from "./client.js";
 import { get } from "./config.js";
 import { credentialFor } from "./instance.js";
 import type { Command, ResolvedContext, ResolvedProject } from "./model.js";
-import { findProject } from "./project.js";
+import { findWorkspace } from "./workspace.js";
 import { badge, cmd, label, place, row, say, warn } from "./ui.js";
 
 interface MeResponse {
@@ -61,7 +61,7 @@ export async function resolveContext(
 
   // 2. Fall back to local project file (.memcell)
   if (!project) {
-    const found = await findProject(from).catch(() => null);
+    const found = await findWorkspace(from).catch(() => null);
     if (found?.project) {
       const proj = found.project;
       const slug = proj.project || proj.space;

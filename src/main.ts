@@ -4,7 +4,7 @@ import { resolveContext, enforceRequirements } from "./context.js";
 import { detail, overview, refusal } from "./help.js";
 import { badInstance, whereInstance } from "./instance.js";
 import { parse } from "./parse.js";
-import { findProject } from "./project.js";
+import { findWorkspace } from "./workspace.js";
 import { dirname } from "node:path";
 
 import { checkUpdate, printUpdateNotice } from "./update.js";
@@ -59,7 +59,7 @@ export async function main(argv: string[], version: string): Promise<number> {
       // migrates itself and every later one finds nothing to do. It never
       // fails the command it precedes — a wiring we could not rewrite is
       // still a wiring that fires.
-      const found = await findProject().catch(() => null);
+      const found = await findWorkspace().catch(() => null);
       if (found) await migrateWiring(dirname(found.at)).catch(() => []);
 
       const context = await resolveContext(instance, parsed.flags, from);

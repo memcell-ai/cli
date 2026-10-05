@@ -126,7 +126,7 @@ describe("a machine that was reset", () => {
     // Wired, but this machine no longer holds the key — after a reset, a
     // keyring moved between machines, or a revoked key. Same shape, different
     // problem, different fix.
-    const { saveProject } = await import("../src/project.js");
+    const { saveProject } = await import("../src/workspace.js");
     await saveProject({ instance: "http://localhost:3100", space: "avalon" }, project);
     Object.defineProperty(process, "stdin", {
       value: stdin({ cwd: project }),

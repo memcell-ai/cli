@@ -11,7 +11,7 @@ import { wired } from "./wired.js";
 const OUTCOMES = ["worked", "failed", "avoided"] as const;
 
 export async function report(
-  statementId: string,
+  memoryId: string,
   outcome: string,
   note?: string,
   url?: string,
@@ -29,12 +29,16 @@ export async function report(
 
   try {
     const sdk = await getSdkClient(here.instance, { bearer: here.key });
-    const moved = (await (sdk as any).feedback({
-      statementId,
+    const feedbackPayload: any = {
+      memoryId,
+      statementId: memoryId,
       outcome: outcome as any,
-      reason: note,
-      note,
-    })) as any;
+    };
+    if (note !== undefined) {
+      feedbackPayload.reason = note;
+      feedbackPayload.note = note;
+    }
+    const moved = (await (sdk as any).feedback(feedbackPayload)) as any;
     const fromNum: number =
       typeof moved.from === "number" ? moved.from : (moved.attributed?.[0]?.from ?? 0.5);
     const toNum: number =

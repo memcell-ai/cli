@@ -36,7 +36,7 @@ const { listMemories, createMemory, getMemory, deleteMemory } =
   await import("../src/commands/memories.js");
 const { parse } = await import("../src/parse.js");
 const { saveCredential } = await import("../src/instance.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 const { resolveContext } = await import("../src/context.js");
 
 const instance = "http://memcell.test";

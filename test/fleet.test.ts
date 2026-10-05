@@ -43,7 +43,7 @@ const {
 const { listAuditLogs, exportAuditLogs } = await import("../src/commands/audit.js");
 const { getEnterpriseInsights } = await import("../src/commands/insights.js");
 const { saveCredential } = await import("../src/instance.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 
 const instance = "http://memcell.test";
 const cwd = process.cwd;

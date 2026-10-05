@@ -4,7 +4,7 @@ import { agentStanding, call, MemcellError } from "../client.js";
 import { credentialFor } from "../instance.js";
 import { agentKeyForProject } from "../keyring.js";
 import { resolveNamespace } from "../namespace.js";
-import { findProject } from "../project.js";
+import { findWorkspace } from "../workspace.js";
 import { getSdkClient } from "../sdk-client.js";
 import {
   badge,
@@ -101,7 +101,7 @@ export async function listAgents(
       return 0;
     }
 
-    const found = await findProject();
+    const found = await findWorkspace();
     const here = found ? await agentKeyForProject(found.project.instance, dirname(found.at)) : null;
 
     say(
@@ -327,7 +327,7 @@ export async function revokeAgent(instance: string, keyId: string): Promise<numb
 }
 
 export async function whoamiAgent(instance: string): Promise<number> {
-  const found = await findProject();
+  const found = await findWorkspace();
   if (!found) {
     say(
       row(0, [badge("memcell"), label("agents whoami")]),

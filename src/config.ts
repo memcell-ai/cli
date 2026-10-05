@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { parse, stringify } from "smol-toml";
 
-import { PROJECT_FILE, PROJECT_FILE_ASIDE } from "./project.js";
+import { WORKSPACE_FILE, WORKSPACE_FILE_ASIDE } from "./workspace.js";
 import { machineFile } from "./machine.js";
 
 // Settings, in two places with one precedence: **the project wins.**
@@ -166,7 +166,7 @@ export async function text(
 async function projectFile(): Promise<string> {
   let dir = resolve(process.cwd());
   for (;;) {
-    for (const name of [PROJECT_FILE, PROJECT_FILE_ASIDE]) {
+    for (const name of [WORKSPACE_FILE, WORKSPACE_FILE_ASIDE]) {
       const at = join(dir, name);
       try {
         // A FILE, not merely a path that exists: the machine's own data lives
@@ -181,11 +181,11 @@ async function projectFile(): Promise<string> {
     if (up === dir) break;
     dir = up;
   }
-  const cwdClassic = join(resolve(process.cwd()), PROJECT_FILE);
+  const cwdClassic = join(resolve(process.cwd()), WORKSPACE_FILE);
   const taken = await stat(cwdClassic)
     .then((s) => s.isDirectory())
     .catch(() => false);
-  return taken ? join(resolve(process.cwd()), PROJECT_FILE_ASIDE) : cwdClassic;
+  return taken ? join(resolve(process.cwd()), WORKSPACE_FILE_ASIDE) : cwdClassic;
 }
 
 /** Where a scope's settings are written, so a command can name the file. */

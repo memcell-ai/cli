@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { findProjectFromRoots, saveProject } from "../src/project.js";
+import { findProjectFromRoots, saveProject } from "../src/workspace.js";
 import { listConnectedProjects, saveAgentKey } from "../src/keyring.js";
 
 async function scratch() {
