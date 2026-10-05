@@ -17,7 +17,7 @@ vi.spyOn(console, "log").mockImplementation((line: unknown) => {
 });
 
 const { hookRemove } = await import("../src/commands/hook.js");
-const { saveProject, findProject } = await import("../src/project.js");
+const { saveProject, findProject } = await import("../src/workspace.js");
 const { saveAgentKey, agentKeyFor } = await import("../src/keyring.js");
 const { claude } = await import("../src/adapters/claude.js");
 

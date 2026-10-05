@@ -1,6 +1,6 @@
 import type { MemCell } from "@memcell/sdk";
 import { get } from "./config.js";
-import { findProject, type Project } from "./project.js";
+import { findWorkspace, type Workspace } from "./workspace.js";
 
 /**
  * Resolves the full "owner/project" namespace for API operations.
@@ -13,7 +13,7 @@ import { findProject, type Project } from "./project.js";
 export async function resolveNamespace(
   sdk: MemCell,
   explicitTarget?: string,
-  foundProject?: { project: Project; at: string } | null,
+  foundProject?: { project: Workspace; at: string } | null,
 ): Promise<string> {
   const target = explicitTarget?.trim();
   if (target && target.includes("/")) {
@@ -21,7 +21,7 @@ export async function resolveNamespace(
   }
 
   const projectObj =
-    foundProject !== undefined ? foundProject : await findProject().catch(() => null);
+    foundProject !== undefined ? foundProject : await findWorkspace().catch(() => null);
   const proj = projectObj?.project;
   const slug = target || proj?.workspace || proj?.project || proj?.space;
 

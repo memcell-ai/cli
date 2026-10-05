@@ -1,7 +1,7 @@
 import { deviceGrant } from "../grant.js";
 import { call, whoami } from "../client.js";
 import { credentialFor } from "../instance.js";
-import { findProject } from "../project.js";
+import { findWorkspace } from "../workspace.js";
 import { getSdkClient } from "../sdk-client.js";
 import {
   badge,
@@ -37,7 +37,7 @@ import {
  * between ever checking whether this directory could run the loop.
  */
 async function hereNext(): Promise<Row[]> {
-  const found = await findProject(process.cwd());
+  const found = await findWorkspace(process.cwd());
   return found
     ? [row(2, [good("connected here")], [value(found.project.space)])]
     : [row(2, [warn("not connected here")], [label("run"), cmd("memcell connect")])];

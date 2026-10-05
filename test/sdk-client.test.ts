@@ -4,7 +4,7 @@ import { getSdkClient } from "../src/sdk-client.js";
 describe("getSdkClient", () => {
   it("wraps native Response objects without triggering private member #state error", async () => {
     // Uses real global Response instance to ensure native Node.js 24 private brand checks are exercised
-    const nativeResponse = new Response(JSON.stringify({ ok: true, statements: [] }), {
+    const nativeResponse = new Response(JSON.stringify({ ok: true, memories: [] }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -19,7 +19,7 @@ describe("getSdkClient", () => {
     // Exercising recall calls internal request() which checks response.status === 429 and !response.ok
     const result = await client.recall({ query: "test query" });
     expect(result).toBeDefined();
-    expect(result.statements).toEqual([]);
+    expect(result.memories).toEqual([]);
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -28,7 +28,7 @@ describe("getSdkClient", () => {
 
     const mockFetch = vi.fn(async (_url: any, init?: any) => {
       capturedHeaders = init?.headers ?? {};
-      return new Response(JSON.stringify({ ok: true, statements: [] }), {
+      return new Response(JSON.stringify({ ok: true, memories: [] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });

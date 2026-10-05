@@ -866,7 +866,7 @@ describe("intent envelope rollup & prompt cleaning", () => {
   it("isGuard classifies standing invariants, action rules, and pinned rules as guards", () => {
     expect(
       isGuard({
-        statementId: "s1",
+        memoryId: "s1",
         text: "Any rule",
         confidence: 0.8,
         layer: "org",
@@ -874,11 +874,11 @@ describe("intent envelope rollup & prompt cleaning", () => {
       }),
     ).toBe(true);
     expect(
-      isGuard({ statementId: "s2", text: "Any rule", confidence: 0.8, layer: "org", pinned: true }),
+      isGuard({ memoryId: "s2", text: "Any rule", confidence: 0.8, layer: "org", pinned: true }),
     ).toBe(true);
     expect(
       isGuard({
-        statementId: "s3",
+        memoryId: "s3",
         text: "Any rule",
         confidence: 0.8,
         layer: "org",
@@ -887,7 +887,7 @@ describe("intent envelope rollup & prompt cleaning", () => {
     ).toBe(true);
     expect(
       isGuard({
-        statementId: "s4",
+        memoryId: "s4",
         text: "Any rule",
         confidence: 0.8,
         layer: "org",
@@ -896,16 +896,16 @@ describe("intent envelope rollup & prompt cleaning", () => {
     ).toBe(true);
     expect(
       isGuard({
-        statementId: "s5",
+        memoryId: "s5",
         text: "Any rule",
         confidence: 0.8,
         layer: "org",
-        kind: "gotcha",
+        type: "guard",
       }),
     ).toBe(true);
     expect(
       isGuard({
-        statementId: "s6",
+        memoryId: "s6",
         text: "Some observation about weather",
         confidence: 0.8,
         layer: "org",
@@ -916,7 +916,7 @@ describe("intent envelope rollup & prompt cleaning", () => {
   it("asContext places standing invariants in operational guards section ahead of soft conventions", () => {
     const results = [
       {
-        statementId: "s-guard-1",
+        memoryId: "s-guard-1",
         text: "Releases must go through release-please.",
         confidence: 0.9,
         layer: "org",
@@ -924,7 +924,7 @@ describe("intent envelope rollup & prompt cleaning", () => {
         appliesAt: ["send"],
       },
       {
-        statementId: "s-conv-1",
+        memoryId: "s-conv-1",
         text: "Buttons use the centralized Button component.",
         confidence: 0.6,
         layer: "team",
@@ -934,11 +934,11 @@ describe("intent envelope rollup & prompt cleaning", () => {
     const ctx = asContext(results, "test-space", "deploy release");
     expect(ctx).toContain("OPERATIONAL GUARDS & INVARIANTS");
     expect(ctx).toContain("Releases must go through release-please.");
-    expect(ctx).toContain("From this project's memory (test-space) — already learned here:");
+    expect(ctx).toContain("From this workspace's memory (test-space) — already learned here:");
     expect(ctx).toContain("Buttons use the centralized Button component.");
     // Guard must appear before soft conventions in context string
     expect(ctx.indexOf("OPERATIONAL GUARDS & INVARIANTS")).toBeLessThan(
-      ctx.indexOf("From this project's memory"),
+      ctx.indexOf("From this workspace's memory"),
     );
   });
 });

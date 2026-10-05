@@ -97,9 +97,7 @@ export async function listPromotions(
           [scopeBadge(req.fromScope || "user")],
           [variant("→")],
           [scopeBadge(req.toScope || "project")],
-          req.statement?.title
-            ? [label(req.statement.title)]
-            : [label("statement"), idSeg(req.statementId || req.statement_id)],
+          req.memory?.title ? [label(req.memory.title)] : [label("memory"), idSeg(req.memoryId)],
         ),
         row(
           2,
@@ -153,16 +151,16 @@ export async function approvePromotion(
       );
     }
 
-    const stmt = res.statement;
+    const mem = res.memory;
     say(
       row(0, [badge("memcell"), label("promotions approve"), place(namespace)]),
       row(
         1,
         [good("approved")],
-        stmt?.scope ? [scopeBadge(stmt.scope)] : null,
-        stmt?.title ? [label(stmt.title)] : null,
+        mem?.scope ? [scopeBadge(mem.scope)] : null,
+        mem?.title ? [label(mem.title)] : null,
       ),
-      row(2, [idSeg(requestId)], stmt?.id ? [label("statement"), idSeg(stmt.id)] : null),
+      row(2, [idSeg(requestId)], mem?.id ? [label("memory"), idSeg(mem.id)] : null),
     );
     return 0;
   } catch (error) {

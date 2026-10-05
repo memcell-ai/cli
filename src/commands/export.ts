@@ -13,14 +13,13 @@ import { wired } from "./wired.js";
 // Formats are the files other agents already read, so leaving (or just
 // keeping a copy in the repo) needs no translator afterwards.
 
-interface ExportedStatement {
+interface ExportedMemory {
   id?: string;
-  statementId?: string;
+  memoryId?: string;
   text: string;
   title?: string;
   type?: string | null;
   tags?: string[];
-  kind: string | null;
   scope: string;
   status: string;
   confidence: number;
@@ -31,41 +30,38 @@ interface ExportedStatement {
 
 interface ExportDoc {
   space: { slug: string; name: string; exportedAt: string };
-  statements: ExportedStatement[];
+  memories: ExportedMemory[];
 }
 
 export const EXPORT_FORMATS = ["json", "agents-md", "claude-md", "cursorrules"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
-/** The kinds and types, in the order a reader wants them: what was decided, what must
+/** The types, in the order a reader wants them: what was decided, what must
  *  be followed, what to avoid, then everything known. */
-const SECTIONS: [title: string, kinds: (string | null)[], types?: (string | null)[]][] = [
-  ["Decisions", ["decision", "guard"], ["directive"]],
-  ["Conventions", ["convention", "preference"], ["preference"]],
-  ["Gotchas", ["gotcha"], ["observation"]],
-  ["Dead ends — do not retry", ["dead_end"], []],
-  ["Facts", ["fact", null], ["fact"]],
+const SECTIONS: [title: string, types: (string | null)[]][] = [
+  ["Directives & Guards", ["directive", "guard"]],
+  ["Preferences", ["preference"]],
+  ["Observations & Learnings", ["observation"]],
+  ["Facts", ["fact", null]],
 ];
 
-/** A statement as one Markdown line: the claim, then its condition. */
-function lineOf(s: ExportedStatement): string {
+/** A memory as one Markdown line: the claim, then its condition. */
+function lineOf(s: ExportedMemory): string {
   const when = s.context?.when ? ` *(applies when ${s.context.when})*` : "";
   return `- ${s.text}${when}`;
 }
 
 export function renderMarkdown(doc: ExportDoc, heading: string): string {
-  const live = doc.statements.filter((s) => s.status === "active");
+  const items = doc.memories || [];
+  const live = items.filter((s) => s.status === "active");
   const parts = [
     `# ${heading}`,
     "",
-    `What ${doc.space.name} knows — ${live.length} statement${live.length === 1 ? "" : "s"}, exported from memcell on ${doc.space.exportedAt.slice(0, 10)}.`,
+    `What ${doc.space.name} knows — ${live.length} memor${live.length === 1 ? "y" : "ies"}, exported from memcell on ${doc.space.exportedAt.slice(0, 10)}.`,
   ];
-  const placed = new Set<ExportedStatement>();
-  for (const [title, kinds, types] of SECTIONS) {
-    const here = live.filter(
-      (s) =>
-        !placed.has(s) && (kinds.includes(s.kind) || (s.type && types && types.includes(s.type))),
-    );
+  const placed = new Set<ExportedMemory>();
+  for (const [title, types] of SECTIONS) {
+    const here = live.filter((s) => !placed.has(s) && types.includes(s.type ?? null));
     if (here.length === 0) continue;
     here.forEach((s) => placed.add(s));
     parts.push("", `## ${title}`, "", ...here.map(lineOf));
@@ -76,7 +72,8 @@ export function renderMarkdown(doc: ExportDoc, heading: string): string {
 }
 
 export function renderCursorrules(doc: ExportDoc): string {
-  const live = doc.statements.filter((s) => s.status === "active");
+  const items = doc.memories || [];
+  const live = items.filter((s) => s.status === "active");
   return (
     [
       `# ${doc.space.name} — exported from memcell ${doc.space.exportedAt.slice(0, 10)}`,
@@ -146,18 +143,19 @@ export async function exportSpace(
             format === "claude-md" ? "CLAUDE.md — project memory" : "Project memory",
           );
 
+  const totalCount = (doc.memories || []).length;
   if (out) {
     await writeFile(out, rendered);
     say(
       row(0, [badge("memcell"), label("export"), place(targetSpace)]),
-      row(1, [good(`${doc.statements.length} statements`)], [value(format)], [place(out)]),
+      row(1, [good(`${totalCount} memories`)], [value(format)], [place(out)]),
     );
   } else {
     // The document itself, piped clean; the receipt rides beside it.
     emit(rendered);
     aside(
       row(0, [badge("memcell"), label("export"), place(targetSpace)]),
-      row(1, [good(`${doc.statements.length} statements`)], [value(format)]),
+      row(1, [good(`${totalCount} memories`)], [value(format)]),
     );
   }
   return 0;

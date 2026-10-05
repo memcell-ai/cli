@@ -1,6 +1,6 @@
 import { call, MemcellError } from "../client.js";
 import { credentialFor } from "../instance.js";
-import { findProject } from "../project.js";
+import { findWorkspace } from "../workspace.js";
 import { badge, cmd, label, place, row, say, state, value, variant, warn } from "../ui.js";
 
 // What the agents did.
@@ -118,7 +118,7 @@ export async function stats(instance: string): Promise<number> {
   // unlinked directory still gets one space rather than a sum across all
   // of them — `--all-spaces` widened it and was a third way to spell a
   // question that already had two.
-  const here = signedIn ? await findProject() : null;
+  const here = signedIn ? await findWorkspace() : null;
 
   try {
     const read = await call<Stats>(
@@ -137,7 +137,7 @@ export async function stats(instance: string): Promise<number> {
           ? [label("space"), value(named)]
           : [label("this instance")],
       ),
-      figure("followed", read.followed, () => "statements kept at the moment they applied"),
+      figure("followed", read.followed, () => "memories kept at the moment they applied"),
       figure("stopped", read.stopped, (n) => `act${n === 1 ? "" : "s"} memory prevented`),
       figure("repeated", read.repeated, (n) => `correction${n === 1 ? "" : "s"} that did not take`),
       // Not a fourth verb — the denominator the first one is read against.

@@ -18,7 +18,7 @@ import {
 } from "../instance.js";
 import { pruneProjectKeys, saveAgentKey } from "../keyring.js";
 import { resolveModelForAgent } from "../model-detect.js";
-import { findGitRoot, findProject, PROJECT_FILE, saveProject } from "../project.js";
+import { findGitRoot, findWorkspace, WORKSPACE_FILE, saveWorkspace } from "../workspace.js";
 import { ask, CAN_ASK, choose, type Choice } from "../select.js";
 import {
   badge,
@@ -66,7 +66,7 @@ export async function connect(
   },
 ): Promise<number> {
   const pair = options.pair?.trim();
-  const existing = await findProject(process.cwd()).catch(() => null);
+  const existing = await findWorkspace(process.cwd()).catch(() => null);
   let targetProject = (options.project || options.space)?.trim();
 
   const isInteractive = !pair && !options.project && !options.space && CAN_ASK();
@@ -409,8 +409,8 @@ export async function connect(
   const linked = exchanged.project || exchanged.space;
   const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
   const gitRoot = !existing ? await findGitRoot(process.cwd()) : null;
-  const targetPath = existing?.at ?? (gitRoot ? join(gitRoot, PROJECT_FILE) : process.cwd());
-  const at = await saveProject(
+  const targetPath = existing?.at ?? (gitRoot ? join(gitRoot, WORKSPACE_FILE) : process.cwd());
+  const at = await saveWorkspace(
     {
       instance,
       owner: ownerSlug,

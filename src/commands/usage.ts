@@ -68,6 +68,7 @@ export async function getUsage(
 
     const data = await sdk.usage.get(owner, { timeframe });
 
+    const memQuotas = data.quotas.memories;
     say(
       row(
         0,
@@ -77,22 +78,22 @@ export async function getUsage(
       ),
       row(
         1,
-        [label("statements:")],
-        [value(data.quotas.statements.total.toLocaleString())],
-        data.quotas.statements.limit
+        [label("memories:")],
+        [value(memQuotas.total.toLocaleString())],
+        memQuotas.limit
           ? [
               label("/"),
-              value(data.quotas.statements.limit.toLocaleString()),
-              meter(data.quotas.statements.total, data.quotas.statements.limit),
+              value(memQuotas.limit.toLocaleString()),
+              meter(memQuotas.total, memQuotas.limit),
             ]
           : null,
       ),
-      ...(data.quotas.statements.types
+      ...(memQuotas.types
         ? [
             row(
               2,
               [label("by type:")],
-              ...Object.entries(data.quotas.statements.types).map(([t, count]) => [
+              ...Object.entries(memQuotas.types).map(([t, count]) => [
                 variant(t),
                 label(Number(count).toLocaleString()),
               ]),

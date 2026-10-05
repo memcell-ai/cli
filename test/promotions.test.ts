@@ -33,7 +33,7 @@ const { listPromotions, approvePromotion, rejectPromotion } =
   await import("../src/commands/promotions.js");
 const { promote } = await import("../src/commands/promote.js");
 const { saveCredential } = await import("../src/instance.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 const { saveAgentKey } = await import("../src/keyring.js");
 
 const instance = "http://memcell.test";
@@ -134,9 +134,9 @@ describe("promotions command group & 4-tier scope promotion", () => {
 
     const code = await promote("stmt_1", "project", "Standardizing", instance);
     expect(code).toBe(0);
-    const promoCall = calls.find((c) => c.url.includes("/statements/stmt_1/promote"));
+    const promoCall = calls.find((c) => c.url.includes("/memories/stmt_1/promote"));
     expect(promoCall).toBeDefined();
-    expect(promoCall?.body).toMatchObject({ toScope: "project", reason: "Standardizing" });
+    expect(promoCall?.body).toMatchObject({ toScope: "workspace", reason: "Standardizing" });
   });
 
   it("handles review-requested statement promotion in promote command", async () => {
@@ -153,7 +153,7 @@ describe("promotions command group & 4-tier scope promotion", () => {
 
     const code = await promote("stmt_1", "organization", "Org wide standard", instance);
     expect(code).toBe(0);
-    const promoCall = calls.find((c) => c.url.includes("/statements/stmt_1/promote"));
+    const promoCall = calls.find((c) => c.url.includes("/memories/stmt_1/promote"));
     expect(promoCall).toBeDefined();
     expect(promoCall?.body).toMatchObject({ toScope: "organization", reason: "Org wide standard" });
   });

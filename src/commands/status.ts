@@ -2,7 +2,7 @@ import { dirname } from "node:path";
 import { MemcellError, agentStanding, whoami } from "../client.js";
 import { agentKeyForProject, listConnectedProjects } from "../keyring.js";
 import { credentialFor, DEFAULT_INSTANCE, knownInstances } from "../instance.js";
-import { findProject } from "../project.js";
+import { findWorkspace } from "../workspace.js";
 import { badge, blank, cmd, good, label, place, row, say, value, warn } from "../ui.js";
 
 // What this machine knows, checked rather than recited: the stored session
@@ -12,7 +12,7 @@ import { badge, blank, cmd, good, label, place, row, say, value, warn } from "..
 export async function status(instance: string, _from: string): Promise<number> {
   const credential = await credentialFor(instance);
   const hosted = instance === DEFAULT_INSTANCE;
-  const found = await findProject();
+  const found = await findWorkspace();
 
   const projectDisplay = found
     ? found.project.owner

@@ -5,13 +5,13 @@ import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, good, id, label, place, row, say, scopeBadge, variant, warn } from "../ui.js";
 import { wired } from "./wired.js";
 
-// `memcell promote <statementId>` — elevate a statement to a broader scope
-// (project, team, organization). If direct execution is unauthorized,
+// `memcell promote <memoryId>` — elevate a memory to a broader scope
+// (workspace, team, organization). If direct execution is unauthorized,
 // submits a promotion request for peer review.
 
 export async function promote(
-  statementId: string,
-  toScope: string = "project",
+  memoryId: string,
+  toScope: string = "workspace",
   reason?: string,
   url?: string,
 ): Promise<number> {
@@ -19,8 +19,8 @@ export async function promote(
   if (!here) return 1;
 
   let normalizedScope = toScope.trim().toLowerCase();
-  if (normalizedScope === "common" || normalizedScope === "proj") {
-    normalizedScope = "project";
+  if (normalizedScope === "common" || normalizedScope === "proj" || normalizedScope === "project") {
+    normalizedScope = "workspace";
   } else if (normalizedScope === "org") {
     normalizedScope = "organization";
   }
@@ -30,15 +30,15 @@ export async function promote(
     const namespace = await resolveNamespace(sdk, undefined);
 
     let res: any;
-    if (typeof (sdk.statements as any)?.promote === "function") {
-      res = await (sdk.statements as any).promote(namespace, statementId, {
+    if (typeof (sdk.memories as any)?.promote === "function") {
+      res = await (sdk.memories as any).promote(namespace, memoryId, {
         toScope: normalizedScope,
         reason,
       });
     } else {
       res = await call(
         here.instance,
-        `/api/v1/${namespace}/statements/${encodeURIComponent(statementId)}/promote`,
+        `/api/v1/${namespace}/memories/${encodeURIComponent(memoryId)}/promote`,
         {
           method: "POST",
           body: { toScope: normalizedScope, reason },
@@ -47,18 +47,18 @@ export async function promote(
       );
     }
 
-    if (res?.promoted !== false && (res?.statement || res?.id)) {
-      const stmt = res.statement || res;
+    if (res?.promoted !== false && (res?.memory || res?.statement || res?.id)) {
+      const mem = res.memory || res.statement || res;
       say(
         row(0, [badge("memcell"), label("promote"), place(here.space)]),
         row(
           1,
           [good("promoted")],
-          [label("scope"), scopeBadge(stmt.scope || normalizedScope)],
-          stmt.version ? [label(`v${stmt.version}`)] : null,
-          stmt.title ? [label(stmt.title)] : null,
+          [label("scope"), scopeBadge(mem.scope || normalizedScope)],
+          mem.version ? [label(`v${mem.version}`)] : null,
+          mem.title ? [label(mem.title)] : null,
         ),
-        row(2, [id(stmt.id)]),
+        row(2, [id(mem.id)]),
       );
       return 0;
     }
@@ -72,9 +72,7 @@ export async function promote(
         [label("target scope"), scopeBadge(req?.toScope || normalizedScope)],
         req?.status ? [label("status"), variant(req.status)] : null,
       ),
-      req?.id
-        ? row(2, [id(req.id)], [label("statement"), id(statementId)])
-        : row(2, [id(statementId)]),
+      req?.id ? row(2, [id(req.id)], [label("memory"), id(memoryId)]) : row(2, [id(memoryId)]),
       reason ? row(2, [label("reason:"), label(reason)]) : null,
     );
     return 0;

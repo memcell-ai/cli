@@ -9,10 +9,9 @@ import { wired } from "./wired.js";
 // MCP support reaches the identical answer.
 
 interface Served {
-  statementId: string;
+  memoryId: string;
   text: string;
   type?: string | null;
-  kind?: string | null;
   confidence: number;
   layer?: string;
   vouched?: boolean;
@@ -29,6 +28,7 @@ export async function recall(
   scope?: string,
   scopes?: string,
   myMemory?: boolean,
+  meta?: string,
 ): Promise<number> {
   const here = await wired("recall", url);
   if (!here) return 1;
@@ -41,6 +41,29 @@ export async function recall(
         .filter(Boolean)
     : undefined;
 
+  let parsedMetadata: Record<string, unknown> | undefined;
+  if (meta) {
+    try {
+      parsedMetadata = JSON.parse(meta);
+      if (
+        typeof parsedMetadata !== "object" ||
+        parsedMetadata === null ||
+        Array.isArray(parsedMetadata)
+      ) {
+        throw new Error("Metadata must be a JSON object");
+      }
+    } catch {
+      say(
+        row(0, [
+          badge("memcell"),
+          bad("recall"),
+          label("invalid --meta JSON: must be a valid JSON object"),
+        ]),
+      );
+      return 1;
+    }
+  }
+
   try {
     const sdk = await getSdkClient(here.instance, { bearer: here.key });
     const answer = await sdk.recall({
@@ -50,15 +73,15 @@ export async function recall(
       scopes: parsedScopes,
       my_memory: myMemory,
       myMemory,
+      metadata: parsedMetadata,
     } as any);
 
     const ansAny = answer as any;
-    const rawList: any[] = ansAny.results || ansAny.statements || [];
+    const rawList: any[] = ansAny.memories || ansAny.results || [];
     const results: Served[] = rawList.map((s) => ({
-      statementId: s.statementId || s.id,
-      text: s.text || s.title || s.statement || "",
-      type: s.type || s.kind,
-      kind: s.kind || s.type,
+      memoryId: s.memoryId || s.id,
+      text: s.text || s.title || "",
+      type: s.type,
       confidence: typeof s.confidence === "number" ? s.confidence : 0.5,
       layer: s.layer || s.scope || "common",
       vouched: Boolean(s.vouched || s.verified || s.status === "active"),
@@ -85,14 +108,14 @@ export async function recall(
         row(
           1,
           [value(s.confidence.toFixed(2))],
-          s.type || s.kind ? [variant(s.type || s.kind!)] : null,
-          [scopeBadge(s.layer || "project")],
+          s.type ? [variant(s.type)] : null,
+          [scopeBadge(s.layer || "workspace")],
           s.pinned ? [variant("pinned")] : null,
           !(s.verified ?? s.vouched) ? [variant("unvouched")] : null,
           [label(s.text)],
         ),
         // The id, because reporting an outcome on this needs it.
-        row(2, [id(s.statementId)]),
+        row(2, [id(s.memoryId)]),
       ]),
     );
     return 0;

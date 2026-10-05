@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { findProject, PROJECT_FILE, removeProject, saveProject } from "../src/project.js";
+import { findProject, PROJECT_FILE, removeProject, saveProject } from "../src/workspace.js";
 
 // What a wired directory is, pinned because getting it wrong is how the
 // old `connect`/`disconnect` pair came to be inverses in name only.
@@ -141,7 +141,7 @@ describe("a directory wearing the project file's name", () => {
     const { mkdtempSync, mkdirSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const { findProject, saveProject } = await import("../src/project.js");
+    const { findProject, saveProject } = await import("../src/workspace.js");
     const dir = mkdtempSync(join(tmpdir(), "memcell-collide-"));
     // The single-process story: the record lives at .memcell/ in the project.
     mkdirSync(join(dir, ".memcell"));
@@ -155,7 +155,7 @@ describe("a directory wearing the project file's name", () => {
     const { mkdtempSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const { findProject, saveProject } = await import("../src/project.js");
+    const { findProject, saveProject } = await import("../src/workspace.js");
     const dir = mkdtempSync(join(tmpdir(), "memcell-classic-"));
     const at = await saveProject({ instance: "https://memcell.ai", space: "one" }, dir);
     expect(at.endsWith("/.memcell")).toBe(true);

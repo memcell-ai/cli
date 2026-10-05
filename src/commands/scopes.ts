@@ -33,7 +33,7 @@ export async function scopes(url?: string): Promise<number> {
         row(
           1,
           [variant((s as any).name || (s as any).scope)],
-          [label(s.count === 1 ? "1 statement" : `${s.count} statements`)],
+          [label(s.count === 1 ? "1 memory" : `${s.count} memories`)],
         ),
       ),
     );

@@ -1,13 +1,13 @@
 import { dirname } from "node:path";
 
-import { findProject, setProjectPaused } from "../project.js";
+import { findWorkspace, setWorkspacePaused } from "../workspace.js";
 import { badge, blank, cmd, good, label, place, row, say, warn } from "../ui.js";
 
 // What pauses the background loop for a project, stored in the project file
 // so that every hook short-circuits with zero latency and zero prompt noise.
 
 export async function pause(from?: string): Promise<number> {
-  const found = await findProject(from);
+  const found = await findWorkspace(from);
   if (!found) {
     say(row(0, [badge("memcell"), warn("not connected")], [label("run"), cmd("memcell connect")]));
     return 1;
@@ -29,7 +29,7 @@ export async function pause(from?: string): Promise<number> {
     return 0;
   }
 
-  await setProjectPaused(true, found.at);
+  await setWorkspacePaused(true, found.at);
 
   say(
     row(0, [badge("memcell"), good("paused")]),
@@ -44,7 +44,7 @@ export async function pause(from?: string): Promise<number> {
 }
 
 export async function resume(from?: string): Promise<number> {
-  const found = await findProject(from);
+  const found = await findWorkspace(from);
   if (!found) {
     say(row(0, [badge("memcell"), warn("not connected")], [label("run"), cmd("memcell connect")]));
     return 1;
@@ -63,7 +63,7 @@ export async function resume(from?: string): Promise<number> {
     return 0;
   }
 
-  await setProjectPaused(false, found.at);
+  await setWorkspacePaused(false, found.at);
 
   say(
     row(0, [badge("memcell"), good("resumed")]),

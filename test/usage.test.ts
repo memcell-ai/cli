@@ -58,7 +58,7 @@ describe("usage get", () => {
       owner: { slug: "acme", type: "organization" },
       timeframe: "30d",
       quotas: {
-        statements: {
+        memories: {
           total: 1250,
           limit: 10000,
           types: { directive: 800, preference: 450 },
@@ -89,7 +89,7 @@ describe("usage get", () => {
     const out = printed.join("\n");
     expect(out).toContain("usage");
     expect(out).toContain("acme");
-    expect(out).toContain("statements:");
+    expect(out).toContain("memories:");
     expect(out).toContain("1,250");
     expect(out).toContain("10,000");
     expect(out).toContain("tier:");
@@ -102,7 +102,7 @@ describe("usage get", () => {
     answer = () => ({
       owner: { slug: "cyberdyne", type: "organization" },
       quotas: {
-        statements: { total: 50, limit: 1000 },
+        memories: { total: 50, limit: 1000 },
         apiRequests: { total: 200, limit: 5000 },
       },
     });

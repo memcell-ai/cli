@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePreAct, stageStatementsFromRecall } from "../src/loop/pre-act.js";
+import { evaluatePreAct, stageMemoriesFromRecall } from "../src/loop/pre-act.js";
 import { SURFACE as claudeSurface } from "../src/adapters/claude.js";
 import { can, type Guard } from "../src/adapters/surface.js";
 
@@ -8,9 +8,9 @@ const guard = (() => {
   return claudeSurface.guard as Guard;
 })();
 
-describe("stageStatementsFromRecall", () => {
-  it("stages #guard statements in strict mode as hard refusal gates", () => {
-    const statements = [
+describe("stageMemoriesFromRecall", () => {
+  it("stages #guard memories in strict mode as hard refusal gates", () => {
+    const memories = [
       {
         id: "s-1",
         title: "Never force push to main",
@@ -20,18 +20,18 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(statements, "strict");
+    const staged = stageMemoriesFromRecall(memories, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!).toMatchObject({
-      statementId: "s-1",
+      memoryId: "s-1",
       title: "Never force push to main",
       refuses: true,
       appliesAt: ["change", "record", "send"],
     });
   });
 
-  it("degrades #guard statements in advisory mode to soft advisories (refuses: false)", () => {
-    const statements = [
+  it("degrades #guard memories in advisory mode to soft advisories (refuses: false)", () => {
+    const memories = [
       {
         id: "s-2",
         title: "Never force push to main",
@@ -41,13 +41,13 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(statements, "advisory");
+    const staged = stageMemoriesFromRecall(memories, "advisory");
     expect(staged).toHaveLength(1);
     expect(staged[0]!.refuses).toBe(false);
   });
 
-  it("stages #convention statements as soft advisories regardless of guardMode", () => {
-    const statements = [
+  it("stages #convention memories as soft advisories regardless of guardMode", () => {
+    const memories = [
       {
         id: "s-3",
         title: "Use pnpm instead of npm",
@@ -57,17 +57,17 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const stagedStrict = stageStatementsFromRecall(statements, "strict");
+    const stagedStrict = stageMemoriesFromRecall(memories, "strict");
     expect(stagedStrict).toHaveLength(1);
     expect(stagedStrict[0]!.refuses).toBe(false);
     expect(stagedStrict[0]!.appliesAt).toEqual(["change", "record"]);
 
-    const stagedAdvisory = stageStatementsFromRecall(statements, "advisory");
+    const stagedAdvisory = stageMemoriesFromRecall(memories, "advisory");
     expect(stagedAdvisory[0]!.refuses).toBe(false);
   });
 
   it("honors specific act class tags when present", () => {
-    const statements = [
+    const memories = [
       {
         id: "s-4",
         title: "Audit all external API calls",
@@ -77,14 +77,14 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(statements, "strict");
+    const staged = stageMemoriesFromRecall(memories, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!.appliesAt).toEqual(["send"]);
     expect(staged[0]!.refuses).toBe(true);
   });
 
-  it("discards pure knowledge statements without action triggers", () => {
-    const statements = [
+  it("discards pure knowledge memories without action triggers", () => {
+    const memories = [
       {
         id: "s-5",
         title: "Architecture uses PostgreSQL and Drizzle",
@@ -94,12 +94,12 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(statements, "strict");
+    const staged = stageMemoriesFromRecall(memories, "strict");
     expect(staged).toHaveLength(0);
   });
 
-  it("stages statements with type === 'guard' as hard refusal gates in strict mode", () => {
-    const statements = [
+  it("stages memories with type === 'guard' as hard refusal gates in strict mode", () => {
+    const memories = [
       {
         id: "s-guard-type",
         title: "Never drop production tables",
@@ -108,18 +108,18 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(statements, "strict");
+    const staged = stageMemoriesFromRecall(memories, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!).toMatchObject({
-      statementId: "s-guard-type",
+      memoryId: "s-guard-type",
       title: "Never drop production tables",
       refuses: true,
       appliesAt: ["change", "record", "send"],
     });
   });
 
-  it("stages statements with type === 'directive' as soft advisories (refuses: false) even in strict mode", () => {
-    const statements = [
+  it("stages memories with type === 'directive' as soft advisories (refuses: false) even in strict mode", () => {
+    const memories = [
       {
         id: "s-directive",
         title: "Always verify output before executing",
@@ -128,20 +128,20 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(statements, "strict");
+    const staged = stageMemoriesFromRecall(memories, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!).toMatchObject({
-      statementId: "s-directive",
+      memoryId: "s-directive",
       title: "Always verify output before executing",
       refuses: false,
       appliesAt: ["change", "record"],
     });
   });
 
-  it("correctly normalizes legacy statement objects", () => {
-    const legacyResults = [
+  it("correctly normalizes memory objects", () => {
+    const memoryResults = [
       {
-        statementId: "s-legacy",
+        memoryId: "s-mem",
         text: "Always run tests before committing.",
         confidence: 0.9,
         appliesAt: ["record"],
@@ -149,10 +149,10 @@ describe("stageStatementsFromRecall", () => {
       },
     ];
 
-    const staged = stageStatementsFromRecall(legacyResults, "strict");
+    const staged = stageMemoriesFromRecall(memoryResults, "strict");
     expect(staged).toHaveLength(1);
     expect(staged[0]!).toMatchObject({
-      statementId: "s-legacy",
+      memoryId: "s-mem",
       appliesAt: ["record"],
       refuses: true,
     });
@@ -160,8 +160,8 @@ describe("stageStatementsFromRecall", () => {
 });
 
 describe("evaluatePreAct", () => {
-  const strictGuardStatement = {
-    statementId: "g-1",
+  const strictGuardMemory = {
+    memoryId: "g-1",
     title: "Never push directly to production branch",
     text: "Never push directly to production branch: git push must go through PR.",
     tags: ["git", "guard"],
@@ -169,8 +169,8 @@ describe("evaluatePreAct", () => {
     refuses: true,
   };
 
-  const conventionStatement = {
-    statementId: "c-1",
+  const conventionMemory = {
+    memoryId: "c-1",
     title: "Follow strict TypeScript conventions",
     text: "Follow strict TypeScript conventions: no explicit any.",
     tags: ["typescript", "convention"],
@@ -183,18 +183,18 @@ describe("evaluatePreAct", () => {
       tool: "",
       input: {},
       guard,
-      activeStatements: [strictGuardStatement],
+      activeMemories: [strictGuardMemory],
     });
     expect(result.verdict).toBe("pass");
   });
 
-  it("returns pass when tool action does not match any statement appliesAt", () => {
+  it("returns pass when tool action does not match any memory appliesAt", () => {
     // Read action (e.g. git status) should not trigger send guard
     const result = evaluatePreAct({
       tool: "Bash",
       input: { command: "git status" },
       guard,
-      activeStatements: [strictGuardStatement],
+      activeMemories: [strictGuardMemory],
     });
     expect(result.verdict).toBe("pass");
   });
@@ -205,7 +205,7 @@ describe("evaluatePreAct", () => {
       tool: "Bash",
       input: { command: "git push origin main" },
       guard,
-      activeStatements: [strictGuardStatement],
+      activeMemories: [strictGuardMemory],
     });
 
     expect(result.verdict).toBe("refuse");
@@ -215,7 +215,7 @@ describe("evaluatePreAct", () => {
       expect(result.stops).toHaveLength(1);
       expect(result.pairs).toEqual([
         {
-          statementId: "g-1",
+          memoryId: "g-1",
           act: "send",
           tool: "Bash",
           became: "refused",
@@ -225,8 +225,8 @@ describe("evaluatePreAct", () => {
   });
 
   it("provides soft guidance and never refuses when executing tools with an advisory directive", () => {
-    const directiveStatement = {
-      statementId: "d-1",
+    const directiveMemory = {
+      memoryId: "d-1",
       title: "Always verify output before executing",
       text: "Always verify output before executing: systematically validate before triggering.",
       tags: ["workflow"],
@@ -238,7 +238,7 @@ describe("evaluatePreAct", () => {
       tool: "Edit",
       input: { file_path: "src/index.ts" },
       guard,
-      activeStatements: [directiveStatement],
+      activeMemories: [directiveMemory],
     });
 
     expect(result.verdict).toBe("advise");
@@ -248,7 +248,7 @@ describe("evaluatePreAct", () => {
       expect(result.bears[0]!.refuses).toBe(false);
       expect(result.pairs).toEqual([
         {
-          statementId: "d-1",
+          memoryId: "d-1",
           act: "change",
           tool: "Edit",
           became: "served",
@@ -257,13 +257,13 @@ describe("evaluatePreAct", () => {
     }
   });
 
-  it("provides soft guidance when matching an advisory statement", () => {
+  it("provides soft guidance when matching an advisory memory", () => {
     // Change action (e.g. Edit tool) matches convention
     const result = evaluatePreAct({
       tool: "Edit",
       input: { file_path: "src/index.ts" },
       guard,
-      activeStatements: [conventionStatement],
+      activeMemories: [conventionMemory],
     });
 
     expect(result.verdict).toBe("advise");
@@ -272,7 +272,7 @@ describe("evaluatePreAct", () => {
       expect(result.guidance).toContain("Follow strict TypeScript conventions");
       expect(result.pairs).toEqual([
         {
-          statementId: "c-1",
+          memoryId: "c-1",
           act: "change",
           tool: "Edit",
           became: "served",
@@ -286,7 +286,7 @@ describe("evaluatePreAct", () => {
       tool: "Edit",
       input: { file_path: "src/index.ts" },
       guard,
-      activeStatements: [conventionStatement],
+      activeMemories: [conventionMemory],
       firedMap: { "said:change": Date.now() },
     });
 
@@ -294,14 +294,14 @@ describe("evaluatePreAct", () => {
   });
 
   it("completes evaluation in sub-millisecond time (< 1ms)", () => {
-    const statements = [strictGuardStatement, conventionStatement];
+    const memories = [strictGuardMemory, conventionMemory];
     const start = performance.now();
     for (let i = 0; i < 1000; i++) {
       evaluatePreAct({
         tool: "Bash",
         input: { command: "git push origin main" },
         guard,
-        activeStatements: statements,
+        activeMemories: memories,
       });
     }
     const elapsed = performance.now() - start;

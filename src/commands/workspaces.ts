@@ -3,7 +3,7 @@ import { call, MemcellError } from "../client.js";
 import { get } from "../config.js";
 import { credentialFor } from "../instance.js";
 import { resolveNamespace } from "../namespace.js";
-import { findProject } from "../project.js";
+import { findWorkspace } from "../workspace.js";
 import { getSdkClient } from "../sdk-client.js";
 import {
   badge,
@@ -22,10 +22,8 @@ import {
 
 interface Me {
   activeWorkspace?: { slug: string; name: string } | null;
-  activeProject?: { slug: string; name: string } | null;
   activeSpace?: { slug: string; name: string } | null;
   workspaces?: { id: string; slug: string; name: string }[];
-  projects?: { id: string; slug: string; name: string }[];
 }
 
 const needsSession = (instance: string) =>
@@ -43,7 +41,7 @@ function refused(instance: string, failure: Error): number {
 }
 
 function getWorkspacesClient(sdk: any) {
-  return sdk.workspaces ?? sdk.projects;
+  return sdk.workspaces;
 }
 
 export async function listWorkspaces(
@@ -65,8 +63,8 @@ export async function listWorkspaces(
       (owner ? wsClient.listForOwner(owner) : wsClient.list()).catch(() => null),
     ]);
 
-    const active = me?.activeWorkspace || me?.activeProject || me?.activeSpace;
-    const workspaces: any[] = res?.items || me?.workspaces || me?.projects || [];
+    const active = me?.activeWorkspace || me?.activeSpace;
+    const workspaces: any[] = res?.items || me?.workspaces || [];
 
     if (workspaces.length === 0) {
       say(
@@ -80,7 +78,7 @@ export async function listWorkspaces(
       return 0;
     }
 
-    const here = (await findProject())?.project;
+    const here = (await findWorkspace())?.project;
     const linkedSlug = here?.project || here?.space;
 
     say(
@@ -273,7 +271,7 @@ export async function useWorkspace(instance: string, slug: string): Promise<numb
     const active = answer.activeWorkspace ||
       answer.activeProject ||
       answer.activeSpace || { slug, name: slug };
-    const here = (await findProject())?.project;
+    const here = (await findWorkspace())?.project;
     const linkedSlug = here?.project || here?.space;
 
     say(

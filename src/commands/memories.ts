@@ -21,12 +21,7 @@ import {
 } from "../ui.js";
 
 function getTargetWorkspace(flags: Record<string, string | true>): string | undefined {
-  const raw =
-    typeof flags.workspace === "string"
-      ? flags.workspace
-      : typeof flags.project === "string"
-        ? flags.project
-        : undefined;
+  const raw = typeof flags.workspace === "string" ? flags.workspace : undefined;
   if (!raw) return undefined;
   const ws = raw.trim();
   if (typeof flags.owner === "string" && !ws.includes("/")) {
@@ -44,7 +39,7 @@ function refused(instance: string, failure: Error): number {
 }
 
 function getMemoriesClient(sdk: any) {
-  return sdk.memories ?? sdk.statements;
+  return sdk.memories;
 }
 
 export async function listMemories(
@@ -57,12 +52,7 @@ export async function listMemories(
     const target = getTargetWorkspace(flags);
     const namespace = await resolveNamespace(sdk, target);
 
-    const typeFilter =
-      typeof flags.type === "string"
-        ? flags.type
-        : typeof flags.kind === "string"
-          ? flags.kind
-          : undefined;
+    const typeFilter = typeof flags.type === "string" ? flags.type : undefined;
 
     const page = typeof flags.page === "string" ? parseInt(flags.page, 10) : undefined;
     const limit = typeof flags.limit === "string" ? parseInt(flags.limit, 10) : undefined;
@@ -84,7 +74,6 @@ export async function listMemories(
 
     const res = await memClient.list(namespace, {
       type: typeFilter as any,
-      kind: typeFilter as any,
       page: Number.isFinite(page) ? page : undefined,
       perPage: Number.isFinite(limit) ? limit : undefined,
       status,
@@ -144,13 +133,15 @@ export async function getMemory(
     try {
       const relNamespace = (memClient as any).relations;
       if (relNamespace?.list) {
-        rels = await relNamespace.list(namespace, memoryId);
+        const raw = await relNamespace.list(namespace, memoryId);
+        rels = raw?.incoming ? raw : (raw as any)?.relations || { incoming: [], outgoing: [] };
       } else {
         const parts = namespace.split("/");
-        rels = await (sdk as any).request(
+        const raw = await (sdk as any).request(
           `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}/relations`,
           { method: "GET" },
         );
+        rels = raw?.incoming ? raw : (raw as any)?.relations || { incoming: [], outgoing: [] };
       }
     } catch {
       // Non-blocking on memory get
@@ -226,12 +217,7 @@ export async function createMemory(
     const target = getTargetWorkspace(flags);
     const namespace = await resolveNamespace(sdk, target);
 
-    const type =
-      typeof flags.type === "string"
-        ? flags.type
-        : typeof flags.kind === "string"
-          ? flags.kind
-          : undefined;
+    const type = typeof flags.type === "string" ? flags.type : undefined;
 
     let scope: string | undefined;
     if (typeof flags.scope === "string") {
@@ -450,7 +436,7 @@ export async function adoptMemory(
     say(
       row(0, [badge("memcell"), label("memories adopt"), place(namespace)]),
       row(1, [good("adopted into")], [value(into)]),
-      row(2, [idSeg(targetInfo?.statementId || memoryId)]),
+      row(2, [idSeg(targetInfo?.memoryId || memoryId)]),
     );
     return 0;
   } catch (error) {
@@ -600,9 +586,7 @@ export async function memoryRelations(
           [variant(r.relationType || r.relation_type)],
           [idSeg(r.targetId || r.target_id)],
           [value(r.confidence !== undefined ? r.confidence.toFixed(2) : "0.90")],
-          r.targetStatement?.title || r.targetMemory?.title
-            ? [label(r.targetStatement?.title || r.targetMemory?.title)]
-            : null,
+          r.targetMemory?.title ? [label(r.targetMemory.title)] : null,
         ),
       ),
       ...incoming.map((r: any) =>
@@ -612,9 +596,7 @@ export async function memoryRelations(
           [variant(r.relationType || r.relation_type)],
           [idSeg(r.sourceId || r.source_id)],
           [value(r.confidence !== undefined ? r.confidence.toFixed(2) : "0.90")],
-          r.sourceStatement?.title || r.sourceMemory?.title
-            ? [label(r.sourceStatement?.title || r.sourceMemory?.title)]
-            : null,
+          r.sourceMemory?.title ? [label(r.sourceMemory.title)] : null,
         ),
       ),
     );

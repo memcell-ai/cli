@@ -43,7 +43,7 @@ interface Run {
   items: number;
   queued: number;
   settled: number;
-  statements: number;
+  memories: number;
   held: number;
   failing: number;
   error: string | null;
@@ -90,7 +90,7 @@ function statusLine(slug: string, run: Run, tick: number): Row {
     0,
     [badge(slug)],
     gauge,
-    [label("learned"), state("good", run.statements.toLocaleString(), "")],
+    [label("learned"), state("good", (run.memories ?? 0).toLocaleString(), "")],
     [variant(word)],
     [time(duration(run.elapsedMs) + (run.etaMs !== null ? ` · ${duration(run.etaMs)} left` : ""))],
   );
@@ -218,7 +218,7 @@ export async function seed(
       : row(
           1,
           [good("live")],
-          [label("learned"), state("good", last.statements.toLocaleString(), "")],
+          [label("learned"), state("good", (last.memories ?? 0).toLocaleString(), "")],
           [label("from"), value(last.settled.toLocaleString()), label("items")],
           [time(`in ${duration(last.elapsedMs)}`)],
         ),

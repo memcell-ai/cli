@@ -7,7 +7,7 @@ import { COMMANDS } from "../src/commands/index.js";
 import { enforceRequirements, resolveContext } from "../src/context.js";
 import { saveCredential } from "../src/instance.js";
 import { parse } from "../src/parse.js";
-import { saveProject } from "../src/project.js";
+import { saveProject } from "../src/workspace.js";
 
 async function scratch() {
   return mkdtemp(join(tmpdir(), "memcell-aspect-"));
@@ -29,7 +29,7 @@ describe("global flags parsing", () => {
   });
 
   it("accepts --owner on commands without unknown flag errors", () => {
-    const res = parse(["statements", "list", "--owner", "acme-corp"], COMMANDS);
+    const res = parse(["memories", "list", "--owner", "acme-corp"], COMMANDS);
     expect(res.kind).toBe("run");
     if (res.kind === "run") {
       expect(res.flags.owner).toBe("acme-corp");
@@ -93,7 +93,7 @@ describe("execution context resolution", () => {
 describe("aspect requirement gates", () => {
   it("blocks execution when auth is required and user has no credential", () => {
     const mockCommand = {
-      path: ["projects", "list"],
+      path: ["workspaces", "list"],
       what: "test",
       require: { auth: "required" as const },
       run: async () => 0,
@@ -116,7 +116,7 @@ describe("aspect requirement gates", () => {
 
   it("blocks execution when project is required and no project can be resolved", () => {
     const mockCommand = {
-      path: ["statements", "list"],
+      path: ["memories", "list"],
       what: "test",
       require: { project: "required" as const },
       run: async () => 0,
@@ -139,7 +139,7 @@ describe("aspect requirement gates", () => {
 
   it("passes when all declared requirements are met", () => {
     const mockCommand = {
-      path: ["statements", "list"],
+      path: ["memories", "list"],
       what: "test",
       require: { auth: "required" as const, project: "required" as const },
       run: async () => 0,

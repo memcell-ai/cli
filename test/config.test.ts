@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { saveProject } from "../src/project.js";
+import { saveProject } from "../src/workspace.js";
 
 // Settings live in two files with one precedence, and what is pinned here is
 // that precedence plus the two ways a settings command lies: writing to the
@@ -29,7 +29,7 @@ beforeAll(async () => {
 
 const config = await import("../src/config.js");
 const readJson = async (file: string) => JSON.parse(await readFile(file, "utf8"));
-const { findProject } = await import("../src/project.js");
+const { findProject } = await import("../src/workspace.js");
 
 describe("precedence", () => {
   it("the project wins over the machine", async () => {

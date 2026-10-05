@@ -32,6 +32,7 @@ export async function getSdkClient(
 
   const baseFetch = options.fetch ?? fetch;
   const runtimeModel = detectActiveRuntimeModel();
+  let activeRecallMetadata: Record<string, unknown> | undefined;
 
   const customFetch: typeof fetch = async (input, init) => {
     const headersObj: Record<string, string> = {};
@@ -63,12 +64,12 @@ export async function getSdkClient(
           parsed.text = parsed.title;
           changed = true;
         }
-        if (parsed.statement_id && !parsed.statementId) {
-          parsed.statementId = parsed.statement_id;
-          changed = true;
-        }
         if (parsed.reason && !parsed.note) {
           parsed.note = parsed.reason;
+          changed = true;
+        }
+        if (activeRecallMetadata && !parsed.metadata) {
+          parsed.metadata = activeRecallMetadata;
           changed = true;
         }
         if (changed) {
@@ -115,11 +116,11 @@ export async function getSdkClient(
         if (!raw.organization && (raw.slug || raw.name) && !raw.organizations && !raw.members) {
           raw.organization = { ...raw };
         }
-        if (Array.isArray(raw.items) && !raw.statements) {
-          raw.statements = raw.items;
+        if (Array.isArray(raw.items) && !raw.memories) {
+          raw.memories = raw.items;
         }
-        if (Array.isArray(raw.statements) && !raw.items) {
-          raw.items = raw.statements;
+        if (Array.isArray(raw.memories) && !raw.items) {
+          raw.items = raw.memories;
         }
         if (Array.isArray(raw.results)) {
           for (const item of raw.results) {
@@ -129,8 +130,8 @@ export async function getSdkClient(
             }
           }
         }
-        if (Array.isArray(raw.statements)) {
-          for (const item of raw.statements) {
+        if (Array.isArray(raw.memories)) {
+          for (const item of raw.memories) {
             if (item && typeof item === "object") {
               if (item.text && !item.title) item.title = item.text;
               if (item.pinned && item.isPinned === undefined) item.isPinned = item.pinned;
@@ -151,10 +152,22 @@ export async function getSdkClient(
     });
   };
 
-  return new MemCell({
+  const client = new MemCell({
     baseUrl: instance,
     ...(apiKey ? { apiKey } : {}),
     ...(accessToken ? { accessToken } : {}),
     fetch: customFetch,
   });
+
+  const origRecall = client.recall.bind(client);
+  client.recall = async (params: any) => {
+    activeRecallMetadata = params?.metadata;
+    try {
+      return await origRecall(params);
+    } finally {
+      activeRecallMetadata = undefined;
+    }
+  };
+
+  return client;
 }

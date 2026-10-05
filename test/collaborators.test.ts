@@ -37,7 +37,7 @@ const {
   revokeCollaboratorInvite,
 } = await import("../src/commands/collaborators.js");
 const { saveCredential } = await import("../src/instance.js");
-const { saveProject } = await import("../src/project.js");
+const { saveProject } = await import("../src/workspace.js");
 
 const instance = "http://memcell.test";
 const cwd = process.cwd;

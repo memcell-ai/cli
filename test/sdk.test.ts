@@ -103,11 +103,11 @@ describe("MemCell SDK (cli package export)", () => {
           JSON.stringify({
             recallId: "rec_123",
             promptContext: "<memcell>Context</memcell>",
-            statements: [
+            memories: [
               {
                 id: "st_1",
                 title: "Never skip verification",
-                kind: "invariant",
+                type: "guard",
                 confidence: 0.95,
               },
             ],
@@ -127,12 +127,12 @@ describe("MemCell SDK (cli package export)", () => {
       const res1 = await memcell.recall({
         namespace: "org/repo",
         query: "deploy procedure",
-        kind: ["invariant", "reflex"],
+        type: ["guard", "directive"],
         minConfidence: 0.8,
       });
 
       expect(res1.recallId).toBe("rec_123");
-      expect(res1.statements).toHaveLength(1);
+      expect(res1.memories).toHaveLength(1);
       expect(requests[0]?.url).toBe("https://custom.memcell.io/api/v1/org/repo/recall");
       expect(requests[0]?.body.intent).toBe("deploy procedure");
     });
@@ -149,12 +149,11 @@ describe("MemCell SDK (cli package export)", () => {
             JSON.stringify({
               recallId: "rec_run_42",
               promptContext: "<memcell>Guards loaded</memcell>",
-              statements: [
+              memories: [
                 {
                   id: "st_1",
                   title: "Validate env before deploy",
-                  kind: "invariant",
-                  isInvariant: true,
+                  type: "guard",
                 },
               ],
             }),
@@ -318,7 +317,7 @@ describe("MemCell SDK (cli package export)", () => {
             JSON.stringify({
               recallId: "rec_123",
               promptContext: "<xml></xml>",
-              statements: [],
+              memories: [],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           );
@@ -363,7 +362,7 @@ describe("MemCell SDK (cli package export)", () => {
     it("intercepts RateLimit-Warning header and invokes onRateLimitWarning callback", async () => {
       const warningHandler = vi.fn();
       const mockFetch = vi.fn(async () => {
-        return new Response(JSON.stringify({ recallId: "rec_warning", statements: [] }), {
+        return new Response(JSON.stringify({ recallId: "rec_warning", memories: [] }), {
           status: 200,
           headers: {
             "Content-Type": "application/json",
@@ -400,7 +399,7 @@ describe("MemCell SDK (cli package export)", () => {
             },
           });
         }
-        return new Response(JSON.stringify({ recallId: "rec_recovered", statements: [] }), {
+        return new Response(JSON.stringify({ recallId: "rec_recovered", memories: [] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
