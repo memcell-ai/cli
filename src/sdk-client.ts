@@ -55,6 +55,20 @@ export async function getSdkClient(
       headersObj["x-memcell-model"] = runtimeModel;
     }
 
+    let effectiveInput = input;
+    if (typeof input === "string") {
+      effectiveInput = input
+        .replace(/\/statements\b/g, "/memories")
+        .replace(/\/projects\b/g, "/workspaces");
+    } else if (input instanceof URL) {
+      effectiveInput = new URL(
+        input
+          .toString()
+          .replace(/\/statements\b/g, "/memories")
+          .replace(/\/projects\b/g, "/workspaces"),
+      );
+    }
+
     let body = init?.body;
     if (typeof body === "string" && body.startsWith("{")) {
       try {
@@ -68,6 +82,14 @@ export async function getSdkClient(
           parsed.note = parsed.reason;
           changed = true;
         }
+        if (parsed.statement_id && !parsed.memory_id) {
+          parsed.memory_id = parsed.statement_id;
+          changed = true;
+        }
+        if (parsed.memory_id && !parsed.statement_id) {
+          parsed.statement_id = parsed.memory_id;
+          changed = true;
+        }
         if (activeRecallMetadata && !parsed.metadata) {
           parsed.metadata = activeRecallMetadata;
           changed = true;
@@ -79,7 +101,7 @@ export async function getSdkClient(
         // ignore
       }
     }
-    const res = await baseFetch(input, { ...init, headers: headersObj, body });
+    const res = await baseFetch(effectiveInput, { ...init, headers: headersObj, body });
 
     const hasHeadersGet = Boolean(res?.headers && typeof (res.headers as any).get === "function");
     const headersMap = hasHeadersGet
@@ -116,11 +138,35 @@ export async function getSdkClient(
         if (!raw.organization && (raw.slug || raw.name) && !raw.organizations && !raw.members) {
           raw.organization = { ...raw };
         }
+        if (raw.memory && !raw.statement) {
+          raw.statement = raw.memory;
+        }
+        if (raw.statement && !raw.memory) {
+          raw.memory = raw.statement;
+        }
+        if (!raw.workspace && raw.project) {
+          raw.workspace = raw.project;
+        }
+        if (!raw.project && raw.workspace) {
+          raw.project = raw.workspace;
+        }
         if (Array.isArray(raw.items) && !raw.memories) {
           raw.memories = raw.items;
         }
         if (Array.isArray(raw.memories) && !raw.items) {
           raw.items = raw.memories;
+        }
+        if (Array.isArray(raw.statements) && !raw.memories) {
+          raw.memories = raw.statements;
+        }
+        if (Array.isArray(raw.memories) && !raw.statements) {
+          raw.statements = raw.memories;
+        }
+        if (Array.isArray(raw.workspaces) && !raw.projects) {
+          raw.projects = raw.workspaces;
+        }
+        if (Array.isArray(raw.projects) && !raw.workspaces) {
+          raw.workspaces = raw.projects;
         }
         if (Array.isArray(raw.results)) {
           for (const item of raw.results) {
@@ -163,11 +209,28 @@ export async function getSdkClient(
   client.recall = async (params: any) => {
     activeRecallMetadata = params?.metadata;
     try {
-      return await origRecall(params);
+      const res = await origRecall(params);
+      if (res && typeof res === "object") {
+        if (!(res as any).memories && Array.isArray((res as any).statements)) {
+          (res as any).memories = (res as any).statements;
+        } else if (!(res as any).memories && Array.isArray((res as any).items)) {
+          (res as any).memories = (res as any).items;
+        } else if (!(res as any).memories) {
+          (res as any).memories = [];
+        }
+      }
+      return res;
     } finally {
       activeRecallMetadata = undefined;
     }
   };
+
+  if (!(client as any).memories && (client as any).statements) {
+    (client as any).memories = (client as any).statements;
+  }
+  if (!(client as any).workspaces && (client as any).projects) {
+    (client as any).workspaces = (client as any).projects;
+  }
 
   return client;
 }

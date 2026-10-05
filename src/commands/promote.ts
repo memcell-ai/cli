@@ -30,8 +30,9 @@ export async function promote(
     const namespace = await resolveNamespace(sdk, undefined);
 
     let res: any;
-    if (typeof (sdk.memories as any)?.promote === "function") {
-      res = await (sdk.memories as any).promote(namespace, memoryId, {
+    const memoriesApi = (sdk as any).memories;
+    if (typeof memoriesApi?.promote === "function") {
+      res = await memoriesApi.promote(namespace, memoryId, {
         toScope: normalizedScope,
         reason,
       });

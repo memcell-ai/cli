@@ -68,7 +68,8 @@ export async function getUsage(
 
     const data = await sdk.usage.get(owner, { timeframe });
 
-    const memQuotas = data.quotas.memories;
+    const memQuotas = (data.quotas as any)?.memories ??
+      (data.quotas as any)?.statements ?? { total: 0, limit: 0, percent: 0 };
     say(
       row(
         0,
