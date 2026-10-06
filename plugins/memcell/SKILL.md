@@ -32,7 +32,7 @@ they are there.
 ```
 memcell recall "<what you are trying to do or know>"
 memcell remember "<one claim, in one sentence>"
-memcell report <statement-id> worked|failed
+memcell report <memory-id> worked|failed
 memcell import <file>
 ```
 
@@ -66,7 +66,7 @@ report on it.
   through it deliberately.
 - **`layer: public`** — from the open-source commons, kept current. Where it
   contradicts what you remember about a library, it is the later source.
-- **`pinned`** — a standing statement, present whatever you asked. It did not
+- **`pinned`** — a standing memory, present whatever you asked. It did not
   answer your question; do not read its presence as relevance.
 - **`diverged`** — you already went against this one earlier in this
   session. It is served again for that reason. Re-read it before continuing,
@@ -82,15 +82,15 @@ One claim, one sentence, when work settles something durable that a
 transcript would bury.
 
 ```
-memcell remember "Retries cap at five attempts; after that the job parks in the dead-letter table."
-memcell remember "Polling the gateway for capture status times out under load." --kind gotcha
+memcell remember "Retries cap at five attempts; after that the job parks in the dead-letter table." --type directive --enforce
+memcell remember "Polling the gateway for capture status times out under load." --type fact --observation "timed out after 50 concurrent requests"
 ```
 
 File decisions, constraints discovered, and approaches that failed. Do not
 file activity ("fixed the retry bug"), restatements of code, or anything
 `git log` already carries.
 
-An **action guard** or **operational statement** — something a future session could disobey — takes `--at`, naming
+An **action guard** or **operational memory** — something a future session could disobey — takes `--at`, naming
 the moments it bears on, so it is served again at the one it applies to
 rather than only at the start of a session:
 
@@ -120,10 +120,10 @@ This is the only thing that moves confidence, and it is what separates this
 from a notes file. A recall nobody reports on teaches the record nothing,
 and stale confidence is worse than none.
 
-Report `failed` when you followed a statement and the work went wrong, or
-when it turned out untrue. Going against a statement that still stands is a
+Report `failed` when you followed a memory and the work went wrong, or
+when it turned out untrue. Going against a memory that still stands is a
 different thing: it is recorded on its own, moves no confidence, and brings
-the statement back on your next recall. Say so in the conversation either
+the memory back on your next recall. Say so in the conversation either
 way, rather than silently overriding it.
 
 ## import — when a document carries decisions

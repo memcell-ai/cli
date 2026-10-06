@@ -72,10 +72,10 @@ async function write(store: Store): Promise<void> {
  * Which memcell this invocation talks to — the first setting to go through
  * the config chain, and the reason that chain exists.
  *
- * `--url` · MEMCELL_INSTANCE · the project's `instance` · the
+ * `--url` · MEMCELL_INSTANCE · the workspace's `instance` · the
  * machine's `instance` · whatever was last connected · the hosted one.
  * The last-connected fallback stays beneath config on purpose: it is a
- * memory of what happened, and a setting somebody wrote is a statement of
+ * memory of what happened, and a setting somebody wrote is a declaration of
  * what they want.
  */
 export async function resolveInstance(flag?: string): Promise<string> {

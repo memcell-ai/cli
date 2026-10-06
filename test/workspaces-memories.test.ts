@@ -141,7 +141,7 @@ describe("workspaces commands execution", () => {
 describe("memories commands execution", () => {
   it("lists memories in active workspace", async () => {
     answer = () => ({
-      statements: [
+      memories: [
         {
           id: "mem-1",
           title: "Production database requires SSL",
@@ -160,12 +160,6 @@ describe("memories commands execution", () => {
   it("creates a memory directly in workspace", async () => {
     answer = () => ({
       memory: {
-        id: "mem-2",
-        title: "Keep functions pure when possible",
-        type: "directive",
-        scope: "workspace",
-      },
-      statement: {
         id: "mem-2",
         title: "Keep functions pure when possible",
         type: "directive",

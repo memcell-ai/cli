@@ -35,7 +35,7 @@ import { detectActiveRuntimeModel } from "../model-detect.js";
 // THE SECOND AXIOM: the hook ships and connects, it never judges. It hands
 // the turn's transcript delta to `remember` and the memory engine distills what was durable;
 // it reports an outcome only where the memory itself said the turn
-// corroborated a statement. Deciding "was that worth keeping" or "did that
+// corroborated a memory. Deciding "was that worth keeping" or "did that
 // help" on the client would be guessing with somebody's record.
 
 /** Nobody is waiting at the end of a turn; somebody is watching the cursor
@@ -56,8 +56,8 @@ const UNWATCHED_MS = 20_000;
  *  model. */
 const PAYLOAD_TIMEOUT_MS = 60_000;
 const HANDOVER_MS = PAYLOAD_TIMEOUT_MS; // Backwards-compatible alias
-/** How many statement-and-act pairings one turn hands over. A turn with forty
- *  acts must not cost forty judgements, and the same statement against the same
+/** How many memory-and-act pairings one turn hands over. A turn with forty
+ *  acts must not cost forty judgements, and the same memory against the same
  *  kind of act twice says nothing the first one did not. */
 const SERVED_AT_LIMIT = 12;
 
@@ -325,8 +325,8 @@ export interface Recalled {
   confidence: number;
   layer: string;
   type?: string;
+  enforce?: boolean;
   tags?: string[];
-  kind?: string;
   /** The moments this bears on — read, change, record, send, answer. Empty
    *  for knowledge, which is most of a memory. */
   appliesAt?: string[];
@@ -342,13 +342,12 @@ export interface Recalled {
   verified?: boolean;
 }
 
-/** A memory is treated as an operational guard if it is explicitly typed as a
+/** A memory is treated as an operational guard if it has enforce: true, is explicitly typed as a
  *  guard, tagged with 'guard', flagged as refusing the act, or if its text specifies a hard
  *  prohibition or mandatory trigger constraint. Standard directives and preferences are NOT guards. */
 export function isGuard(r: Recalled): boolean {
-  if (r.type === "guard" || r.refuses || r.tags?.includes("guard")) return true;
-  if (r.type === "preference" || r.type === "observation" || r.type === "fact") return false;
-  if (r.kind === "dead_end" || r.kind === "gotcha") return true;
+  if (r.enforce || r.type === "guard" || r.refuses || r.tags?.includes("guard")) return true;
+  if (r.type === "preference" || r.type === "fact") return false;
   if (r.standing || r.pinned || (r.appliesAt && r.appliesAt.length > 0)) return true;
   return /\b(prohibited|forbidden|must not|never|do not|cannot|only when (?:explicitly )?triggered by)\b/i.test(
     r.text,
@@ -381,8 +380,8 @@ function findTriggerViolations(guards: Recalled[], prompt: string): TriggerViola
   return violations;
 }
 
-/** Recalled statements, written for a model's turn: each carries what it is
- *  worth and where it sits, because a statement stripped of its confidence
+/** Recalled memories, written for a model's turn: each carries what it is
+ *  worth and where it sits, because a memory stripped of its confidence
  *  invites treating a 0.4 guess as a 0.9 fact.
  *
  *  Guards and preconditions are separated from empirical conventions so an agent
@@ -506,7 +505,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
     await logEvent(`${tag} · ${here.why}`);
     // Said once, at the start, and only when the loop cannot run AT ALL.
     //
-    // The rule above is that this stays quiet, and that rule is about
+    // The principle above is that this stays quiet, and that principle is about
     // FAILURE: an instance that is down or slow will be up again, and a hook
     // that complains about it is a hook people remove. Being unwired is not a
     // failure — it is permanent until somebody types one command, and the
@@ -548,10 +547,10 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
   //
   // The hook wrote `note.servedAt` in memory and the process exited without
   // saving it, on every act, in every session, since the pairing was
-  // introduced. Which statement was put in front of which act is the one fact
+  // introduced. Which memory was put in front of which act is the one fact
   // only this hook sees; the instance cannot infer it from the transcript,
   // and that is the whole reason it is recorded here. Lost on exit, no
-  // statement-act pairing was ever written: a memory whose directives fired every turn
+  // memory-act pairing was ever written: a memory whose directives fired every turn
   // read as one whose directives had never fired at all.
   //
   // The cache is now kept on the way out. `keepSessionCache` is best-effort and
@@ -567,10 +566,10 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
   // directive nobody is holding by the time it applies. This says the one that
   // bears on THIS act, at the moment of it.
   //
-  // It costs no call: the statements came down with the turn's recall and the
+  // It costs no call: the memories came down with the turn's recall and the
   // choosing happens here. It says nothing far more often than it says
   // something — an act nothing bears on, or an act this build cannot name,
-  // is silence. A statement shown where it does not apply is worse than none,
+  // is silence. A memory shown where it does not apply is worse than none,
   // because the next one is skipped too.
   if (moment === "before-act") {
     const tool = payload.tool_name ?? payload.toolName ?? "";
@@ -658,7 +657,6 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         recallId?: string;
         results?: Recalled[];
         memories?: RawMemoryInput[];
-        statements?: RawMemoryInput[];
         guardMode?: "strict" | "advisory";
         profile?: string | null;
         note?: string;
@@ -679,10 +677,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
         // what actually happened, not "0 served".
         await logEvent(`${tag} · recall · ${formatApiError(asked)}`);
       }
-      const rawMemories = (answer?.memories ??
-        answer?.results ??
-        answer?.statements ??
-        []) as RawMemoryInput[];
+      const rawMemories = (answer?.memories ?? answer?.results ?? []) as RawMemoryInput[];
       const guardMode = (answer?.guardMode ?? note.guardMode ?? "strict") as "strict" | "advisory";
       note.guardMode = guardMode;
 
@@ -775,15 +770,14 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       );
     } else if (enough) {
       const handed = await apiCall<{
-        created: { memoryId?: string; statementId?: string }[];
-        reinforced: { memoryId?: string; statementId?: string }[];
-        attributed: { memoryId?: string; statementId?: string; outcome: "worked" | "failed" }[];
-        diverged?: { memoryId?: string; statementId?: string; text: string }[];
+        created: { memoryId?: string; id?: string }[];
+        reinforced: { memoryId?: string; id?: string }[];
+        attributed: { memoryId?: string; id?: string; outcome: "worked" | "failed" }[];
+        diverged?: { memoryId?: string; id?: string; text: string }[];
         superseded?: {
           memoryId?: string;
-          statementId?: string;
+          id?: string;
           byMemoryId?: string;
-          byStatementId?: string;
         }[];
         note?: string;
       }>(
@@ -863,7 +857,7 @@ export async function runMoment(moment: LifecycleHook, program: string): Promise
       // turn's transcript delta AND the session it belongs to; the engine read what
       // that session recalled and assigned credit, worked or failed. THE HOOK
       // IS A PIPE: it only reports what came back. This is why the correlation
-      // that used to live here — match a reinforced statement to a recall and
+      // that used to live here — match a reinforced memory to a recall and
       // call it worked — is gone: it was a judgment, and it never once said
       // failed.
       if (phases.includes("report")) {

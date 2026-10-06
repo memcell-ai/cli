@@ -48,8 +48,8 @@ export async function promote(
       );
     }
 
-    if (res?.promoted !== false && (res?.memory || res?.statement || res?.id)) {
-      const mem = res.memory || res.statement || res;
+    if (res?.promoted !== false && (res?.memory || res?.id)) {
+      const mem = res.memory || res;
       say(
         row(0, [badge("memcell"), label("promote"), place(here.space)]),
         row(

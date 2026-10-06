@@ -58,7 +58,7 @@ export function parse(argv: string[], commands: Command[]): Parse {
     const arg = argv[i]!;
 
     // Everything after `--` is a positional, whatever it looks like. A
-    // statement's text can start with a dash.
+    // memory's text can start with a dash.
     if (arg === "--") {
       words.push(...argv.slice(i + 1));
       break;

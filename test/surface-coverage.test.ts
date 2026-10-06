@@ -31,7 +31,7 @@ describe("what every adapter declares", () => {
     expect(named.length, `${name} guards no tool`).toBeGreaterThan(0);
 
     // The two that matter most: something must count as changing, and
-    // something as sending. Those are where the standing rules live.
+    // something as sending. Those are where the standing memories live.
     expect(guard.tools.change?.length ?? 0, `${name} names nothing as change`).toBeGreaterThan(0);
     expect(guard.tools.send?.length ?? 0, `${name} names nothing as send`).toBeGreaterThan(0);
   });

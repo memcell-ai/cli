@@ -6,7 +6,7 @@ import { badge, cmd, label, place, row, say, state, value, variant, warn } from 
 // What the agents did.
 //
 // Three verbs, and they are about the agent rather than about memcell:
-// rules it followed, acts memory stopped, and rules it went against having
+// directives it followed, acts memory stopped, and directives it went against having
 // already gone against them once.
 //
 // Signed in it counts your space; signed out it counts the instance, which

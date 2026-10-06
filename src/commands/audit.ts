@@ -66,7 +66,8 @@ export async function listAuditLogs(
     if (typeof flags["target-type"] === "string")
       query.set("targetType", flags["target-type"].trim());
     if (typeof flags["target-id"] === "string") query.set("targetId", flags["target-id"].trim());
-    if (typeof flags.project === "string") query.set("projectId", flags.project.trim());
+    if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
+    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     if (typeof flags.team === "string") query.set("teamId", flags.team.trim());
     if (typeof flags.from === "string") query.set("from", flags.from.trim());
     if (typeof flags.to === "string") query.set("to", flags.to.trim());
@@ -146,7 +147,8 @@ export async function exportAuditLogs(
     if (typeof flags.from === "string") query.set("from", flags.from.trim());
     if (typeof flags.to === "string") query.set("to", flags.to.trim());
     if (typeof flags.action === "string") query.set("action", flags.action.trim());
-    if (typeof flags.project === "string") query.set("projectId", flags.project.trim());
+    if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
+    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     const qs = `?${query.toString()}`;
 
     const exportData = await call<string>(

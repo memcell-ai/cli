@@ -50,7 +50,7 @@ export async function hook(moment: string, program: string): Promise<number> {
   const adapter = adapterFor(program);
 
   // A guard somebody asked to STOP this act. Spoken in the harness's own
-  // refusal, and the reason is always the guard statement's own words — nobody is
+  // refusal, and the reason is always the guard memory's own words — nobody is
   // stopped without being told what stopped them.
   //
   // This is the ONE place the loop is allowed to stand in the way, and only

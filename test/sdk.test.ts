@@ -127,7 +127,7 @@ describe("MemCell SDK (cli package export)", () => {
       const res1 = await memcell.recall({
         namespace: "org/repo",
         query: "deploy procedure",
-        type: ["guard", "directive"],
+        type: ["preference", "directive"],
         minConfidence: 0.8,
       });
 
@@ -166,7 +166,7 @@ describe("MemCell SDK (cli package export)", () => {
           return new Response(
             JSON.stringify({
               outcome: "worked",
-              attributed: [{ statementId: "st_1", title: "Validate env", from: 0.8, to: 0.85 }],
+              attributed: [{ memoryId: "st_1", title: "Validate env", from: 0.8, to: 0.85 }],
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           );

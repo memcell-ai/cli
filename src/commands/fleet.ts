@@ -75,7 +75,8 @@ export async function listFleet(
     if (typeof flags.status === "string") query.set("status", flags.status.trim());
     if (typeof flags.health === "string") query.set("health", flags.health.trim());
     if (typeof flags.team === "string") query.set("teamId", flags.team.trim());
-    if (typeof flags.project === "string") query.set("projectId", flags.project.trim());
+    if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
+    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     const qs = query.toString() ? `?${query.toString()}` : "";
 
     const res = await call<{ agents: any[] }>(
@@ -111,7 +112,7 @@ export async function listFleet(
         const isSuspended = ag.status === "suspended";
         const statusBadge = isSuspended ? bad("SUSPENDED") : good("ACTIVE");
         const healthBadge = ag.health === "healthy" ? good("healthy") : warn(ag.health);
-        const scopeStr = ag.scope === "organization" ? "org-wide" : "project-scoped";
+        const scopeStr = ag.scope === "organization" ? "org-wide" : "workspace-scoped";
 
         return row(
           1,
@@ -124,7 +125,7 @@ export async function listFleet(
           ag.framework ? [label(ag.framework)] : [],
           ag.model ? [variant(ag.model)] : [],
           [label(`${ag.activeKeyCount ?? 0} keys`)],
-          [label(`${ag.projectGrantCount ?? 0} grants`)],
+          [label(`${ag.workspaceGrantCount ?? ag.projectGrantCount ?? 0} grants`)],
         );
       }),
     );
@@ -179,7 +180,9 @@ export async function getFleetAgent(
         [label("scope:")],
         [value(agent.scope)],
         agent.teamName ? [label("team:"), value(agent.teamName)] : [],
-        agent.projectName ? [label("project:"), value(agent.projectName)] : [],
+        agent.workspaceName || agent.projectName
+          ? [label("workspace:"), value(agent.workspaceName || agent.projectName)]
+          : [],
       ),
       agent.framework || agent.model
         ? row(
@@ -218,12 +221,12 @@ export async function getFleetAgent(
 
     if (grants.length > 0) {
       say(
-        row(1, [label("Cross-Project Grants:"), variant(`${grants.length}`)]),
+        row(1, [label("Cross-Workspace Grants:"), variant(`${grants.length}`)]),
         ...grants.map((g) =>
           row(
             2,
-            [idSeg(g.projectId)],
-            [value(g.projectName || g.projectId)],
+            [idSeg(g.workspaceId || g.projectId)],
+            [value(g.workspaceName || g.projectName || g.workspaceId || g.projectId)],
             [variant(g.permission)],
             [time(String(g.grantedAt))],
           ),
@@ -258,7 +261,12 @@ export async function registerFleetAgent(
     const description =
       typeof flags.description === "string" ? flags.description.trim() : undefined;
     const teamId = typeof flags.team === "string" ? flags.team.trim() : undefined;
-    const projectId = typeof flags.project === "string" ? flags.project.trim() : undefined;
+    const workspaceId =
+      typeof flags.workspace === "string"
+        ? flags.workspace.trim()
+        : typeof flags.project === "string"
+          ? flags.project.trim()
+          : undefined;
 
     const result = await call<{ agent: any; key?: any }>(
       instance,
@@ -273,7 +281,8 @@ export async function registerFleetAgent(
           model,
           description,
           teamId,
-          projectId,
+          workspaceId,
+          projectId: workspaceId,
           generateKey: flags["no-key"] !== true,
         },
       },
@@ -392,7 +401,7 @@ export async function resumeFleetAgent(
   }
 }
 
-export async function grantFleetProject(
+export async function grantFleetWorkspace(
   instance: string,
   agentId: string,
   flags: Record<string, string | true> = {},
@@ -405,11 +414,16 @@ export async function grantFleetProject(
   const orgSlug = await resolveOrg(flags);
   if (!orgSlug) return missingOrg(instance);
 
-  const projectId = typeof flags.project === "string" ? flags.project.trim() : undefined;
-  if (!projectId) {
+  const workspaceId =
+    typeof flags.workspace === "string"
+      ? flags.workspace.trim()
+      : typeof flags.project === "string"
+        ? flags.project.trim()
+        : undefined;
+  if (!workspaceId) {
     say(
       row(0, [badge("memcell"), place(instance)]),
-      row(1, [warn("--project <projectId> is required to grant project access")]),
+      row(1, [warn("--workspace <workspaceId> is required to grant workspace access")]),
     );
     return 1;
   }
@@ -426,18 +440,18 @@ export async function grantFleetProject(
       `/api/v1/organizations/${encodeURIComponent(orgSlug)}/fleet/${encodeURIComponent(agentId)}/grant`,
       {
         method: "POST",
-        body: { projectId, permission },
+        body: { workspaceId, projectId: workspaceId, permission },
       },
     );
 
     say(
-      row(0, [badge("memcell"), label("fleet project grant"), place(instance)]),
+      row(0, [badge("memcell"), label("fleet workspace grant"), place(instance)]),
       row(
         1,
         [good("granted access")],
         [idSeg(agentId)],
-        [label("to project")],
-        [value(projectId)],
+        [label("to workspace")],
+        [value(workspaceId)],
         [variant(permission)],
       ),
     );
@@ -447,7 +461,9 @@ export async function grantFleetProject(
   }
 }
 
-export async function revokeFleetProject(
+export const grantFleetProject = grantFleetWorkspace;
+
+export async function revokeFleetWorkspace(
   instance: string,
   agentId: string,
   flags: Record<string, string | true> = {},
@@ -460,11 +476,16 @@ export async function revokeFleetProject(
   const orgSlug = await resolveOrg(flags);
   if (!orgSlug) return missingOrg(instance);
 
-  const projectId = typeof flags.project === "string" ? flags.project.trim() : undefined;
-  if (!projectId) {
+  const workspaceId =
+    typeof flags.workspace === "string"
+      ? flags.workspace.trim()
+      : typeof flags.project === "string"
+        ? flags.project.trim()
+        : undefined;
+  if (!workspaceId) {
     say(
       row(0, [badge("memcell"), place(instance)]),
-      row(1, [warn("--project <projectId> is required to revoke project access")]),
+      row(1, [warn("--workspace <workspaceId> is required to revoke workspace access")]),
     );
     return 1;
   }
@@ -475,18 +496,18 @@ export async function revokeFleetProject(
       `/api/v1/organizations/${encodeURIComponent(orgSlug)}/fleet/${encodeURIComponent(agentId)}/grant`,
       {
         method: "DELETE",
-        body: { projectId },
+        body: { workspaceId, projectId: workspaceId },
       },
     );
 
     say(
-      row(0, [badge("memcell"), label("fleet project grant revoked"), place(instance)]),
+      row(0, [badge("memcell"), label("fleet workspace grant revoked"), place(instance)]),
       row(
         1,
         [good("revoked access")],
         [idSeg(agentId)],
-        [label("from project")],
-        [value(projectId)],
+        [label("from workspace")],
+        [value(workspaceId)],
       ),
     );
     return 0;
@@ -494,3 +515,5 @@ export async function revokeFleetProject(
     return refused(instance, err as Error);
   }
 }
+
+export const revokeFleetProject = revokeFleetWorkspace;

@@ -49,7 +49,7 @@ const EVENT_HOOKS: Record<string, LifecycleHook> = {
  * What this harness can do, declared — see adapters/surface.ts.
  *
  * Claude Code documents thirty-three events; the loop rides seven of them. That
- * is a statement about what memcell asks for, not about what the agent
+ * is a declaration about what memcell asks for, not about what the agent
  * offers, and the difference is written down here so nobody reads one as the
  * other again.
  *

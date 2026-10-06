@@ -250,8 +250,8 @@ describe("cli insights commands", () => {
         workedRecalls: 1475,
         failedRecalls: 25,
         pendingRecalls: 0,
-        totalStatements: 320,
-        convergedStatements: 280,
+        totalMemories: 320,
+        convergedMemories: 280,
       },
       timeseries: [],
     });

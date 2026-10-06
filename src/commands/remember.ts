@@ -4,7 +4,7 @@ import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, good, id, label, place, row, say, scopeBadge, value, variant } from "../ui.js";
 import { wired } from "./wired.js";
 
-// `memcell remember <text>` — file one finished statement from a shell.
+// `memcell remember <text>` — file one finished memory from a shell.
 // Hand whole documents or files to `memcell import` instead.
 
 interface Written {
@@ -20,13 +20,16 @@ const APPLIES_AT = ["read", "change", "record", "send", "answer"] as const;
 
 export async function remember(
   text: string,
-  typeOrKind?: string,
+  type?: string,
   at?: string,
   url?: string,
   scope?: string,
   meta?: string,
   subject?: string,
   roles?: string,
+  context?: string,
+  observation?: string,
+  enforce?: boolean,
 ): Promise<number> {
   // Refused by name rather than dropped: a directive filed as applying at a
   // moment nothing fires would sit here looking wired and never be served.
@@ -76,18 +79,33 @@ export async function remember(
         .filter(Boolean)
     : undefined;
 
-  return file(text, typeOrKind, appliesAt, url, normalizedScope, parsedMeta, subject, parsedRoles);
+  return file(
+    text,
+    type,
+    appliesAt,
+    url,
+    normalizedScope,
+    parsedMeta,
+    subject,
+    parsedRoles,
+    context,
+    observation,
+    enforce,
+  );
 }
 
 async function file(
   text: string,
-  typeOrKind?: string,
+  type?: string,
   appliesAt: string[] = [],
   url?: string,
   scope: string = "project",
   metadata?: Record<string, unknown>,
   subject?: string,
   roles?: string[],
+  context?: string,
+  observation?: string,
+  enforce?: boolean,
 ): Promise<number> {
   const here = await wired("remember", url);
   if (!here) return 1;
@@ -96,12 +114,14 @@ async function file(
     const sdk = await getSdkClient(here.instance, { bearer: here.key });
     const written = (await sdk.remember({
       title: text,
-      type: typeOrKind as any,
-      kind: typeOrKind as any,
+      type: type as any,
       scope,
       subject,
       requiredRoles: roles,
       metadata,
+      context,
+      observation,
+      enforce,
     } as any)) as unknown as Written;
 
     say(

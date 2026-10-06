@@ -51,9 +51,9 @@ Static instruction files and monolithic system prompts don't solve this:
 
 **MemCell gives your agents closed-loop memory:**
 
-1. **Pre-Action Recall** — Before taking action, agents receive verified statements relevant to the current task.
+1. **Pre-Action Recall** — Before taking action, agents receive verified memories relevant to the current task.
 2. **Execution & Feedback** — When actions succeed or fail, real outcomes are reported back.
-3. **Earned Confidence** — Statements that work gain confidence; statements that fail decay. Zero manual prompt maintenance.
+3. **Earned Confidence** — Memories that work gain confidence; memories that fail decay. Zero manual prompt maintenance.
 
 ---
 
@@ -61,7 +61,7 @@ Static instruction files and monolithic system prompts don't solve this:
 
 MemCell pairs two lightweight layers so agents stay aligned without getting in your way:
 
-- **Deterministic Hooks (Zero-Touch)**: Fire automatically on session start, prompt submit, and turn end. Relevant statements and directives are checked before actions begin—without relying on the model remembering to call a tool. _Hooks fail open in <50ms, so offline or slow networks never block your editor._
+- **Deterministic Hooks (Zero-Touch)**: Fire automatically on session start, prompt submit, and turn end. Relevant memories and directives are checked before actions begin—without relying on the model remembering to call a tool. _Hooks fail open in <50ms, so offline or slow networks never block your editor._
 - **MCP Tool Bridge (`memcell mcp`)**: Provides interactive tools (`recall`, `remember`, `report`, `ingest`) when agents need to search memory or record discoveries mid-turn.
 
 ---
@@ -111,7 +111,7 @@ memcell import
 memcell stats
 ```
 
-Displays statements followed, errors avoided, estimated tokens saved from prevented error loops, and 30-day activity sparklines.
+Displays memories followed, errors avoided, estimated tokens saved from prevented error loops, and 30-day activity sparklines.
 
 ---
 
@@ -135,8 +135,8 @@ Displays statements followed, errors avoided, estimated tokens saved from preven
 | :------------------------------ | :--------------------------------------------------------------------- |
 | `memcell connect`               | Connect this directory to MemCell, install hooks, and configure MCP    |
 | `memcell status`                | Check authentication standing, active project, and connection health   |
-| `memcell stats`                 | Show statements followed, errors avoided, and token savings            |
-| `memcell recall <intent>`       | Query memory for verified statements and past outcomes before acting   |
+| `memcell stats`                 | Show memories followed, errors avoided, and token savings              |
+| `memcell recall <intent>`       | Query memory for verified memories and past outcomes before acting     |
 | `memcell remember <text>`       | File a project convention or directive (`--at` for lifecycle triggers) |
 | `memcell report <id> <outcome>` | Report `worked`, `failed`, or `avoided` to update confidence           |
 | `memcell ingest <file>`         | Distill a document or specification into atomic memories               |

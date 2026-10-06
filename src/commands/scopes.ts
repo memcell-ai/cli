@@ -4,8 +4,8 @@ import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, label, place, row, say, variant } from "../ui.js";
 import { wired } from "./wired.js";
 
-// `memcell scopes` — list active operational scopes and statement
-// counts in the currently wired project.
+// `memcell scopes` — list active operational scopes and memory
+// counts in the currently wired workspace.
 
 export async function scopes(url?: string): Promise<number> {
   const here = await wired("scopes", url);

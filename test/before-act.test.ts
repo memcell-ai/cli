@@ -10,8 +10,8 @@ import { can } from "../src/adapters/surface.js";
 // tools. Turning "the Bash tool running `git push`" into one of those five is
 // knowledge about one harness and one shell, and it lives here.
 //
-// Silence is a real answer and the common one. A rule shown where it does not
-// apply is worse than no rule: the next one gets skipped too.
+// Silence is a real answer and the common one. A memory shown where it does not
+// apply is worse than no memory: the next one gets skipped too.
 
 const guard = (() => {
   if (!can(SURFACE.guard)) throw new Error("claude code documents PreToolUse");

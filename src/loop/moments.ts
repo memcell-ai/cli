@@ -5,14 +5,14 @@
 //     reach the agent BEFORE it acts, or it acts without it.
 //   turn end                      → remember. What the turn produced is
 //     handed over as transcript delta; the memory engine distills what was durable.
-//   turn end · session end        → report.   A statement the turn's own
+//   turn end · session end        → report.   A memory the turn's own
 //     work corroborated is one the recall got right, and saying so is the
 //     only thing that moves confidence.
 //   before act                    → pre-act guard evaluation. A directive
 //     read at the top of a session and needed forty steps later is a directive
 //     nobody is holding by the time it applies. This fires before an
-//     individual act and evaluates active statements bearing on THAT act. It fires many
-//     times a turn, so it costs no call: active statements come down once
+//     individual act and evaluates active memories bearing on THAT act. It fires many
+//     times a turn, so it costs no call: active memories come down once
 //     and the in-memory matching happens locally.
 //   after act                     → post-act guidance delivery and failure recovery.
 

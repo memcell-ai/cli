@@ -70,13 +70,13 @@ describe("promotions command group & 4-tier scope promotion", () => {
       requests: [
         {
           id: "req_1",
-          statementId: "stmt_1",
+          memoryId: "mem_1",
           fromScope: "user",
           toScope: "project",
           status: "pending",
           requestedBy: "usr_alice",
           reason: "Team baseline",
-          statement: { id: "stmt_1", title: "Always type strictly" },
+          memory: { id: "mem_1", title: "Always type strictly" },
         },
       ],
       total: 1,
@@ -92,8 +92,8 @@ describe("promotions command group & 4-tier scope promotion", () => {
   it("approves a promotion request", async () => {
     answer = () => ({
       approved: true,
-      statement: {
-        id: "stmt_1",
+      memory: {
+        id: "mem_1",
         title: "Always type strictly",
         scope: "project",
       },
@@ -121,39 +121,39 @@ describe("promotions command group & 4-tier scope promotion", () => {
     expect(rejectCall?.body).toMatchObject({ reviewReason: "Out of scope" });
   });
 
-  it("handles direct statement promotion in promote command", async () => {
+  it("handles direct memory promotion in promote command", async () => {
     answer = () => ({
       promoted: true,
-      statement: {
-        id: "stmt_1",
+      memory: {
+        id: "mem_1",
         title: "Always type strictly",
         scope: "project",
         version: 2,
       },
     });
 
-    const code = await promote("stmt_1", "project", "Standardizing", instance);
+    const code = await promote("mem_1", "project", "Standardizing", instance);
     expect(code).toBe(0);
-    const promoCall = calls.find((c) => c.url.includes("/memories/stmt_1/promote"));
+    const promoCall = calls.find((c) => c.url.includes("/memories/mem_1/promote"));
     expect(promoCall).toBeDefined();
     expect(promoCall?.body).toMatchObject({ toScope: "workspace", reason: "Standardizing" });
   });
 
-  it("handles review-requested statement promotion in promote command", async () => {
+  it("handles review-requested memory promotion in promote command", async () => {
     answer = () => ({
       promoted: false,
       promotionRequest: {
         id: "req_org_1",
-        statementId: "stmt_1",
+        memoryId: "mem_1",
         fromScope: "project",
         toScope: "organization",
         status: "pending",
       },
     });
 
-    const code = await promote("stmt_1", "organization", "Org wide standard", instance);
+    const code = await promote("mem_1", "organization", "Org wide standard", instance);
     expect(code).toBe(0);
-    const promoCall = calls.find((c) => c.url.includes("/memories/stmt_1/promote"));
+    const promoCall = calls.find((c) => c.url.includes("/memories/mem_1/promote"));
     expect(promoCall).toBeDefined();
     expect(promoCall?.body).toMatchObject({ toScope: "organization", reason: "Org wide standard" });
   });

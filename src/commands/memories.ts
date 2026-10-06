@@ -103,6 +103,7 @@ export async function listMemories(
           [value(s.confidence !== undefined ? s.confidence.toFixed(2) : "0.50")],
           s.type ? [variant(s.type)] : null,
           [scopeBadge(s.scope || "workspace")],
+          s.enforce ? [variant("guard")] : null,
           s.status === "pinned" ? [variant("pinned")] : null,
           [label(s.title)],
         ),
@@ -156,10 +157,12 @@ export async function getMemory(
         [value(s.confidence !== undefined ? s.confidence.toFixed(2) : "0.50")],
         s.type ? [variant(s.type)] : null,
         [scopeBadge(s.scope || "workspace")],
+        s.enforce ? [variant("guard")] : null,
         s.status ? [variant(s.status)] : null,
       ),
       row(1, [label("memory:"), value(s.title)]),
       s.context ? row(2, [label("context:"), label(s.context)]) : null,
+      s.observation ? row(2, [label("observation:"), label(s.observation)]) : null,
       (s as any).requiredRoles?.length
         ? row(2, [label("required roles:"), list((s as any).requiredRoles)])
         : null,
@@ -181,9 +184,7 @@ export async function getMemory(
                 [variant("→")],
                 [variant(r.relationType || r.relation_type)],
                 [idSeg(r.targetId || r.target_id)],
-                r.targetStatement?.title || r.targetMemory?.title
-                  ? [label(r.targetStatement?.title || r.targetMemory?.title)]
-                  : null,
+                r.targetMemory?.title ? [label(r.targetMemory?.title)] : null,
               ),
             ),
             ...(rels.incoming || []).map((r: any) =>
@@ -192,9 +193,7 @@ export async function getMemory(
                 [variant("←")],
                 [variant(r.relationType || r.relation_type)],
                 [idSeg(r.sourceId || r.source_id)],
-                r.sourceStatement?.title || r.sourceMemory?.title
-                  ? [label(r.sourceStatement?.title || r.sourceMemory?.title)]
-                  : null,
+                r.sourceMemory?.title ? [label(r.sourceMemory?.title)] : null,
               ),
             ),
           ]
@@ -248,6 +247,17 @@ export async function createMemory(
 
     const status = typeof flags.status === "string" ? (flags.status as any) : undefined;
 
+    const context = typeof flags.context === "string" ? flags.context : undefined;
+    const observation = typeof flags.observation === "string" ? flags.observation : undefined;
+    const enforce =
+      flags.enforce === true
+        ? true
+        : flags.enforce === "true"
+          ? true
+          : flags.enforce === "false"
+            ? false
+            : undefined;
+
     let metadata: Record<string, unknown> | undefined;
     if (typeof flags.meta === "string") {
       try {
@@ -266,6 +276,9 @@ export async function createMemory(
       subject,
       requiredRoles: roles,
       metadata,
+      context,
+      observation,
+      enforce,
     } as any);
 
     say(
@@ -298,6 +311,16 @@ export async function updateMemory(
     const memoryText = typeof flags.text === "string" ? flags.text : undefined;
     const type = typeof flags.type === "string" ? (flags.type as any) : undefined;
     const status = typeof flags.status === "string" ? (flags.status as any) : undefined;
+    const context = typeof flags.context === "string" ? flags.context : undefined;
+    const observation = typeof flags.observation === "string" ? flags.observation : undefined;
+    const enforce =
+      flags.enforce === true
+        ? true
+        : flags.enforce === "true"
+          ? true
+          : flags.enforce === "false"
+            ? false
+            : undefined;
 
     let metadata: Record<string, unknown> | undefined;
     if (typeof flags.meta === "string") {
@@ -314,6 +337,9 @@ export async function updateMemory(
       type,
       status,
       metadata,
+      context,
+      observation,
+      enforce,
     });
 
     say(
@@ -456,7 +482,7 @@ export async function relateMemories(
     const target = getTargetWorkspace(flags);
     const namespace = await resolveNamespace(sdk, target);
 
-    const relationType = typeof flags.type === "string" ? flags.type : "constrains";
+    const relationType = typeof flags.type === "string" ? flags.type : "limits";
     const confidence = typeof flags.confidence === "string" ? parseFloat(flags.confidence) : 0.9;
 
     const relNamespace = (memClient as any).relations;

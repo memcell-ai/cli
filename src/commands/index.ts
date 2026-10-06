@@ -24,11 +24,11 @@ import { connect } from "./connect.js";
 import { exportSpace } from "./export.js";
 import {
   getFleetAgent,
-  grantFleetProject,
+  grantFleetWorkspace,
   listFleet,
   registerFleetAgent,
   resumeFleetAgent,
-  revokeFleetProject,
+  revokeFleetWorkspace,
   suspendFleetAgent,
 } from "./fleet.js";
 import { hook, hookRemove } from "./hook.js";
@@ -211,15 +211,23 @@ export const COMMANDS: Command[] = [
     path: ["remember"],
     what: "file one thing this project has established — --at names when a directive applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
-    takes: ["type", "kind", "at", "url", "scope", "meta", "subject", "target", "roles"],
+    takes: [
+      "type",
+      "at",
+      "url",
+      "scope",
+      "meta",
+      "subject",
+      "target",
+      "roles",
+      "context",
+      "observation",
+      "enforce",
+    ],
     run: ({ args, flags }) =>
       remember(
         args.text!,
-        typeof flags.type === "string"
-          ? flags.type
-          : typeof flags.kind === "string"
-            ? flags.kind
-            : undefined,
+        typeof flags.type === "string" ? flags.type : undefined,
         typeof flags.at === "string" ? flags.at : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
         typeof flags.scope === "string" ? flags.scope : undefined,
@@ -230,6 +238,15 @@ export const COMMANDS: Command[] = [
             ? flags.target
             : undefined,
         typeof flags.roles === "string" ? flags.roles : undefined,
+        typeof flags.context === "string" ? flags.context : undefined,
+        typeof flags.observation === "string" ? flags.observation : undefined,
+        flags.enforce === true
+          ? true
+          : flags.enforce === "true"
+            ? true
+            : flags.enforce === "false"
+              ? false
+              : undefined,
       ),
   },
   {
@@ -393,6 +410,9 @@ export const COMMANDS: Command[] = [
       "roles",
       "subject",
       "target",
+      "context",
+      "observation",
+      "enforce",
     ],
     run: ({ instance, args, flags }) => createMemory(instance, args.text!, flags),
   },
@@ -411,6 +431,9 @@ export const COMMANDS: Command[] = [
       "roles",
       "subject",
       "target",
+      "context",
+      "observation",
+      "enforce",
     ],
     run: ({ instance, args, flags }) => createMemory(instance, args.text!, flags),
   },
@@ -418,7 +441,18 @@ export const COMMANDS: Command[] = [
     path: ["memories", "update"],
     what: "update a memory's content, status, or type",
     args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace", "text", "name", "type", "status", "meta"],
+    takes: [
+      "url",
+      "workspace",
+      "text",
+      "name",
+      "type",
+      "status",
+      "meta",
+      "context",
+      "observation",
+      "enforce",
+    ],
     run: ({ instance, args, flags }) => updateMemory(instance, args.id!, flags),
   },
   {
@@ -1220,14 +1254,16 @@ export const COMMANDS: Command[] = [
   {
     path: ["export"],
     what: "carry this space out — one document, no account needed",
-    takes: ["format", "out", "url"],
+    takes: ["format", "out", "url", "workspace"],
     landing: true,
     run: ({ flags, context }) =>
       exportSpace(
         typeof flags.format === "string" ? flags.format : "json",
         typeof flags.out === "string" ? flags.out : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
-        typeof flags.project === "string" ? flags.project : context?.project?.namespace,
+        typeof flags.workspace === "string"
+          ? flags.workspace
+          : context?.workspace?.namespace || context?.project?.namespace,
       ),
   },
   {
@@ -1355,17 +1391,17 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["fleet", "grant"],
-    what: "grant cross-project access for an agent to a specific project",
+    what: "grant cross-workspace access for an agent to a specific workspace",
     args: [{ name: "agentId", required: true, what: "agent id" }],
-    takes: ["url", "org", "project", "permission"],
-    run: ({ instance, args, flags }) => grantFleetProject(instance, args.agentId!, flags),
+    takes: ["url", "org", "workspace", "permission"],
+    run: ({ instance, args, flags }) => grantFleetWorkspace(instance, args.agentId!, flags),
   },
   {
     path: ["fleet", "revoke"],
-    what: "revoke cross-project access for an agent from a project",
+    what: "revoke cross-workspace access for an agent from a workspace",
     args: [{ name: "agentId", required: true, what: "agent id" }],
-    takes: ["url", "org", "project"],
-    run: ({ instance, args, flags }) => revokeFleetProject(instance, args.agentId!, flags),
+    takes: ["url", "org", "workspace"],
+    run: ({ instance, args, flags }) => revokeFleetWorkspace(instance, args.agentId!, flags),
   },
 
   // ── Audit Resource ─────────────────────────────────────────────────────
@@ -1380,7 +1416,7 @@ export const COMMANDS: Command[] = [
       "action",
       "target-type",
       "target-id",
-      "project",
+      "workspace",
       "team",
       "from",
       "to",
@@ -1400,7 +1436,7 @@ export const COMMANDS: Command[] = [
       "action",
       "target-type",
       "target-id",
-      "project",
+      "workspace",
       "team",
       "from",
       "to",
@@ -1420,7 +1456,7 @@ export const COMMANDS: Command[] = [
       "action",
       "target-type",
       "target-id",
-      "project",
+      "workspace",
       "team",
       "from",
       "to",
@@ -1432,7 +1468,7 @@ export const COMMANDS: Command[] = [
   {
     path: ["audit", "export"],
     what: "export enterprise audit logs formatted for SIEM (CEF, JSON, or CSV)",
-    takes: ["url", "org", "format", "out", "from", "to", "action", "project"],
+    takes: ["url", "org", "format", "out", "from", "to", "action", "workspace"],
     run: ({ instance, flags }) => exportAuditLogs(instance, flags),
   },
 
@@ -1440,7 +1476,7 @@ export const COMMANDS: Command[] = [
   {
     path: ["insights"],
     what: "view enterprise cognitive telemetry, savings economics, and latency KPIs",
-    takes: ["url", "org", "timeframe", "team", "project", "json"],
+    takes: ["url", "org", "timeframe", "team", "workspace", "json"],
     run: ({ instance, flags }) => getEnterpriseInsights(instance, flags),
   },
 ];

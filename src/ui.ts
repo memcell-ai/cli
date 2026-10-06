@@ -164,7 +164,7 @@ export const meter = (v: number, total: number, reading?: string): Seg => ({
  *  A badge always becomes its own group: the mark and the name are identity,
  *  and identity is separated from what follows it by the same dot every other
  *  pair on the line gets. Doing it here rather than at the call sites means
- *  the rule holds for every command at once, and a new one cannot forget it. */
+ *  the principle holds for every command at once, and a new one cannot forget it. */
 export function row(depth: number, ...groups: (Seg | Seg[] | null | undefined | false)[]): Row {
   const kept: Seg[][] = [];
   for (const group of groups) {

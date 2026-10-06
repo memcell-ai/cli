@@ -863,23 +863,23 @@ describe("intent envelope rollup & prompt cleaning", () => {
     expect(intent).toBe(longPrompt);
   });
 
-  it("isGuard classifies standing invariants, action rules, and pinned rules as guards", () => {
+  it("isGuard classifies standing directives, action constraints, and pinned memories as guards", () => {
     expect(
       isGuard({
         memoryId: "s1",
-        text: "Any rule",
+        text: "Any memory",
         confidence: 0.8,
         layer: "org",
         standing: true,
       }),
     ).toBe(true);
     expect(
-      isGuard({ memoryId: "s2", text: "Any rule", confidence: 0.8, layer: "org", pinned: true }),
+      isGuard({ memoryId: "s2", text: "Any memory", confidence: 0.8, layer: "org", pinned: true }),
     ).toBe(true);
     expect(
       isGuard({
         memoryId: "s3",
-        text: "Any rule",
+        text: "Any memory",
         confidence: 0.8,
         layer: "org",
         appliesAt: ["send"],
@@ -888,7 +888,7 @@ describe("intent envelope rollup & prompt cleaning", () => {
     expect(
       isGuard({
         memoryId: "s4",
-        text: "Any rule",
+        text: "Any memory",
         confidence: 0.8,
         layer: "org",
         refuses: true,
@@ -897,7 +897,7 @@ describe("intent envelope rollup & prompt cleaning", () => {
     expect(
       isGuard({
         memoryId: "s5",
-        text: "Any rule",
+        text: "Any memory",
         confidence: 0.8,
         layer: "org",
         type: "guard",

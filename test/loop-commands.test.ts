@@ -64,7 +64,7 @@ describe("recall", () => {
       momentId: "m1",
       results: [
         {
-          statementId: "s1",
+          memoryId: "s1",
           text: "Retries cap at five attempts.",
           kind: "convention",
           confidence: 0.72,
@@ -118,12 +118,12 @@ describe("recall", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("marks a pinned statement, so presence is never read as relevance", async () => {
+  it("marks a pinned memory, so presence is never read as relevance", async () => {
     answer = () => ({
       momentId: "m1",
       results: [
         {
-          statementId: "s1",
+          memoryId: "s1",
           text: "Matched this question.",
           kind: null,
           confidence: 0.7,
@@ -131,8 +131,8 @@ describe("recall", () => {
           vouched: true,
         },
         {
-          statementId: "s2",
-          text: "Standing rule, here whatever you asked.",
+          memoryId: "s2",
+          text: "Standing principle, here whatever you asked.",
           kind: "convention",
           confidence: 0.8,
           layer: "team",
@@ -151,7 +151,7 @@ describe("recall", () => {
     }
     const out = printed.join("\n");
     expect(out).toContain("pinned");
-    // Only the pin carries it — the matched statement must not.
+    // Only the pin carries it — the matched memory must not.
     expect(out.split("Matched this question.")[0]).not.toContain("pinned");
   });
 
@@ -162,25 +162,25 @@ describe("recall", () => {
 });
 
 describe("remember", () => {
-  it("files one claim at the statements door", async () => {
+  it("files one claim at the memory door", async () => {
     answer = () => ({ id: "s9", scope: "team", confidence: 0.55, note: "Filed at 0.55." });
 
     expect(await remember("Retries cap at five attempts.")).toBe(0);
     expect(calls[0]!.url).toBe("http://memcell.test/api/v1/remember");
     expect(calls[0]!.headers.authorization).toBe("Bearer mc_pairkey");
     expect(calls[0]!.body.text).toBe("Retries cap at five attempts.");
-    expect(calls[0]!.body).not.toHaveProperty("kind");
+    expect(calls[0]!.body).not.toHaveProperty("type");
   });
 
-  it("carries a kind when one is named", async () => {
+  it("carries a type when one is named", async () => {
     answer = () => ({ id: "s9", scope: "team", confidence: 0.55, note: "Filed." });
-    await remember("Never call the gateway from a migration.", "convention");
-    expect(calls[0]!.body.kind).toBe("convention");
+    await remember("Never call the gateway from a migration.", "directive");
+    expect(calls[0]!.body.type).toBe("directive");
   });
 });
 
 describe("report", () => {
-  it("posts the outcome against the statement recall named", async () => {
+  it("posts the outcome against the memory recall named", async () => {
     answer = () => ({ from: 0.55, to: 0.62 });
 
     expect(await report("s1", "worked")).toBe(0);
