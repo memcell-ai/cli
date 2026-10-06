@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.11.0](https://github.com/memcell-ai/cli/compare/memcell-v0.10.12...memcell-v0.11.0) (2026-10-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* purge statements and projects in favor of memories and workspaces ([#60](https://github.com/memcell-ai/cli/issues/60))
+
+### Features
+
+* add --all flag for deleting all memory versions and latest-version deletion ([#59](https://github.com/memcell-ai/cli/issues/59)) ([d178ffb](https://github.com/memcell-ai/cli/commit/d178ffbeb9d4294c64e65cbb3291c0e7459fc14f))
+* **cli:** add fleet, audit, and insights commands with emergency kill-switch ([#56](https://github.com/memcell-ai/cli/issues/56)) ([dbc9981](https://github.com/memcell-ai/cli/commit/dbc9981a06884ed2290bdfb738516f39ea9a2ec3))
+* **cli:** epistemic triad, observation grounding, and memory relations command surface ([#62](https://github.com/memcell-ai/cli/issues/62)) ([d78e43b](https://github.com/memcell-ai/cli/commit/d78e43b219d8606c4ccdbd0ccd4767185bd76963))
+
+
+### Code Refactoring
+
+* purge statements and projects in favor of memories and workspaces ([#60](https://github.com/memcell-ai/cli/issues/60)) ([cfd0e55](https://github.com/memcell-ai/cli/commit/cfd0e55135abcbc9281e687d73ae9e6cfdc411ca))
+
 ## [0.10.12](https://github.com/memcell-ai/cli/compare/memcell-v0.10.11...memcell-v0.10.12) (2026-09-30)
 
 
