@@ -4,9 +4,9 @@ import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, good, label, place, row, say, value, warn } from "../ui.js";
 import { wired } from "./wired.js";
 
-// `memcell report <statement> <outcome>` — what happened when somebody acted
-// on a served statement. The only thing that moves confidence, which is why
-// a statement's confidence is earned rather than asserted.
+// `memcell report <memory> <outcome>` — what happened when somebody acted
+// on a served memory. The only thing that moves confidence, which is why
+// a memory's confidence is earned rather than asserted.
 
 const OUTCOMES = ["worked", "failed", "avoided"] as const;
 
@@ -31,7 +31,6 @@ export async function report(
     const sdk = await getSdkClient(here.instance, { bearer: here.key });
     const feedbackPayload: any = {
       memoryId,
-      statementId: memoryId,
       outcome: outcome as any,
     };
     if (note !== undefined) {

@@ -6,7 +6,7 @@
 // five is knowledge about one harness and one shell, and this is where it is
 // allowed to live.
 //
-// It runs before every tool call, so it costs no call of its own: the statements
+// It runs before every tool call, so it costs no call of its own: the memories
 // came down once with the turn's recall, and this only decides which of them
 // to say now.
 

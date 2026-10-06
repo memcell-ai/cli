@@ -82,7 +82,7 @@ export const FLAGS: Record<string, FlagSpec> = {
   },
   reason: { name: "reason", takes: "why", what: "why the commons should carry it" },
   "no-watch": { name: "no-watch", what: "do not follow the crawl" },
-  global: { name: "global", short: "g", what: "this machine, rather than this project" },
+  global: { name: "global", short: "g", what: "this machine, rather than this workspace" },
   pair: { name: "pair", takes: "id", what: "the pairing shown on the connect page" },
   format: {
     name: "format",
@@ -94,7 +94,7 @@ export const FLAGS: Record<string, FlagSpec> = {
     name: "limit",
     short: "n",
     takes: "count",
-    what: "how many MATCHED statements to serve — pins ride on top",
+    what: "how many MATCHED memories to serve — pins ride on top",
   },
   type: {
     name: "type",
@@ -119,14 +119,14 @@ export const FLAGS: Record<string, FlagSpec> = {
   cursor: { name: "cursor", takes: "cursor", what: "pagination cursor" },
   page: { name: "page", takes: "number", what: "page number for pagination" },
   role: { name: "role", takes: "role", what: "role (e.g. read, write, admin, owner, member)" },
-  into: { name: "into", takes: "target", what: "target project namespace to adopt into" },
+  into: { name: "into", takes: "target", what: "target workspace namespace to adopt into" },
   timeframe: {
     name: "timeframe",
     takes: "window",
     what: "telemetry timeframe: 24h · 7d · 30d · all",
   },
   description: { name: "description", takes: "text", what: "description of the resource" },
-  text: { name: "text", takes: "statement", what: "statement text content" },
+  text: { name: "text", takes: "memory", what: "memory text content" },
   expires: { name: "expires", takes: "days", what: "token expiration duration in days" },
   "dry-run": {
     name: "dry-run",
@@ -144,12 +144,12 @@ export const FLAGS: Record<string, FlagSpec> = {
   "min-cluster-size": {
     name: "min-cluster-size",
     takes: "count",
-    what: "minimum statements per cluster (default: 2)",
+    what: "minimum memories per cluster (default: 2)",
   },
   "max-cluster-size": {
     name: "max-cluster-size",
     takes: "count",
-    what: "maximum statements per cluster (default: 8)",
+    what: "maximum memories per cluster (default: 8)",
   },
   wait: {
     name: "wait",

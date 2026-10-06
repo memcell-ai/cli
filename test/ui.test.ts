@@ -5,7 +5,7 @@ import { bar as blocks, duration, pending } from "../src/ui.js";
 // The terminal and the console draw the same reading, so the same
 // arithmetic has to hold in both. The bug being pinned here: whole-block
 // rounding meant a long crawl could not move its bar for the first twenty
-// minutes, and the CLI made it worse by drawing a YIELD (statements over
+// minutes, and the CLI made it worse by drawing a YIELD (memories over
 // items) where progress belonged — a number that stays near zero all run.
 //
 // Colour is off in this process (no TTY), so what these assert is shape.

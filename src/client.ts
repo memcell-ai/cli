@@ -80,7 +80,7 @@ export async function call<T>(
   const activeSignal = signal ?? AbortSignal.timeout(timeoutMs ?? CALL_TIMEOUT_MS);
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    // Same-origin rules do not apply to a terminal, but the server checks
+    // Same-origin policies do not apply to a terminal, but the server checks
     // for an origin it trusts before it will act on a state change.
     origin: instance,
     accept: "application/json",

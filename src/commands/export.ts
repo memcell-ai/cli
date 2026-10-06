@@ -29,7 +29,8 @@ interface ExportedMemory {
 }
 
 interface ExportDoc {
-  space: { slug: string; name: string; exportedAt: string };
+  workspace?: { slug: string; name: string; exportedAt: string };
+  space?: { slug: string; name: string; exportedAt: string };
   memories: ExportedMemory[];
 }
 
@@ -54,10 +55,12 @@ function lineOf(s: ExportedMemory): string {
 export function renderMarkdown(doc: ExportDoc, heading: string): string {
   const items = doc.memories || [];
   const live = items.filter((s) => s.status === "active");
+  const spaceInfo = doc.workspace ||
+    doc.space || { name: "workspace", exportedAt: new Date().toISOString() };
   const parts = [
     `# ${heading}`,
     "",
-    `What ${doc.space.name} knows — ${live.length} memor${live.length === 1 ? "y" : "ies"}, exported from memcell on ${doc.space.exportedAt.slice(0, 10)}.`,
+    `What ${spaceInfo.name} knows — ${live.length} memor${live.length === 1 ? "y" : "ies"}, exported from memcell on ${spaceInfo.exportedAt.slice(0, 10)}.`,
   ];
   const placed = new Set<ExportedMemory>();
   for (const [title, types] of SECTIONS) {
@@ -74,9 +77,11 @@ export function renderMarkdown(doc: ExportDoc, heading: string): string {
 export function renderCursorrules(doc: ExportDoc): string {
   const items = doc.memories || [];
   const live = items.filter((s) => s.status === "active");
+  const spaceInfo = doc.workspace ||
+    doc.space || { name: "workspace", exportedAt: new Date().toISOString() };
   return (
     [
-      `# ${doc.space.name} — exported from memcell ${doc.space.exportedAt.slice(0, 10)}`,
+      `# ${spaceInfo.name} — exported from memcell ${spaceInfo.exportedAt.slice(0, 10)}`,
       ...live.map((s) => lineOf(s).replace(/^- /, "")),
     ].join("\n") + "\n"
   );
@@ -86,7 +91,7 @@ export async function exportSpace(
   format: string,
   out?: string,
   url?: string,
-  targetProject?: string,
+  targetWorkspace?: string,
 ): Promise<number> {
   if (!(EXPORT_FORMATS as readonly string[]).includes(format)) {
     say(
@@ -96,8 +101,8 @@ export async function exportSpace(
     return 1;
   }
 
-  const hasProject = Boolean(targetProject);
-  const here = await wired("export", url, { silent: hasProject });
+  const hasWorkspace = Boolean(targetWorkspace);
+  const here = await wired("export", url, { silent: hasWorkspace });
 
   let targetSpace: string;
   let targetInstance = url ?? "http://localhost:3000";
@@ -107,8 +112,8 @@ export async function exportSpace(
     targetSpace = here.space;
     targetInstance = here.instance;
     targetBearer = here.key;
-  } else if (targetProject) {
-    targetSpace = targetProject;
+  } else if (targetWorkspace) {
+    targetSpace = targetWorkspace;
   } else {
     return 1;
   }
@@ -117,7 +122,7 @@ export async function exportSpace(
   try {
     const exportPath = targetBearer
       ? "/api/v1/export"
-      : `/api/v1/export?project=${encodeURIComponent(targetSpace)}`;
+      : `/api/v1/export?workspace=${encodeURIComponent(targetSpace)}`;
     doc = await call<ExportDoc>(targetInstance, exportPath, {
       method: "GET",
       bearer: targetBearer,

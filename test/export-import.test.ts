@@ -124,13 +124,13 @@ describe("reading text out of a JSON export", () => {
 
   it("takes objects that say where their text is", () => {
     expect(
-      textsFromJson([{ text: "a" }, { memory: "b" }, { content: "c" }, { statement: "d" }]),
+      textsFromJson([{ text: "a" }, { memory: "b" }, { content: "c" }, { title: "d" }]),
     ).toEqual(["a", "b", "c", "d"]);
   });
 
   it("looks under the plainly named wrapper keys", () => {
     expect(textsFromJson({ memories: [{ memory: "kept" }] })).toEqual(["kept"]);
-    expect(textsFromJson({ statements: ["kept"] })).toEqual(["kept"]);
+    expect(textsFromJson({ items: ["kept"] })).toEqual(["kept"]);
   });
 
   it("reads our own export back — the round trip", () => {

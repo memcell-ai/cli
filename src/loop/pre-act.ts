@@ -14,7 +14,8 @@ export interface RawMemoryInput {
   title?: string;
   text?: string;
   context?: string | null;
-  example?: string | null;
+  observation?: string | null;
+  enforce?: boolean;
   tags?: string[];
   confidence?: number;
   stability?: number;
@@ -51,6 +52,7 @@ export function stageMemoriesFromRecall(
 
     // 1. Determine if this memory is a Guard vs. Directive vs. Convention vs. General Knowledge
     const isGuard =
+      mem.enforce === true ||
       mem.type === "guard" ||
       tags.includes("guard") ||
       tags.includes("security") ||

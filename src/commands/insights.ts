@@ -63,7 +63,8 @@ export async function getEnterpriseInsights(
     const query = new URLSearchParams();
     query.set("timeframe", timeframe);
     if (typeof flags.team === "string") query.set("teamId", flags.team.trim());
-    if (typeof flags.project === "string") query.set("projectId", flags.project.trim());
+    if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
+    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     const qs = `?${query.toString()}`;
 
     const insights = await call<any>(
@@ -102,11 +103,7 @@ export async function getEnterpriseInsights(
         [label("Memory Convergence:")],
         [value(`${kpis.memoryConvergenceRate.toFixed(1)}%`)],
         [label("Converged Memories:")],
-        [
-          value(
-            `${metrics.convergedMemories ?? metrics.convergedStatements} / ${metrics.totalMemories ?? metrics.totalStatements}`,
-          ),
-        ],
+        [value(`${metrics.convergedMemories ?? 0} / ${metrics.totalMemories ?? 0}`)],
       ),
       row(
         1,

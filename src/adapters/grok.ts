@@ -141,7 +141,7 @@ export const grok: Adapter = {
  * `change` is the same set the capture side already learned — one list, so
  * the two halves cannot drift into disagreeing about what a write is. A tool
  * nobody verified is left out: that act goes unguarded, which is silence
- * rather than a rule shown where it does not apply.
+ * rather than a memory shown where it does not apply.
  */
 export const SURFACE: Surface = {
   moments: {

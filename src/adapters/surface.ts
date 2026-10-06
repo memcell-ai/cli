@@ -12,8 +12,8 @@ import type { Moment } from "../loop/moments.js";
 // It had a worse fault. A missing key meant BOTH "this harness cannot" and
 // "we never wired it", and those are opposite facts. Reading absence as
 // incapacity is how thirteen harnesses that all document a pre-act event
-// came to be described as four that do — the map was read as a statement
-// about the agents when it was only ever a statement about us.
+// came to be described as four that do — the map was read as a declaration
+// about the agents when it was only ever a declaration about us.
 //
 // So a capability is never absent here. It is either declared with how, or
 // declared UNSUPPORTED WITH A REASON, and the reason has to be about the
@@ -63,7 +63,7 @@ export interface At {
  * The guard: memcell speaking at the moment an act is about to happen,
  * rather than once at the top of a session.
  *
- * `tools` is the piece that cannot live anywhere else. A statement records
+ * `tools` is the piece that cannot live anywhere else. A memory records
  * WHEN it bears on an act in words every trade shares — read, change,
  * record, send, answer — and says nothing about tools, because the record
  * outlives whichever agents exist. Naming which of THIS agent's tools count

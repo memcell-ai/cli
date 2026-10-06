@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The loop, as the hooks fire it. What is pinned is which leg runs at which
-// moment, and the two rules that keep a hook safe to install in somebody's
+// moment, and the two principles that keep a hook safe to install in somebody's
 // session: it fails open on every path, and it never judges — it reports an
 // outcome only where the memory itself said the material corroborated a
-// statement a recall had served.
+// memory a recall had served.
 
 const home = await mkdtemp(join(tmpdir(), "memcell-hook-home-"));
 const project = await mkdtemp(join(tmpdir(), "memcell-hook-proj-"));
@@ -139,7 +139,7 @@ describe("recall", () => {
     expect(calls[0]!.path).toBe("recall");
     expect(calls[0]!.body.intent).toBe("how do we handle money?");
     expect(out.context).toContain("Amounts are cents.");
-    // The confidence rides along: a statement stripped of it invites
+    // The confidence rides along: a memory stripped of it invites
     // treating a guess as a fact.
     expect(out.context).toContain("0.80");
   });
@@ -171,7 +171,7 @@ describe("recall", () => {
     expect(context.indexOf("Never call the gateway from a migration.")).toBeLessThan(
       context.indexOf("From this workspace's memory"),
     );
-    // And it is not repeated below as an ordinary statement.
+    // And it is not repeated below as an ordinary memory.
     expect(context.split("Never call the gateway from a migration.")).toHaveLength(2);
     // Everything else still arrives, in its own section.
     expect(context).toContain("Amounts are cents.");
@@ -739,7 +739,7 @@ describe("a hand-over the instance will never take", () => {
 
 describe("the pairing survives the process", () => {
   // Each hook firing is its own process. `before-act` is the ONLY thing that
-  // ever sees which rule was put in front of which act — the instance cannot
+  // ever sees which memory was put in front of which act — the instance cannot
   // recover that from the transcript, which is the entire reason the pairing
   // is recorded on this side. It is written into the session note and handed
   // over with the turn.
@@ -747,8 +747,8 @@ describe("the pairing survives the process", () => {
   // Every path out of `before-act` returned early, and the note was kept at
   // the bottom of the function, so none of them reached it. The pairing was
   // written to memory and died with the process on every act since the leg
-  // was introduced: no `rule_act` row was ever written, and a memory whose
-  // rules fired every single turn read as one whose rules had never fired.
+  // was introduced: no pairing row was ever written, and a memory whose
+  // guidance fired every single turn read as one whose guidance had never fired.
   //
   // This asserts the note ON DISK, not the return value, because the return
   // value was always right.
@@ -765,7 +765,7 @@ describe("the pairing survives the process", () => {
       momentId: "m9",
       results: [
         {
-          memoryId: "s-rule",
+          memoryId: "s-guard",
           text: "Never widen a consented scope.",
           confidence: 0.8,
           layer: "team",
@@ -788,12 +788,12 @@ describe("the pairing survives the process", () => {
 
     const kept = (await noteOf("pair1")).servedAt ?? [];
     expect(kept).toHaveLength(1);
-    expect(kept[0]).toMatchObject({ memoryId: "s-rule", act: "change", became: "served" });
+    expect(kept[0]).toMatchObject({ memoryId: "s-guard", act: "change", became: "served" });
   });
 
   it("keeps it on the paths that say nothing, too", async () => {
     // Four of the six ways out of this leg return before anything is said —
-    // no tool, no act, no rule bearing on it, already said this session.
+    // no tool, no act, no memory bearing on it, already said this session.
     // They still have to leave the note where they found it rather than
     // dropping a pairing an earlier act recorded.
     reset();
@@ -801,7 +801,7 @@ describe("the pairing survives the process", () => {
       momentId: "m10",
       results: [
         {
-          memoryId: "s-rule",
+          memoryId: "s-guard",
           text: "Never widen a consented scope.",
           confidence: 0.8,
           layer: "team",

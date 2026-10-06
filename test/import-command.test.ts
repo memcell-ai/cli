@@ -8,7 +8,7 @@ const mockSdk = {
   remember: vi.fn(async (params: any) => {
     rememberedCalls.push(params);
     return {
-      created: [{ id: "stmt-1", title: "Atomic statement" }],
+      created: [{ id: "mem-1", title: "Atomic memory" }],
       reinforced: [],
     };
   }),

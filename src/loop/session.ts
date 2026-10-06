@@ -6,10 +6,10 @@ import { machineDir, machineFile } from "../machine.js";
 //
 // Each hook is a separate process: prompt-submit exits long before turn-end
 // starts. So anything one pipeline phase needs to know about another has to be written
-// down — which statements a recall served, which hook served them, and how
+// down — which memories a recall served, which hook served them, and how
 // far through the transcript the last remember got.
 //
-// It lives on the machine beside the keys, not in the project: it is about
+// It lives on the machine beside the keys, not in the workspace: it is about
 // one person's session on one computer, and it is deleted when the session
 // ends. A stale session cache is only ever the tail of a session that crashed.
 

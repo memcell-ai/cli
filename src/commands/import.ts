@@ -30,7 +30,7 @@ import { wired } from "./wired.js";
 // so a project with notes starts remembering them without retyping anything.
 //
 // Every file goes through the server's distillation engine and gets turned into
-// atomic statements with provenance. A JSON file is read for its text first —
+// atomic memories with provenance. A JSON file is read for its text first —
 // a top-level array, or one under a plainly named key, of strings or of objects
 // that carry their text in a string field. That shape is generic on purpose:
 // it reads our own export back, and it reads any export that says what it means,
@@ -97,7 +97,7 @@ export function textsFromJson(parsed: unknown): string[] | null {
   const arrayOf = (v: unknown): unknown[] | null => {
     if (Array.isArray(v)) return v;
     if (v && typeof v === "object") {
-      for (const key of ["statements", "memories", "items", "results", "entries"]) {
+      for (const key of ["memories", "items", "results", "entries"]) {
         const inner = (v as Record<string, unknown>)[key];
         if (Array.isArray(inner)) return inner;
       }
@@ -113,7 +113,7 @@ export function textsFromJson(parsed: unknown): string[] | null {
       continue;
     }
     if (entry && typeof entry === "object") {
-      for (const key of ["text", "memory", "content", "statement", "title"]) {
+      for (const key of ["text", "memory", "content", "title"]) {
         const held = (entry as Record<string, unknown>)[key];
         if (typeof held === "string" && held.trim()) {
           texts.push(held.trim());

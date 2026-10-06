@@ -10,7 +10,7 @@ export interface SdkClientOptions {
 
 /**
  * Returns a configured MemCell SDK instance for the given target instance.
- * Automatically resolves the bearer token from the connected project or user credentials.
+ * Automatically resolves the bearer token from the connected workspace or user credentials.
  */
 export async function getSdkClient(
   instance: string,
@@ -55,20 +55,6 @@ export async function getSdkClient(
       headersObj["x-memcell-model"] = runtimeModel;
     }
 
-    let effectiveInput = input;
-    if (typeof input === "string") {
-      effectiveInput = input
-        .replace(/\/statements\b/g, "/memories")
-        .replace(/\/projects\b/g, "/workspaces");
-    } else if (input instanceof URL) {
-      effectiveInput = new URL(
-        input
-          .toString()
-          .replace(/\/statements\b/g, "/memories")
-          .replace(/\/projects\b/g, "/workspaces"),
-      );
-    }
-
     let body = init?.body;
     if (typeof body === "string" && body.startsWith("{")) {
       try {
@@ -78,16 +64,16 @@ export async function getSdkClient(
           parsed.text = parsed.title;
           changed = true;
         }
-        if (parsed.reason && !parsed.note) {
-          parsed.note = parsed.reason;
-          changed = true;
-        }
         if (parsed.statement_id && !parsed.memory_id) {
           parsed.memory_id = parsed.statement_id;
           changed = true;
         }
         if (parsed.memory_id && !parsed.statement_id) {
           parsed.statement_id = parsed.memory_id;
+          changed = true;
+        }
+        if (parsed.reason && !parsed.note) {
+          parsed.note = parsed.reason;
           changed = true;
         }
         if (activeRecallMetadata && !parsed.metadata) {
@@ -101,7 +87,7 @@ export async function getSdkClient(
         // ignore
       }
     }
-    const res = await baseFetch(effectiveInput, { ...init, headers: headersObj, body });
+    const res = await baseFetch(input, { ...init, headers: headersObj, body });
 
     const hasHeadersGet = Boolean(res?.headers && typeof (res.headers as any).get === "function");
     const headersMap = hasHeadersGet
@@ -132,41 +118,11 @@ export async function getSdkClient(
       }
 
       if (raw && typeof raw === "object") {
-        if (!raw.project && (raw.id || raw.slug) && raw.name !== undefined) {
-          raw.project = { ...raw };
-        }
         if (!raw.organization && (raw.slug || raw.name) && !raw.organizations && !raw.members) {
           raw.organization = { ...raw };
         }
-        if (raw.memory && !raw.statement) {
-          raw.statement = raw.memory;
-        }
-        if (raw.statement && !raw.memory) {
-          raw.memory = raw.statement;
-        }
-        if (!raw.workspace && raw.project) {
-          raw.workspace = raw.project;
-        }
-        if (!raw.project && raw.workspace) {
-          raw.project = raw.workspace;
-        }
         if (Array.isArray(raw.items) && !raw.memories) {
           raw.memories = raw.items;
-        }
-        if (Array.isArray(raw.memories) && !raw.items) {
-          raw.items = raw.memories;
-        }
-        if (Array.isArray(raw.statements) && !raw.memories) {
-          raw.memories = raw.statements;
-        }
-        if (Array.isArray(raw.memories) && !raw.statements) {
-          raw.statements = raw.memories;
-        }
-        if (Array.isArray(raw.workspaces) && !raw.projects) {
-          raw.projects = raw.workspaces;
-        }
-        if (Array.isArray(raw.projects) && !raw.workspaces) {
-          raw.workspaces = raw.projects;
         }
         if (Array.isArray(raw.results)) {
           for (const item of raw.results) {
@@ -205,16 +161,157 @@ export async function getSdkClient(
     fetch: customFetch,
   });
 
+  const origFeedback = client.feedback?.bind(client);
+  if (origFeedback) {
+    (client as any).feedback = async (params: any) => {
+      const p = { ...params };
+      if (p.memoryId && !p.statementId) p.statementId = p.memoryId;
+      if (p.memory_id && !p.statement_id) p.statement_id = p.memory_id;
+      return origFeedback(p);
+    };
+  }
+
+  if (!(client as any).memories) {
+    (client as any).memories = {
+      list: async (namespace: string, params?: any) => {
+        const parts = namespace.split("/");
+        const q = new URLSearchParams();
+        if (params?.page) q.set("page", String(params.page));
+        if (params?.limit) q.set("limit", String(params.limit));
+        if (params?.type) q.set("type", params.type);
+        if (params?.status) q.set("status", params.status);
+        if (params?.scope) q.set("scope", params.scope);
+        const qs = q.toString() ? `?${q.toString()}` : "";
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories${qs}`,
+        );
+      },
+      get: async (namespace: string, memoryId: string) => {
+        const parts = namespace.split("/");
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}`,
+        );
+      },
+      create: async (namespace: string, input: any) => {
+        const parts = namespace.split("/");
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories`,
+          {
+            method: "POST",
+            body: JSON.stringify(input),
+          },
+        );
+      },
+      update: async (namespace: string, memoryId: string, input: any) => {
+        const parts = namespace.split("/");
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(input),
+          },
+        );
+      },
+      delete: async (namespace: string, memoryId: string, options?: any) => {
+        const parts = namespace.split("/");
+        const qs = options?.allVersions ? "?allVersions=true" : "";
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}${qs}`,
+          {
+            method: "DELETE",
+          },
+        );
+      },
+      star: async (namespace: string, memoryId: string) => {
+        const parts = namespace.split("/");
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}/star`,
+          {
+            method: "POST",
+          },
+        );
+      },
+      history: async (namespace: string, memoryId: string) => {
+        const parts = namespace.split("/");
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}/history`,
+        );
+      },
+      adopt: async (namespace: string, memoryId: string, input: any) => {
+        const parts = namespace.split("/");
+        return (client as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}/adopt`,
+          {
+            method: "POST",
+            body: JSON.stringify(input),
+          },
+        );
+      },
+      relations: {
+        list: async (namespace: string, memoryId: string) => {
+          const parts = namespace.split("/");
+          return (client as any).request(
+            `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(memoryId)}/relations`,
+          );
+        },
+        create: async (namespace: string, sourceId: string, input: any) => {
+          const parts = namespace.split("/");
+          const json = await (client as any).request(
+            `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(sourceId)}/relations`,
+            {
+              method: "POST",
+              body: JSON.stringify(input),
+            },
+          );
+          return json.relation;
+        },
+        delete: async (namespace: string, sourceId: string, relationId: string) => {
+          const parts = namespace.split("/");
+          return (client as any).request(
+            `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/memories/${encodeURIComponent(sourceId)}/relations/${encodeURIComponent(relationId)}`,
+            {
+              method: "DELETE",
+            },
+          );
+        },
+      },
+    };
+  }
+
+  if (!(client as any).workspaces) {
+    (client as any).workspaces = {
+      list: async () => (client as any).request("/api/v1/workspaces"),
+      listForOwner: async (owner: string) =>
+        (client as any).request(`/api/v1/organizations/${encodeURIComponent(owner)}/workspaces`),
+      get: async (id: string) =>
+        (client as any).request(`/api/v1/workspaces/${encodeURIComponent(id)}`),
+      create: async (input: any) =>
+        (client as any).request("/api/v1/workspaces", {
+          method: "POST",
+          body: JSON.stringify(input),
+        }),
+      update: async (id: string, input: any) =>
+        (client as any).request(`/api/v1/workspaces/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        }),
+      delete: async (id: string) =>
+        (client as any).request(`/api/v1/workspaces/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }),
+    };
+  }
+
   const origRecall = client.recall.bind(client);
   client.recall = async (params: any) => {
     activeRecallMetadata = params?.metadata;
     try {
       const res = await origRecall(params);
       if (res && typeof res === "object") {
-        if (!(res as any).memories && Array.isArray((res as any).statements)) {
-          (res as any).memories = (res as any).statements;
-        } else if (!(res as any).memories && Array.isArray((res as any).items)) {
+        if (!(res as any).memories && Array.isArray((res as any).items)) {
           (res as any).memories = (res as any).items;
+        } else if (!(res as any).memories && Array.isArray((res as any).statements)) {
+          (res as any).memories = (res as any).statements;
         } else if (!(res as any).memories) {
           (res as any).memories = [];
         }
@@ -224,13 +321,6 @@ export async function getSdkClient(
       activeRecallMetadata = undefined;
     }
   };
-
-  if (!(client as any).memories && (client as any).statements) {
-    (client as any).memories = (client as any).statements;
-  }
-  if (!(client as any).workspaces && (client as any).projects) {
-    (client as any).workspaces = (client as any).projects;
-  }
 
   return client;
 }
