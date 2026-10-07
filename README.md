@@ -16,6 +16,14 @@
   <a href="https://memcell.ai/docs"><img src="https://img.shields.io/badge/docs-memcell.ai-blue" alt="Documentation" /></a>
 </p>
 
+> [!IMPORTANT]
+> **This repository has been merged into the unified [`memcell-ai/devkit`](https://github.com/memcell-ai/devkit) monorepo.**
+>
+> - **Developer CLI & SDKs**: All future development continues at [memcell-ai/devkit](https://github.com/memcell-ai/devkit).
+> - **Official MCP Server & Registry Manifest**: See [memcell-ai/mcp](https://github.com/memcell-ai/mcp).
+>
+> This repository is now archived and read-only.
+
 ```sh
 # Install globally
 npm install -g memcell
