@@ -127,7 +127,7 @@ export function parse(argv: string[], commands: Command[]): Parse {
       return {
         kind: "error",
         message: `--${name} means nothing to ${command.path.join(" ")}`,
-        hint: command.path[0],
+        hint: command.path.join(" "),
       };
     }
   }
@@ -142,7 +142,7 @@ export function parse(argv: string[], commands: Command[]): Parse {
         return {
           kind: "error",
           message: `${command.path.join(" ")} needs <${spec.name}> — ${spec.what}`,
-          hint: command.path[0],
+          hint: command.path.join(" "),
         };
       }
       if (rest[0] !== undefined) args[spec.name] = rest[0];
@@ -155,7 +155,7 @@ export function parse(argv: string[], commands: Command[]): Parse {
         return {
           kind: "error",
           message: `${command.path.join(" ")} needs <${spec.name}> — ${spec.what}`,
-          hint: command.path[0],
+          hint: command.path.join(" "),
         };
       }
       continue;

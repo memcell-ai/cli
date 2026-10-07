@@ -95,4 +95,40 @@ describe("project response unwrapping for interactive connect", () => {
     expect(slug).toBe("sample");
     expect(targetProject).toBe("memcell/sample");
   });
+
+  it("extracts workspace slug and owner correctly from workspace response", () => {
+    const res: {
+      ok?: boolean;
+      workspace?: { id?: string; slug: string; name: string; ownerSlug?: string };
+      slug?: string;
+      ownerSlug?: string;
+    } = {
+      ok: true,
+      workspace: {
+        id: "ws_123",
+        name: "platform",
+        slug: "platform",
+        ownerSlug: "hammer",
+      },
+    };
+    const ws = res.workspace ?? res;
+    const slug = ws.slug;
+    const finalOwner = ws.ownerSlug || "hammer";
+    const targetWorkspace = finalOwner ? `${finalOwner}/${slug}` : slug;
+
+    expect(slug).toBe("platform");
+    expect(targetWorkspace).toBe("hammer/platform");
+  });
+
+  it("resolves candidate workspaces from workspaces array", () => {
+    const workspacesRes = {
+      workspaces: [
+        { id: "1", name: "platform", slug: "platform", ownerSlug: "hammer" },
+        { id: "2", name: "tester", slug: "sample", ownerSlug: "hammer" },
+      ],
+    };
+    const candidateWorkspaces = workspacesRes.workspaces ?? [];
+    expect(candidateWorkspaces).toHaveLength(2);
+    expect(candidateWorkspaces[0]?.slug).toBe("platform");
+  });
 });

@@ -104,7 +104,7 @@ export type Seg =
   | { k: "list"; items: string[] }
   /** Plain text in the default ink. */
   | { k: "text"; t: string }
-  /** Provenance scope badge: [org], [team], [project], [my] */
+  /** Provenance scope badge: [org], [team], [workspace], [my] */
   | { k: "scope"; scope: string };
 
 export interface Row {
@@ -138,7 +138,7 @@ export const cmd = (t: string): Seg => ({
 export const text = (t: string): Seg => ({ k: "text", t });
 export const chip = (tone: Tone): Seg => ({ k: "chip", tone });
 export const list = (items: string[]): Seg => ({ k: "list", items });
-export const scopeBadge = (scope: string = "project"): Seg => ({ k: "scope", scope });
+export const scopeBadge = (scope: string = "workspace"): Seg => ({ k: "scope", scope });
 
 export const state = (tone: Tone, t: string, glyph?: string): Seg => ({
   k: "state",
@@ -261,7 +261,7 @@ function segText(seg: Seg): string {
       if (s === "user" || s === "my" || s === "my-memory") {
         return ROLE.good("[my]");
       }
-      return ROLE.ember("[project]");
+      return ROLE.ember("[workspace]");
     }
   }
 }

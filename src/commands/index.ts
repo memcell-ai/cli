@@ -131,22 +131,26 @@ export const COMMANDS: Command[] = [
     what: "wire this directory — approves in your browser the first time",
     args: [
       {
-        name: "project",
+        name: "workspace",
         required: false,
-        what: "project to connect ([owner]/[project] or slug)",
+        what: "workspace to connect ([owner]/[workspace] or slug)",
       },
     ],
-    takes: ["url", "pair", "project", "space", "agent", "no-browser"],
+    takes: ["url", "pair", "workspace", "project", "space", "agent", "no-browser"],
     landing: true,
     run: ({ instance, from, args, flags }) =>
       connect(instance, {
         pair: typeof flags.pair === "string" ? flags.pair : undefined,
-        project:
-          typeof args.project === "string"
-            ? args.project
-            : typeof flags.project === "string"
-              ? flags.project
-              : undefined,
+        workspace:
+          typeof args.workspace === "string"
+            ? args.workspace
+            : typeof flags.workspace === "string"
+              ? flags.workspace
+              : typeof (args as any).project === "string"
+                ? (args as any).project
+                : typeof flags.project === "string"
+                  ? flags.project
+                  : undefined,
         space: typeof flags.space === "string" ? flags.space : undefined,
         agent: typeof flags.agent === "string" ? flags.agent : undefined,
         noBrowser: flags["no-browser"] === true,
