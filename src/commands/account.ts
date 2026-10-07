@@ -99,9 +99,9 @@ export async function listTokens(instance: string): Promise<number> {
 
     if (tokens.length === 0) {
       say(
-        row(0, [badge("memcell"), label("account tokens"), place(instance)]),
+        row(0, [badge("memcell"), label("account token"), place(instance)]),
         row(1, [label("no personal access tokens")]),
-        row(2, [label("create one with"), cmd("memcell account tokens create <name>")]),
+        row(2, [label("create one with"), cmd("memcell account token create <name>")]),
       );
       return 0;
     }
@@ -109,7 +109,7 @@ export async function listTokens(instance: string): Promise<number> {
     say(
       row(
         0,
-        [badge("memcell"), label("account tokens"), place(instance)],
+        [badge("memcell"), label("account token"), place(instance)],
         [variant(`${tokens.length}`)],
       ),
       ...tokens.map((t) =>
@@ -121,7 +121,7 @@ export async function listTokens(instance: string): Promise<number> {
           [idSeg(t.id)],
         ),
       ),
-      row(2, [label("revoke one with"), cmd("memcell account tokens revoke <id>")]),
+      row(2, [label("revoke one with"), cmd("memcell account token revoke <id>")]),
     );
     return 0;
   } catch (error) {
@@ -149,7 +149,7 @@ export async function createToken(
     });
 
     say(
-      row(0, [badge("memcell"), label("account tokens create"), place(instance)]),
+      row(0, [badge("memcell"), label("account token create"), place(instance)]),
       row(1, [good("created token")], [value(token.name)], [idSeg(token.id)]),
       row(2, [label("token:"), value(token.token)]),
       row(2, [label("copy this token now — it will never be displayed again")]),
@@ -171,8 +171,73 @@ export async function revokeToken(instance: string, tokenId: string): Promise<nu
     await sdk.account.tokens.revoke(tokenId);
 
     say(
-      row(0, [badge("memcell"), label("account tokens revoke"), place(instance)]),
+      row(0, [badge("memcell"), label("account token revoke"), place(instance)]),
       row(1, [good("revoked personal token")], [idSeg(tokenId)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function getInvitation(instance: string, invitationId: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const inv = await sdk.invitations.get(invitationId);
+
+    say(
+      row(0, [badge("memcell"), label("invitation"), place(instance)], [idSeg(invitationId)]),
+      row(1, [good(inv.email)], [variant(inv.role || "member")]),
+      inv.organizationSlug ? row(2, [label("organization:"), value(inv.organizationSlug)]) : null,
+      row(2, [label("accept with"), cmd(`memcell account invitation accept ${invitationId}`)]),
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function acceptInvitation(instance: string, invitationId: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    const res = await sdk.invitations.accept(invitationId);
+
+    say(
+      row(0, [badge("memcell"), label("account invitation accept"), place(instance)]),
+      row(1, [good("accepted invitation")], [idSeg(invitationId)]),
+      res.organizationSlug
+        ? row(2, [label("organization context:"), value(res.organizationSlug)])
+        : null,
+    );
+    return 0;
+  } catch (error) {
+    return refused(instance, error as Error);
+  }
+}
+
+export async function declineInvitation(instance: string, invitationId: string): Promise<number> {
+  if (!(await credentialFor(instance))) {
+    needsSession(instance);
+    return 1;
+  }
+
+  try {
+    const sdk = await getSdkClient(instance);
+    await sdk.invitations.decline(invitationId);
+
+    say(
+      row(0, [badge("memcell"), label("account invitation decline"), place(instance)]),
+      row(1, [good("declined invitation")], [idSeg(invitationId)]),
     );
     return 0;
   } catch (error) {

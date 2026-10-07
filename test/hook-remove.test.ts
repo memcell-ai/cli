@@ -66,7 +66,7 @@ describe("memcell hook remove", () => {
       // that kills the credential server-side.
       expect(out()).toContain("disconnected");
       expect(out()).toContain("amber-grove-04821");
-      expect(out()).toContain("memcell agents revoke k1");
+      expect(out()).toContain("memcell agent revoke k1");
     } finally {
       cwd.mockRestore();
       await rm(dir, { recursive: true, force: true });

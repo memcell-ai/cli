@@ -179,15 +179,12 @@ export async function sweepConsolidate(
     if ((result.tensionsCount ?? 0) > 0) {
       say(
         row(2, [state("warn", `${result.tensionsCount} tension(s) surfaced for human review`)]),
-        row(2, [label("inspect with"), cmd("memcell memories --status contested")]),
+        row(2, [label("inspect with"), cmd("memcell memory --status contested")]),
       );
     }
     if ((result.fusionsCount ?? 0) > 0) {
       say(
-        row(2, [
-          label("inspect canonical memories with"),
-          cmd("memcell memories --type directive"),
-        ]),
+        row(2, [label("inspect canonical memories with"), cmd("memcell memory --type directive")]),
       );
     }
 

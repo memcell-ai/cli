@@ -169,7 +169,7 @@ export async function stats(instance: string): Promise<number> {
     if (error instanceof MemcellError && error.status === 404) {
       say(
         row(0, [badge("memcell"), place(instance)]),
-        row(1, [warn("no such space here")], [label("list them with"), cmd("memcell spaces")]),
+        row(1, [warn("no such space here")], [label("list them with"), cmd("memcell workspace")]),
       );
       return 1;
     }

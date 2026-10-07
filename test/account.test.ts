@@ -109,7 +109,7 @@ describe("account update", () => {
   });
 });
 
-describe("account tokens list", () => {
+describe("account token list", () => {
   it("lists personal access tokens", async () => {
     answer = () => ({
       tokens: [
@@ -140,7 +140,7 @@ describe("account tokens list", () => {
   });
 });
 
-describe("account tokens create", () => {
+describe("account token create", () => {
   it("creates a new personal access token", async () => {
     answer = () => ({
       token: {
@@ -171,7 +171,7 @@ describe("account tokens create", () => {
   });
 });
 
-describe("account tokens revoke", () => {
+describe("account token revoke", () => {
   it("revokes a personal access token by ID", async () => {
     answer = () => ({ ok: true });
 

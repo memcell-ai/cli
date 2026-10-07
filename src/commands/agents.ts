@@ -64,9 +64,9 @@ export async function listAgents(
 
       if (items.length === 0) {
         say(
-          row(0, [badge("memcell"), label("agents"), place(namespace)]),
+          row(0, [badge("memcell"), label("agent"), place(namespace)]),
           row(1, [label("no agents registered in this project")]),
-          row(2, [label("register one with"), cmd("memcell agents new <name>")]),
+          row(2, [label("register one with"), cmd("memcell agent new <name>")]),
         );
         return 0;
       }
@@ -74,7 +74,7 @@ export async function listAgents(
       say(
         row(
           0,
-          [badge("memcell"), label("agents"), place(namespace)],
+          [badge("memcell"), label("agent"), place(namespace)],
           [variant(`${items.length} agent${items.length === 1 ? "" : "s"}`)],
         ),
         ...items.map((a) =>
@@ -102,7 +102,7 @@ export async function listAgents(
     }
 
     const found = await findWorkspace();
-    const here = found ? await agentKeyForProject(found.project.instance, dirname(found.at)) : null;
+    const here = found ? await agentKeyForProject(found.project.instance, found.root) : null;
 
     say(
       row(
@@ -120,7 +120,7 @@ export async function listAgents(
           k.id === here?.keyId && [variant("here")],
         ),
       ),
-      row(2, [label("revoke one with"), cmd("memcell agents revoke <id>")]),
+      row(2, [label("revoke one with"), cmd("memcell agent revoke <id>")]),
     );
     return 0;
   } catch (error) {
@@ -188,9 +188,9 @@ export async function createAgent(
     });
 
     say(
-      row(0, [badge("memcell"), label("agents create"), place(namespace)]),
+      row(0, [badge("memcell"), label("agent create"), place(namespace)]),
       row(1, [good("registered")], [value(created.name)], [idSeg(created.id)]),
-      row(2, [label("mint a key with"), cmd(`memcell agents key create ${created.id}`)]),
+      row(2, [label("mint a key with"), cmd(`memcell agent key create ${created.id}`)]),
     );
     return 0;
   } catch (error) {
@@ -222,7 +222,7 @@ export async function updateAgent(
     });
 
     say(
-      row(0, [badge("memcell"), label("agents update"), place(namespace)]),
+      row(0, [badge("memcell"), label("agent update"), place(namespace)]),
       row(1, [good("updated")], [value(updated.name)], [idSeg(updated.id)]),
     );
     return 0;
@@ -247,7 +247,7 @@ export async function deleteAgent(
     await sdk.agents.delete(namespace, agentId);
 
     say(
-      row(0, [badge("memcell"), label("agents delete"), place(namespace)]),
+      row(0, [badge("memcell"), label("agent delete"), place(namespace)]),
       row(1, [good("deleted")], [idSeg(agentId)]),
     );
     return 0;
@@ -272,7 +272,7 @@ export async function createAgentKey(
     const key = await sdk.agents.createKey(namespace, agentId);
 
     say(
-      row(0, [badge("memcell"), label("agents key create"), place(namespace)]),
+      row(0, [badge("memcell"), label("agent key create"), place(namespace)]),
       row(1, [good("minted key")], [idSeg(key.id)]),
       key.key ? row(2, [label("token:"), value(key.key)]) : null,
       row(2, [label("keep this key secure — it is shown only once")]),
@@ -301,7 +301,7 @@ export async function revokeAgentKey(
       const namespace = await resolveNamespace(sdk, flags.project as string);
       await sdk.agents.revokeKey(namespace, keyIdOrAgentId, secondArg);
       say(
-        row(0, [badge("memcell"), label("agents key revoke"), place(namespace)]),
+        row(0, [badge("memcell"), label("agent key revoke"), place(namespace)]),
         row(1, [good("revoked")], [idSeg(secondArg)]),
       );
       return 0;
@@ -330,17 +330,17 @@ export async function whoamiAgent(instance: string): Promise<number> {
   const found = await findWorkspace();
   if (!found) {
     say(
-      row(0, [badge("memcell"), label("agents whoami")]),
+      row(0, [badge("memcell"), label("agent whoami")]),
       row(1, [warn("not wired")], [label("run"), cmd("memcell connect")]),
     );
     return 1;
   }
 
-  const root = dirname(found.at);
+  const root = found.root;
   const held = await agentKeyForProject(found.project.instance, root);
   if (!held) {
     say(
-      row(0, [badge("memcell"), label("agents whoami")]),
+      row(0, [badge("memcell"), label("agent whoami")]),
       row(1, [warn("no agent key found here")]),
       row(2, [label("run"), cmd("memcell connect")]),
     );

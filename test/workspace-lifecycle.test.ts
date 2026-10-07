@@ -25,6 +25,8 @@ async function scratch() {
 describe("project lifecycle & table preservation", () => {
   it("preserves existing [config] and custom TOML tables when updating project file", async () => {
     const dir = await scratch();
+    const dotMemcellDir = join(dir, ".memcell");
+    await mkdir(dotMemcellDir, { recursive: true });
     const filePath = join(dir, PROJECT_FILE);
 
     // Seed file with existing config table and custom settings
@@ -112,27 +114,25 @@ notifications = "disabled"
     expect(found?.project.owner).toBe("roots-org");
   });
 
-  it("handles directory clashing by writing and reading .memcell.toml", async () => {
+  it("self-heals legacy .memcell.toml into dedicated .memcell/config.toml", async () => {
     const dir = await scratch();
-    // Create .memcell as a DIRECTORY (e.g. embedded store)
-    await mkdir(join(dir, PROJECT_FILE), { recursive: true });
-
-    const savedPath = await saveProject(
-      {
-        instance: "http://aside.test",
-        project: "aside-proj",
-        space: "aside-proj",
-      },
-      dir,
+    // Create legacy .memcell.toml
+    await writeFile(
+      join(dir, PROJECT_FILE_ASIDE),
+      `[instance]\nurl = "http://aside.test"\n\n[project]\nslug = "aside-proj"\n`,
+      "utf8",
     );
 
-    expect(savedPath).toBe(join(dir, PROJECT_FILE_ASIDE));
-
-    // findProject resolves aside
+    // findProject triggers self-healing
     const found = await findProject(dir);
     expect(found).not.toBeNull();
-    expect(found?.at).toBe(join(dir, PROJECT_FILE_ASIDE));
+    expect(found?.at).toBe(join(dir, PROJECT_FILE));
     expect(found?.project.project).toBe("aside-proj");
+    expect(found?.root).toBe(dir);
+
+    // Verify .memcell.toml was cleaned up
+    const { stat } = await import("node:fs/promises");
+    await expect(stat(join(dir, PROJECT_FILE_ASIDE))).rejects.toThrow();
   });
 });
 

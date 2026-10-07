@@ -37,8 +37,8 @@ const {
   registerFleetAgent,
   suspendFleetAgent,
   resumeFleetAgent,
-  grantFleetProject,
-  revokeFleetProject,
+  grantFleetWorkspace,
+  revokeFleetWorkspace,
 } = await import("../src/commands/fleet.js");
 const { listAuditLogs, exportAuditLogs } = await import("../src/commands/audit.js");
 const { getEnterpriseInsights } = await import("../src/commands/insights.js");
@@ -178,25 +178,26 @@ describe("cli fleet commands", () => {
     expect(calls[0]?.url).toContain("/fleet/ag_100/resume");
   });
 
-  it("grants and revokes cross-project access", async () => {
-    answer = () => ({ ok: true, grant: { agentId: "ag_100", projectId: "proj_42" } });
+  it("grants and revokes cross-workspace access", async () => {
+    answer = () => ({ ok: true, grant: { agentId: "ag_100", workspaceId: "ws_42" } });
 
-    const grantCode = await grantFleetProject(instance, "ag_100", {
+    const grantCode = await grantFleetWorkspace(instance, "ag_100", {
       org: "acme",
-      project: "proj_42",
+      workspace: "ws_42",
       permission: "write",
     });
     expect(grantCode).toBe(0);
     expect(calls[0]?.url).toContain("/fleet/ag_100/grant");
-    expect(calls[0]?.body?.projectId).toBe("proj_42");
+    expect(calls[0]?.body?.workspaceId).toBe("ws_42");
 
     answer = () => ({ ok: true });
-    const revokeCode = await revokeFleetProject(instance, "ag_100", {
+    const revokeCode = await revokeFleetWorkspace(instance, "ag_100", {
       org: "acme",
-      project: "proj_42",
+      workspace: "ws_42",
     });
     expect(revokeCode).toBe(0);
     expect(calls[1]?.method).toBe("DELETE");
+    expect(calls[1]?.body?.workspaceId).toBe("ws_42");
   });
 });
 

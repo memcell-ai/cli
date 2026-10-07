@@ -1,5 +1,15 @@
 import type { Command, Resource } from "../model.js";
-import { getProfile, updateProfile, listTokens, createToken, revokeToken } from "./account.js";
+import { emit } from "../ui.js";
+import {
+  acceptInvitation,
+  createToken,
+  declineInvitation,
+  getInvitation,
+  getProfile,
+  listTokens,
+  revokeToken,
+  updateProfile,
+} from "./account.js";
 import {
   createAgent,
   createAgentKey,
@@ -38,6 +48,14 @@ import { login } from "./login.js";
 import { logout } from "./logout.js";
 import { mcp } from "./mcp.js";
 import {
+  getOperatorAnalytics,
+  getOperatorConfig,
+  getOperatorLimits,
+  getOperatorStats,
+  listOperatorUsers,
+  listOperatorWorkspaces,
+} from "./operator.js";
+import {
   configureOrgSSO,
   createOrganization,
   deleteOrganization,
@@ -57,8 +75,27 @@ import {
   verifyOrgSSO,
 } from "./orgs.js";
 import {
+  addTeamMember,
+  createTeam,
+  deleteTeam,
+  getTeam,
+  listTeamMembers,
+  listTeams,
+  removeTeamMember,
+  updateTeam,
+} from "./teams.js";
+import {
+  createWebhook,
+  deleteWebhook,
+  getWebhook,
+  listWebhooks,
+  pingWebhook,
+  updateWebhook,
+} from "./webhooks.js";
+import {
   deleteWorkspace,
   getWorkspace,
+  getWorkspaceActivity,
   listWorkspaces,
   newWorkspace,
   transferWorkspace,
@@ -72,7 +109,7 @@ import { remember } from "./remember.js";
 import { report } from "./report.js";
 import { pause, resume } from "./pause.js";
 import { reset } from "./reset.js";
-import { scopes } from "./scopes.js";
+import { scope } from "./scope.js";
 import { seed } from "./seed.js";
 import {
   adoptMemory,
@@ -94,19 +131,25 @@ import { getUsage } from "./usage.js";
 
 /** The nouns, so help groups by resource instead of listing every verb. */
 export const RESOURCES: Resource[] = [
-  { name: "workspaces", what: "epistemic memory boundaries, and which one is active" },
-  { name: "memories", what: "atomic units of thought, observation, and directive" },
-  { name: "promotions", what: "scope promotion requests and governance review" },
-  { name: "collaborators", what: "people with access to this workspace" },
-  { name: "agents", what: "registered agents and access keys" },
-  { name: "orgs", what: "organizations you belong to, and which one is active" },
+  { name: "workspace", what: "epistemic memory boundaries, and which one is active" },
+  { name: "memory", what: "atomic units of thought, observation, and directive" },
+  { name: "scope", what: "active operational memory scopes in this workspace" },
+  { name: "promotion", what: "scope promotion requests and governance review" },
+  { name: "collaborator", what: "people with access to this workspace" },
+  { name: "team", what: "organization teams and member assignments" },
+  { name: "webhook", what: "workspace webhooks and external event routing" },
+  { name: "agent", what: "registered agents and access keys" },
+  { name: "fleet", what: "autonomous agent fleet across the organization" },
+  { name: "org", what: "organizations you belong to, and which one is active" },
   { name: "usage", what: "quotas, active metrics, and memory breakdowns" },
+  { name: "audit", what: "immutable enterprise audit logs and compliance trails" },
   { name: "account", what: "your profile and personal access tokens" },
+  { name: "operator", what: "cluster administration and platform limits" },
   { name: "config", what: "settings, per workspace or machine" },
   { name: "sweep", what: "background consolidation and cognitive sleep cycles" },
 ];
 
-export const COMMANDS: Command[] = [
+const BASE_COMMANDS: Command[] = [
   // ── Core Lifecycle & Authentication ────────────────────────────────────
   {
     path: ["login"],
@@ -131,23 +174,22 @@ export const COMMANDS: Command[] = [
     what: "wire this directory — approves in your browser the first time",
     args: [
       {
-        name: "project",
+        name: "workspace",
         required: false,
-        what: "project to connect ([owner]/[project] or slug)",
+        what: "workspace to connect ([owner]/[workspace] or slug)",
       },
     ],
-    takes: ["url", "pair", "project", "space", "agent", "no-browser"],
+    takes: ["url", "pair", "workspace", "agent", "no-browser"],
     landing: true,
     run: ({ instance, from, args, flags }) =>
       connect(instance, {
         pair: typeof flags.pair === "string" ? flags.pair : undefined,
-        project:
-          typeof args.project === "string"
-            ? args.project
-            : typeof flags.project === "string"
-              ? flags.project
+        workspace:
+          typeof args.workspace === "string"
+            ? args.workspace
+            : typeof flags.workspace === "string"
+              ? flags.workspace
               : undefined,
-        space: typeof flags.space === "string" ? flags.space : undefined,
         agent: typeof flags.agent === "string" ? flags.agent : undefined,
         noBrowser: flags["no-browser"] === true,
         from,
@@ -169,19 +211,19 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["pause"],
-    what: "pause background hooks for this project",
+    what: "pause background hooks for this workspace",
     landing: true,
     run: ({ from }) => pause(from),
   },
   {
     path: ["resume"],
-    what: "resume background hooks for this project",
+    what: "resume background hooks for this workspace",
     landing: true,
     run: ({ from }) => resume(from),
   },
   {
     path: ["unpause"],
-    what: "resume background hooks for this project (alias for resume)",
+    what: "resume background hooks for this workspace (alias for resume)",
     run: ({ from }) => resume(from),
   },
 
@@ -190,26 +232,34 @@ export const COMMANDS: Command[] = [
     path: ["recall"],
     what: "what memory serves before you act",
     args: [{ name: "intent", required: true, what: "what you are trying to do or know" }],
-    takes: ["limit", "url", "scope", "scopes", "my-memory", "my", "meta", "metadata"],
+    takes: [
+      "limit",
+      "url",
+      "scope",
+      "scopes",
+      "my-memory",
+      "my",
+      "meta",
+      "metadata",
+      "type",
+      "enforce",
+      "min-confidence",
+      "confidence-floor",
+      "floor",
+      "subject",
+      "target",
+      "format",
+      "allow-provisional",
+      "provisional",
+      "json",
+      "workspace",
+    ],
     landing: true,
-    run: ({ args, flags }) =>
-      recall(
-        args.intent!,
-        typeof flags.limit === "string" ? flags.limit : undefined,
-        typeof flags.url === "string" ? flags.url : undefined,
-        typeof flags.scope === "string" ? flags.scope : undefined,
-        typeof flags.scopes === "string" ? flags.scopes : undefined,
-        flags["my-memory"] === true || flags.my === true,
-        typeof flags.meta === "string"
-          ? flags.meta
-          : typeof flags.metadata === "string"
-            ? flags.metadata
-            : undefined,
-      ),
+    run: ({ args, flags }) => recall(args.intent!, flags),
   },
   {
     path: ["remember"],
-    what: "file one thing this project has established — --at names when a directive applies",
+    what: "file one thing this workspace has established — --at names when a directive applies",
     args: [{ name: "text", required: true, what: "the claim, in one sentence" }],
     takes: [
       "type",
@@ -223,7 +273,9 @@ export const COMMANDS: Command[] = [
       "context",
       "observation",
       "enforce",
+      "workspace",
     ],
+    landing: true,
     run: ({ args, flags }) =>
       remember(
         args.text!,
@@ -247,23 +299,40 @@ export const COMMANDS: Command[] = [
             : flags.enforce === "false"
               ? false
               : undefined,
+        flags,
       ),
   },
   {
     path: ["report"],
-    what: "what happened when something memory served was acted on",
+    what: "calibrate confidence from outcomes (worked · failed · avoided)",
     args: [
-      { name: "memory", required: true, what: "the memory's id, from recall" },
-      { name: "outcome", required: true, what: "worked · failed · avoided" },
+      { name: "memory", required: false, what: "the memory's id, from recall" },
+      { name: "outcome", required: false, what: "worked · failed · avoided" },
     ],
-    takes: ["note", "url"],
-    run: ({ args, flags }) =>
-      report(
-        args.memory!,
-        args.outcome!,
-        typeof flags.note === "string" ? flags.note : undefined,
+    takes: ["memory", "memory-id", "outcome", "summary", "note", "reason", "url", "workspace"],
+    landing: true,
+    run: ({ args, flags }) => {
+      const memoryId = args.memory || (flags.memory as string) || (flags["memory-id"] as string);
+      const outcome = args.outcome || (flags.outcome as string);
+      if (!memoryId || !outcome) {
+        throw new Error(
+          "memcell report requires a memory ID and an outcome (worked | failed | avoided)",
+        );
+      }
+      return report(
+        memoryId,
+        outcome,
+        typeof flags.summary === "string"
+          ? flags.summary
+          : typeof flags.note === "string"
+            ? flags.note
+            : typeof flags.reason === "string"
+              ? flags.reason
+              : undefined,
         typeof flags.url === "string" ? flags.url : undefined,
-      ),
+        flags,
+      );
+    },
   },
   {
     path: ["promote"],
@@ -279,51 +348,23 @@ export const COMMANDS: Command[] = [
       ),
   },
   {
-    path: ["promotions"],
-    what: "list pending scope promotion requests for review",
-    takes: ["url", "status", "project"],
-    landing: true,
-    run: ({ instance, flags }) => listPromotions(instance, flags),
-  },
-  {
-    path: ["promotions", "list"],
-    what: "list scope promotion requests for review",
-    takes: ["url", "status", "project"],
-    landing: true,
-    run: ({ instance, flags }) => listPromotions(instance, flags),
-  },
-  {
-    path: ["promotions", "approve"],
-    what: "approve a pending scope promotion request",
-    args: [{ name: "request", required: true, what: "the promotion request's id" }],
-    takes: ["url", "reason", "project"],
-    run: ({ instance, args, flags }) =>
-      approvePromotion(
-        instance,
-        args.request!,
-        typeof flags.reason === "string" ? flags.reason : undefined,
-        flags,
-      ),
-  },
-  {
-    path: ["promotions", "reject"],
-    what: "reject a pending scope promotion request",
-    args: [{ name: "request", required: true, what: "the promotion request's id" }],
-    takes: ["url", "reason", "project"],
-    run: ({ instance, args, flags }) =>
-      rejectPromotion(
-        instance,
-        args.request!,
-        typeof flags.reason === "string" ? flags.reason : undefined,
-        flags,
-      ),
-  },
-  {
-    path: ["scopes"],
-    what: "list active operational scopes in this project",
+    path: ["scope"],
+    what: "list active operational scopes in this workspace",
     takes: ["url"],
     landing: true,
-    run: ({ flags }) => scopes(typeof flags.url === "string" ? flags.url : undefined),
+    run: ({ flags }) => scope(typeof flags.url === "string" ? flags.url : undefined),
+  },
+  {
+    path: ["scope", "list"],
+    what: "list active operational scopes in this workspace",
+    takes: ["url"],
+    run: ({ flags }) => scope(typeof flags.url === "string" ? flags.url : undefined),
+  },
+  {
+    path: ["scope", "ls"],
+    what: "list active operational scopes in this workspace",
+    takes: ["url"],
+    run: ({ flags }) => scope(typeof flags.url === "string" ? flags.url : undefined),
   },
   {
     path: ["stats"],
@@ -335,10 +376,10 @@ export const COMMANDS: Command[] = [
   // ── Sweep & Epistemic Consolidation ───────────────────────────────────
   {
     path: ["sweep"],
-    what: "run an epistemic consolidation sweep over the active project",
+    what: "run an epistemic consolidation sweep over the active workspace",
     takes: [
       "url",
-      "project",
+      "workspace",
       "owner",
       "min-similarity",
       "min-cluster-size",
@@ -352,10 +393,10 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["sweep", "consolidate"],
-    what: "run an epistemic consolidation sweep over the active project",
+    what: "run an epistemic consolidation sweep over the active workspace",
     takes: [
       "url",
-      "project",
+      "workspace",
       "owner",
       "min-similarity",
       "min-cluster-size",
@@ -364,173 +405,62 @@ export const COMMANDS: Command[] = [
       "no-wait",
       "json",
     ],
-    landing: true,
     run: ({ instance, flags, context }) => sweepConsolidate(instance, flags, context),
   },
 
-  // ── Memories Resource ──────────────────────────────────────────────────
+  // ── Promotion Resource ─────────────────────────────────────────────────
   {
-    path: ["memories"],
-    what: "list memories in the active workspace",
-    takes: ["url", "workspace", "type", "status", "scope", "query", "limit", "page"],
+    path: ["promotion"],
+    what: "list pending scope promotion requests for review",
+    takes: ["url", "status", "workspace"],
     landing: true,
-    run: ({ instance, flags }) => listMemories(instance, flags),
+    run: ({ instance, flags }) => listPromotions(instance, flags),
   },
   {
-    path: ["memories", "list"],
-    what: "list memories in the active workspace",
-    takes: ["url", "workspace", "type", "status", "scope", "query", "limit", "page"],
-    run: ({ instance, flags }) => listMemories(instance, flags),
+    path: ["promotion", "list"],
+    what: "list scope promotion requests for review",
+    takes: ["url", "status", "workspace"],
+    run: ({ instance, flags }) => listPromotions(instance, flags),
   },
   {
-    path: ["memories", "ls"],
-    what: "list memories in the active workspace",
-    takes: ["url", "workspace", "type", "status", "scope", "query", "limit", "page"],
-    run: ({ instance, flags }) => listMemories(instance, flags),
+    path: ["promotion", "ls"],
+    what: "list scope promotion requests for review",
+    takes: ["url", "status", "workspace"],
+    run: ({ instance, flags }) => listPromotions(instance, flags),
   },
   {
-    path: ["memories", "get"],
-    what: "inspect details of a memory by ID",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace"],
-    run: ({ instance, args, flags }) => getMemory(instance, args.id!, flags),
-  },
-  {
-    path: ["memories", "create"],
-    what: "create a memory directly in the workspace",
-    args: [{ name: "text", required: true, what: "the memory text" }],
-    takes: [
-      "url",
-      "workspace",
-      "name",
-      "type",
-      "scope",
-      "status",
-      "meta",
-      "roles",
-      "subject",
-      "target",
-      "context",
-      "observation",
-      "enforce",
-    ],
-    run: ({ instance, args, flags }) => createMemory(instance, args.text!, flags),
-  },
-  {
-    path: ["memories", "new"],
-    what: "create a memory directly in the workspace",
-    args: [{ name: "text", required: true, what: "the memory text" }],
-    takes: [
-      "url",
-      "workspace",
-      "name",
-      "type",
-      "scope",
-      "status",
-      "meta",
-      "roles",
-      "subject",
-      "target",
-      "context",
-      "observation",
-      "enforce",
-    ],
-    run: ({ instance, args, flags }) => createMemory(instance, args.text!, flags),
-  },
-  {
-    path: ["memories", "update"],
-    what: "update a memory's content, status, or type",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: [
-      "url",
-      "workspace",
-      "text",
-      "name",
-      "type",
-      "status",
-      "meta",
-      "context",
-      "observation",
-      "enforce",
-    ],
-    run: ({ instance, args, flags }) => updateMemory(instance, args.id!, flags),
-  },
-  {
-    path: ["memories", "delete"],
-    what: "delete a memory or latest version",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace", "all"],
-    run: ({ instance, args, flags }) => deleteMemory(instance, args.id!, flags),
-  },
-  {
-    path: ["memories", "star"],
-    what: "star or unstar a memory",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace"],
-    run: ({ instance, args, flags }) => starMemory(instance, args.id!, flags),
-  },
-  {
-    path: ["memories", "history"],
-    what: "view revision and outcome history of a memory",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace"],
-    run: ({ instance, args, flags }) => historyMemory(instance, args.id!, flags),
-  },
-  {
-    path: ["memories", "adopt"],
-    what: "adopt an existing memory into another workspace",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace", "into", "to"],
-    run: ({ instance, args, flags }) => adoptMemory(instance, args.id!, flags),
-  },
-  {
-    path: ["memories", "promote"],
-    what: "elevate a memory to workspace, team, or organization scope",
-    args: [{ name: "memory", required: true, what: "memory ID" }],
-    takes: ["to", "reason", "url"],
-    run: ({ args, flags }) =>
-      promote(
-        args.memory!,
-        typeof flags.to === "string" ? flags.to : "workspace",
+    path: ["promotion", "approve"],
+    what: "approve a pending scope promotion request",
+    args: [{ name: "request", required: true, what: "the promotion request's id" }],
+    takes: ["url", "reason", "workspace"],
+    run: ({ instance, args, flags }) =>
+      approvePromotion(
+        instance,
+        args.request!,
         typeof flags.reason === "string" ? flags.reason : undefined,
-        typeof flags.url === "string" ? flags.url : undefined,
+        flags,
       ),
   },
   {
-    path: ["memories", "relate"],
-    what: "declare a directed epistemic relation edge between memories",
-    args: [
-      { name: "source", required: true, what: "source memory ID" },
-      { name: "target", required: true, what: "target memory ID" },
-    ],
-    takes: ["url", "workspace", "type", "confidence"],
-    run: ({ instance, args, flags }) => relateMemories(instance, args.source!, args.target!, flags),
+    path: ["promotion", "reject"],
+    what: "reject a pending scope promotion request",
+    args: [{ name: "request", required: true, what: "the promotion request's id" }],
+    takes: ["url", "reason", "workspace"],
+    run: ({ instance, args, flags }) =>
+      rejectPromotion(
+        instance,
+        args.request!,
+        typeof flags.reason === "string" ? flags.reason : undefined,
+        flags,
+      ),
   },
-  {
-    path: ["memories", "unrelate"],
-    what: "remove an epistemic relation edge between memories",
-    args: [
-      {
-        name: "arg1",
-        required: true,
-        what: "relation ID (or source memory ID if relation ID is second)",
-      },
-      { name: "arg2", required: false, what: "relation ID (if source memory ID is first)" },
-    ],
-    takes: ["url", "workspace"],
-    run: ({ instance, args, flags }) => unrelateMemories(instance, args.arg1!, args.arg2, flags),
-  },
-  {
-    path: ["memories", "relations"],
-    what: "list incoming and outgoing epistemic relations for a memory",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace"],
-    run: ({ instance, args, flags }) => memoryRelations(instance, args.id!, flags),
-  },
+
+  // ── Memory Resource ────────────────────────────────────────────────────
   {
     path: ["memory"],
     what: "list memories in the active workspace",
     takes: ["url", "workspace", "type", "status", "scope", "query", "limit", "page"],
+    landing: true,
     run: ({ instance, flags }) => listMemories(instance, flags),
   },
   {
@@ -567,6 +497,9 @@ export const COMMANDS: Command[] = [
       "roles",
       "subject",
       "target",
+      "context",
+      "observation",
+      "enforce",
     ],
     run: ({ instance, args, flags }) => createMemory(instance, args.text!, flags),
   },
@@ -585,6 +518,9 @@ export const COMMANDS: Command[] = [
       "roles",
       "subject",
       "target",
+      "context",
+      "observation",
+      "enforce",
     ],
     run: ({ instance, args, flags }) => createMemory(instance, args.text!, flags),
   },
@@ -592,7 +528,18 @@ export const COMMANDS: Command[] = [
     path: ["memory", "update"],
     what: "update a memory's content, status, or type",
     args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace", "text", "name", "type", "status", "meta"],
+    takes: [
+      "url",
+      "workspace",
+      "text",
+      "name",
+      "type",
+      "status",
+      "meta",
+      "context",
+      "observation",
+      "enforce",
+    ],
     run: ({ instance, args, flags }) => updateMemory(instance, args.id!, flags),
   },
   {
@@ -661,17 +608,46 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args, flags }) => unrelateMemories(instance, args.arg1!, args.arg2, flags),
   },
   {
-    path: ["memory", "relations"],
-    what: "list incoming and outgoing epistemic relations for a memory",
-    args: [{ name: "id", required: true, what: "memory ID" }],
-    takes: ["url", "workspace"],
-    run: ({ instance, args, flags }) => memoryRelations(instance, args.id!, flags),
+    path: ["memory", "relation"],
+    what: "list incoming and outgoing epistemic relations for a memory (or all in workspace)",
+    args: [
+      {
+        name: "id",
+        required: false,
+        what: "optional memory ID (omit for workspace-wide relations)",
+      },
+    ],
+    takes: ["url", "workspace", "type", "page", "limit", "json"],
+    run: ({ instance, args, flags }) => memoryRelations(instance, args.id, flags),
+  },
+  {
+    path: ["memory", "relation", "list"],
+    what: "list incoming and outgoing epistemic relations for a memory (or all in workspace)",
+    args: [
+      {
+        name: "id",
+        required: false,
+        what: "optional memory ID (omit for workspace-wide relations)",
+      },
+    ],
+    takes: ["url", "workspace", "type", "page", "limit", "json"],
+    run: ({ instance, args, flags }) => memoryRelations(instance, args.id, flags),
+  },
+  {
+    path: ["memory", "seed"],
+    what: "put a source into the commons, or propose one",
+    args: [{ name: "source", required: true, what: "a repository or documentation URL" }],
+    takes: ["url", "reason", "no-watch"],
+    run: ({ instance, args, flags }) =>
+      seed(instance, args.source, {
+        reason: typeof flags.reason === "string" ? flags.reason : undefined,
+        watch: flags["no-watch"] !== true,
+      }),
   },
   {
     path: ["list"],
     what: "list memories in the active workspace",
     takes: ["url", "workspace", "type", "status", "scope", "query", "limit", "page"],
-    landing: true,
     run: ({ instance, flags }) => listMemories(instance, flags),
   },
   {
@@ -681,86 +657,12 @@ export const COMMANDS: Command[] = [
     run: ({ instance, flags }) => listMemories(instance, flags),
   },
 
-  // ── Workspaces Resource ────────────────────────────────────────────────
-  {
-    path: ["workspaces"],
-    what: "list workspaces",
-    takes: ["url", "owner"],
-    landing: true,
-    run: ({ instance, flags }) => listWorkspaces(instance, flags),
-  },
-  {
-    path: ["workspaces", "ls"],
-    what: "list workspaces",
-    takes: ["url", "owner"],
-    run: ({ instance, flags }) => listWorkspaces(instance, flags),
-  },
-  {
-    path: ["workspaces", "list"],
-    what: "list workspaces",
-    takes: ["url", "owner"],
-    run: ({ instance, flags }) => listWorkspaces(instance, flags),
-  },
-  {
-    path: ["workspaces", "get"],
-    what: "view workspace details",
-    args: [{ name: "slug", required: true, what: "workspace slug or [owner]/[workspace]" }],
-    takes: ["url"],
-    run: ({ instance, args, flags }) => getWorkspace(instance, args.slug!, flags),
-  },
-  {
-    path: ["workspaces", "new"],
-    what: "create a new workspace",
-    args: [{ name: "name", required: true, what: "what it holds the truth about" }],
-    takes: ["url", "owner", "description"],
-    run: ({ instance, args, flags }) => newWorkspace(instance, args.name!, flags),
-  },
-  {
-    path: ["workspaces", "create"],
-    what: "create a new workspace",
-    args: [{ name: "name", required: true, what: "what it holds the truth about" }],
-    takes: ["url", "owner", "description"],
-    run: ({ instance, args, flags }) => newWorkspace(instance, args.name!, flags),
-  },
-  {
-    path: ["workspaces", "update"],
-    what: "update workspace settings and description",
-    args: [{ name: "slug", required: true, what: "workspace slug or [owner]/[workspace]" }],
-    takes: ["url", "name", "description"],
-    run: ({ instance, args, flags }) => updateWorkspace(instance, args.slug!, flags),
-  },
-  {
-    path: ["workspaces", "delete"],
-    what: "delete a workspace",
-    args: [{ name: "slug", required: true, what: "workspace slug or [owner]/[workspace]" }],
-    takes: ["url"],
-    run: ({ instance, args }) => deleteWorkspace(instance, args.slug!),
-  },
-  {
-    path: ["workspaces", "transfer"],
-    what: "transfer workspace ownership to another user or organization",
-    args: [{ name: "slug", required: true, what: "workspace slug or [owner]/[workspace]" }],
-    takes: ["url", "to", "owner"],
-    run: ({ instance, args, flags }) => transferWorkspace(instance, args.slug!, flags),
-  },
-  {
-    path: ["workspaces", "use"],
-    what: "work on this workspace from now on, everywhere",
-    args: [{ name: "slug", required: true, what: "from the list" }],
-    takes: ["url"],
-    run: ({ instance, args }) => useWorkspace(instance, args.slug!),
-  },
-  {
-    path: ["workspaces", "switch"],
-    what: "work on this workspace from now on, everywhere",
-    args: [{ name: "slug", required: true, what: "from the list" }],
-    takes: ["url"],
-    run: ({ instance, args }) => useWorkspace(instance, args.slug!),
-  },
+  // ── Workspace Resource ─────────────────────────────────────────────────
   {
     path: ["workspace"],
     what: "list workspaces",
     takes: ["url", "owner"],
+    landing: true,
     run: ({ instance, flags }) => listWorkspaces(instance, flags),
   },
   {
@@ -831,121 +733,128 @@ export const COMMANDS: Command[] = [
     takes: ["url"],
     run: ({ instance, args }) => useWorkspace(instance, args.slug!),
   },
+  {
+    path: ["workspace", "activity"],
+    what: "view audit and outcome activity for a workspace",
+    args: [{ name: "slug", required: false, what: "workspace slug or [owner]/[workspace]" }],
+    takes: ["url", "workspace", "outcome", "subject", "memory-id", "page", "limit", "json"],
+    run: ({ instance, args, flags }) => getWorkspaceActivity(instance, args.slug, flags),
+  },
 
-  // ── Collaborators Resource ─────────────────────────────────────────────
+  // ── Collaborator Resource ──────────────────────────────────────────────
   {
-    path: ["collaborators"],
+    path: ["collaborator"],
     what: "list workspace collaborators and pending invitations",
     args: [{ name: "workspace", required: false, what: "optional workspace namespace" }],
     takes: ["url", "workspace", "role"],
     run: ({ instance, args, flags }) => listCollaborators(instance, args.workspace, flags),
   },
   {
-    path: ["collaborators", "list"],
+    path: ["collaborator", "list"],
     what: "list workspace collaborators and pending invitations",
     args: [{ name: "workspace", required: false, what: "optional workspace namespace" }],
     takes: ["url", "workspace", "role"],
     run: ({ instance, args, flags }) => listCollaborators(instance, args.workspace, flags),
   },
   {
-    path: ["collaborators", "ls"],
+    path: ["collaborator", "ls"],
     what: "list workspace collaborators and pending invitations",
     args: [{ name: "workspace", required: false, what: "optional workspace namespace" }],
     takes: ["url", "workspace", "role"],
     run: ({ instance, args, flags }) => listCollaborators(instance, args.workspace, flags),
   },
   {
-    path: ["collaborators", "invite"],
+    path: ["collaborator", "invite"],
     what: "invite a collaborator to the workspace",
     args: [{ name: "email", required: true, what: "collaborator email" }],
     takes: ["url", "workspace", "role"],
     run: ({ instance, args, flags }) => inviteCollaborator(instance, args.email!, flags),
   },
   {
-    path: ["collaborators", "update-role"],
+    path: ["collaborator", "update-role"],
     what: "update a collaborator's access role",
     args: [{ name: "user", required: true, what: "collaborator user ID" }],
     takes: ["url", "workspace", "role"],
     run: ({ instance, args, flags }) => updateCollaboratorRole(instance, args.user!, flags),
   },
   {
-    path: ["collaborators", "remove"],
+    path: ["collaborator", "remove"],
     what: "remove a collaborator from the workspace",
     args: [{ name: "user", required: true, what: "collaborator user ID" }],
     takes: ["url", "workspace"],
     run: ({ instance, args, flags }) => removeCollaborator(instance, args.user!, flags),
   },
   {
-    path: ["collaborators", "revoke-invite"],
+    path: ["collaborator", "revoke-invite"],
     what: "revoke a pending workspace invitation",
     args: [{ name: "invitation", required: true, what: "invitation ID" }],
     takes: ["url", "workspace"],
     run: ({ instance, args, flags }) => revokeCollaboratorInvite(instance, args.invitation!, flags),
   },
 
-  // ── Agents Resource ────────────────────────────────────────────────────
+  // ── Agent Resource ─────────────────────────────────────────────────────
   {
-    path: ["agents"],
+    path: ["agent"],
     what: "list agents and access keys",
     takes: ["url", "workspace"],
     run: ({ instance, flags }) => listAgents(instance, flags),
   },
   {
-    path: ["agents", "ls"],
+    path: ["agent", "ls"],
     what: "list agents and access keys",
     takes: ["url", "workspace"],
     run: ({ instance, flags }) => listAgents(instance, flags),
   },
   {
-    path: ["agents", "list"],
+    path: ["agent", "list"],
     what: "list agents and access keys",
     takes: ["url", "workspace"],
     run: ({ instance, flags }) => listAgents(instance, flags),
   },
   {
-    path: ["agents", "get"],
+    path: ["agent", "get"],
     what: "inspect details of a registered agent",
     args: [{ name: "id", required: true, what: "agent ID" }],
     takes: ["url", "workspace"],
     run: ({ instance, args, flags }) => getAgent(instance, args.id!, flags),
   },
   {
-    path: ["agents", "new"],
+    path: ["agent", "new"],
     what: "register a new agent in the workspace",
     args: [{ name: "name", required: true, what: "agent name" }],
     takes: ["url", "workspace", "description", "type"],
     run: ({ instance, args, flags }) => createAgent(instance, args.name!, flags),
   },
   {
-    path: ["agents", "create"],
+    path: ["agent", "create"],
     what: "register a new agent in the workspace",
     args: [{ name: "name", required: true, what: "agent name" }],
     takes: ["url", "workspace", "description", "type"],
     run: ({ instance, args, flags }) => createAgent(instance, args.name!, flags),
   },
   {
-    path: ["agents", "update"],
+    path: ["agent", "update"],
     what: "update a registered agent's settings",
     args: [{ name: "id", required: true, what: "agent ID" }],
     takes: ["url", "workspace", "name", "description", "status"],
     run: ({ instance, args, flags }) => updateAgent(instance, args.id!, flags),
   },
   {
-    path: ["agents", "delete"],
+    path: ["agent", "delete"],
     what: "delete a registered agent",
     args: [{ name: "id", required: true, what: "agent ID" }],
     takes: ["url", "workspace"],
     run: ({ instance, args, flags }) => deleteAgent(instance, args.id!, flags),
   },
   {
-    path: ["agents", "key", "create"],
+    path: ["agent", "key", "create"],
     what: "mint a new API key for an agent",
     args: [{ name: "id", required: true, what: "agent ID" }],
     takes: ["url", "workspace"],
     run: ({ instance, args, flags }) => createAgentKey(instance, args.id!, flags),
   },
   {
-    path: ["agents", "key", "revoke"],
+    path: ["agent", "key", "revoke"],
     what: "revoke an agent API key",
     args: [
       { name: "first", required: true, what: "key ID or agent ID" },
@@ -955,47 +864,47 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args, flags }) => revokeAgentKey(instance, args.first!, args.second, flags),
   },
   {
-    path: ["agents", "whoami"],
+    path: ["agent", "whoami"],
     what: "inspect current active agent key standing and quotas",
     takes: ["url"],
     run: ({ instance }) => whoamiAgent(instance),
   },
   {
-    path: ["agents", "revoke"],
+    path: ["agent", "revoke"],
     what: "take one agent's key back",
     args: [{ name: "id", required: true, what: "from the list" }],
     takes: ["url"],
     run: ({ instance, args }) => revokeAgent(instance, args.id!),
   },
 
-  // ── Organizations Resource ─────────────────────────────────────────────
+  // ── Organization Resource ──────────────────────────────────────────────
   {
-    path: ["orgs"],
+    path: ["org"],
     what: "list organizations you belong to",
     takes: ["url"],
     run: ({ instance }) => listOrganizations(instance),
   },
   {
-    path: ["orgs", "list"],
+    path: ["org", "list"],
     what: "list organizations you belong to",
     takes: ["url"],
     run: ({ instance }) => listOrganizations(instance),
   },
   {
-    path: ["orgs", "ls"],
+    path: ["org", "ls"],
     what: "list organizations you belong to",
     takes: ["url"],
     run: ({ instance }) => listOrganizations(instance),
   },
   {
-    path: ["orgs", "get"],
+    path: ["org", "get"],
     what: "view organization profile and details",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url"],
     run: ({ instance, args }) => getOrganization(instance, args.slug!),
   },
   {
-    path: ["orgs", "create"],
+    path: ["org", "create"],
     what: "create a new organization and set active context",
     args: [{ name: "slug", required: true, what: "unique url handle" }],
     takes: ["name", "url"],
@@ -1005,7 +914,7 @@ export const COMMANDS: Command[] = [
       }),
   },
   {
-    path: ["orgs", "new"],
+    path: ["org", "new"],
     what: "create a new organization and set active context",
     args: [{ name: "slug", required: true, what: "unique url handle" }],
     takes: ["name", "url"],
@@ -1015,7 +924,7 @@ export const COMMANDS: Command[] = [
       }),
   },
   {
-    path: ["orgs", "update"],
+    path: ["org", "update"],
     what: "update organization profile name",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["name", "url"],
@@ -1025,35 +934,42 @@ export const COMMANDS: Command[] = [
       }),
   },
   {
-    path: ["orgs", "delete"],
+    path: ["org", "delete"],
     what: "delete an organization",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url"],
     run: ({ instance, args }) => deleteOrganization(instance, args.slug!),
   },
   {
-    path: ["orgs", "switch"],
+    path: ["org", "switch"],
     what: "switch active CLI organization context (or 'personal')",
     args: [{ name: "slug", required: true, what: "from the list, or 'personal'" }],
     takes: ["url"],
     run: ({ instance, args }) => switchOrganization(instance, args.slug!),
   },
   {
-    path: ["orgs", "use"],
+    path: ["org", "use"],
     what: "switch active CLI organization context (or 'personal')",
     args: [{ name: "slug", required: true, what: "from the list, or 'personal'" }],
     takes: ["url"],
     run: ({ instance, args }) => switchOrganization(instance, args.slug!),
   },
   {
-    path: ["orgs", "members"],
+    path: ["org", "member"],
     what: "list organization members",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url", "role"],
     run: ({ instance, args, flags }) => listOrgMembers(instance, args.slug!, flags),
   },
   {
-    path: ["orgs", "member", "update"],
+    path: ["org", "member", "list"],
+    what: "list organization members",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url", "role"],
+    run: ({ instance, args, flags }) => listOrgMembers(instance, args.slug!, flags),
+  },
+  {
+    path: ["org", "member", "update"],
     what: "update an organization member's role",
     args: [
       { name: "slug", required: true, what: "organization handle" },
@@ -1063,7 +979,7 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args, flags }) => updateOrgMember(instance, args.slug!, args.user!, flags),
   },
   {
-    path: ["orgs", "member", "remove"],
+    path: ["org", "member", "remove"],
     what: "remove a member from the organization",
     args: [
       { name: "slug", required: true, what: "organization handle" },
@@ -1073,14 +989,7 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args }) => removeOrgMember(instance, args.slug!, args.user!),
   },
   {
-    path: ["orgs", "invites"],
-    what: "list pending organization invitations",
-    args: [{ name: "slug", required: true, what: "organization handle" }],
-    takes: ["url"],
-    run: ({ instance, args }) => listOrgInvitations(instance, args.slug!),
-  },
-  {
-    path: ["orgs", "invite"],
+    path: ["org", "invite"],
     what: "invite a new member to the organization",
     args: [
       { name: "slug", required: true, what: "organization handle" },
@@ -1090,7 +999,14 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args, flags }) => inviteOrgMember(instance, args.slug!, args.email!, flags),
   },
   {
-    path: ["orgs", "invite", "revoke"],
+    path: ["org", "invite", "list"],
+    what: "list pending organization invitations",
+    args: [{ name: "slug", required: true, what: "organization handle" }],
+    takes: ["url"],
+    run: ({ instance, args }) => listOrgInvitations(instance, args.slug!),
+  },
+  {
+    path: ["org", "invite", "revoke"],
     what: "revoke a pending organization invitation",
     args: [
       { name: "slug", required: true, what: "organization handle" },
@@ -1100,21 +1016,21 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args }) => revokeOrgInvitation(instance, args.slug!, args.invitation!),
   },
   {
-    path: ["orgs", "sso"],
+    path: ["org", "sso"],
     what: "list configured SSO identity providers for an organization",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url"],
     run: ({ instance, args }) => listOrgSSO(instance, args.slug!),
   },
   {
-    path: ["orgs", "sso", "list"],
+    path: ["org", "sso", "list"],
     what: "list configured SSO identity providers for an organization",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url"],
     run: ({ instance, args }) => listOrgSSO(instance, args.slug!),
   },
   {
-    path: ["orgs", "sso", "configure"],
+    path: ["org", "sso", "configure"],
     what: "configure or update a SAML or OIDC provider for an organization",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: [
@@ -1136,21 +1052,21 @@ export const COMMANDS: Command[] = [
     run: ({ instance, args, flags }) => configureOrgSSO(instance, args.slug!, flags),
   },
   {
-    path: ["orgs", "sso", "verify"],
+    path: ["org", "sso", "verify"],
     what: "verify DNS TXT record for an organization SSO domain",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url", "provider-id", "provider"],
     run: ({ instance, args, flags }) => verifyOrgSSO(instance, args.slug!, flags),
   },
   {
-    path: ["orgs", "sso", "enforce"],
+    path: ["org", "sso", "enforce"],
     what: "enable or disable strict SSO enforcement for an organization",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url", "enable", "disable", "off"],
     run: ({ instance, args, flags }) => enforceOrgSSO(instance, args.slug!, flags),
   },
   {
-    path: ["orgs", "sso", "delete"],
+    path: ["org", "sso", "delete"],
     what: "delete an organization SSO provider configuration",
     args: [{ name: "slug", required: true, what: "organization handle" }],
     takes: ["url", "provider-id", "provider"],
@@ -1193,43 +1109,64 @@ export const COMMANDS: Command[] = [
     run: ({ instance, flags }) => updateProfile(instance, flags),
   },
   {
-    path: ["account", "tokens"],
+    path: ["account", "token"],
     what: "list personal access tokens",
     takes: ["url"],
     run: ({ instance }) => listTokens(instance),
   },
   {
-    path: ["account", "tokens", "list"],
+    path: ["account", "token", "list"],
     what: "list personal access tokens",
     takes: ["url"],
     run: ({ instance }) => listTokens(instance),
   },
   {
-    path: ["account", "tokens", "ls"],
+    path: ["account", "token", "ls"],
     what: "list personal access tokens",
     takes: ["url"],
     run: ({ instance }) => listTokens(instance),
   },
   {
-    path: ["account", "tokens", "create"],
+    path: ["account", "token", "create"],
     what: "create a new personal access token",
     args: [{ name: "name", required: true, what: "token name/label" }],
     takes: ["url", "expires"],
     run: ({ instance, args, flags }) => createToken(instance, args.name!, flags),
   },
   {
-    path: ["account", "tokens", "new"],
+    path: ["account", "token", "new"],
     what: "create a new personal access token",
     args: [{ name: "name", required: true, what: "token name/label" }],
     takes: ["url", "expires"],
     run: ({ instance, args, flags }) => createToken(instance, args.name!, flags),
   },
   {
-    path: ["account", "tokens", "revoke"],
+    path: ["account", "token", "revoke"],
     what: "revoke a personal access token",
     args: [{ name: "id", required: true, what: "token ID" }],
     takes: ["url"],
     run: ({ instance, args }) => revokeToken(instance, args.id!),
+  },
+  {
+    path: ["account", "invitation", "get"],
+    what: "inspect details of a pending invitation",
+    args: [{ name: "id", required: true, what: "invitation ID" }],
+    takes: ["url"],
+    run: ({ instance, args }) => getInvitation(instance, args.id!),
+  },
+  {
+    path: ["account", "invitation", "accept"],
+    what: "accept a pending workspace or organization invitation",
+    args: [{ name: "id", required: true, what: "invitation ID" }],
+    takes: ["url"],
+    run: ({ instance, args }) => acceptInvitation(instance, args.id!),
+  },
+  {
+    path: ["account", "invitation", "decline"],
+    what: "decline a pending invitation",
+    args: [{ name: "id", required: true, what: "invitation ID" }],
+    takes: ["url"],
+    run: ({ instance, args }) => declineInvitation(instance, args.id!),
   },
 
   // ── Integration & Tooling ──────────────────────────────────────────────
@@ -1243,7 +1180,10 @@ export const COMMANDS: Command[] = [
       importFiles({
         files: many.files ?? [],
         url: typeof flags.url === "string" ? flags.url : undefined,
-        project: typeof flags.project === "string" ? flags.project : context?.project?.namespace,
+        workspace:
+          typeof flags.workspace === "string"
+            ? flags.workspace
+            : context?.workspace?.namespace || context?.project?.namespace,
         owner: typeof flags.owner === "string" ? flags.owner : (context?.owner ?? undefined),
         dryRun: Boolean(flags["dry-run"]),
         scope: typeof flags.scope === "string" ? flags.scope : undefined,
@@ -1253,7 +1193,7 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["export"],
-    what: "carry this space out — one document, no account needed",
+    what: "carry this workspace out — one document, no account needed",
     takes: ["format", "out", "url", "workspace"],
     landing: true,
     run: ({ flags, context }) =>
@@ -1295,6 +1235,16 @@ export const COMMANDS: Command[] = [
       ),
   },
   {
+    path: ["config"],
+    what: "read and write workspace or global configuration settings",
+    takes: ["global"],
+    run: async () => {
+      const { detail } = await import("../help.js");
+      emit(detail("config") + "\n");
+      return 0;
+    },
+  },
+  {
     path: ["config", "get"],
     what: "what a setting is here, and which file said so",
     args: [{ name: "key", required: true, what: "a dotted path, e.g. recall.limit" }],
@@ -1303,7 +1253,7 @@ export const COMMANDS: Command[] = [
   },
   {
     path: ["config", "set"],
-    what: "set it for this project, or for this machine",
+    what: "set it for this workspace, or for this machine",
     args: [
       { name: "key", required: true, what: "a dotted path, e.g. recall.limit" },
       { name: "value", required: true, what: "the value to store" },
@@ -1311,40 +1261,29 @@ export const COMMANDS: Command[] = [
     takes: ["global"],
     run: ({ args, flags }) => configSet(args.key!, args.value!, flags.global === true),
   },
-  {
-    path: ["memories", "seed"],
-    what: "put a source into the commons, or propose one",
-    args: [{ name: "source", required: true, what: "a repository or documentation URL" }],
-    takes: ["url", "reason", "no-watch"],
-    run: ({ instance, args, flags }) =>
-      seed(instance, args.source, {
-        reason: typeof flags.reason === "string" ? flags.reason : undefined,
-        watch: flags["no-watch"] !== true,
-      }),
-  },
 
   // ── Fleet Resource ─────────────────────────────────────────────────────
   {
     path: ["fleet"],
     what: "list autonomous agent fleet across the organization",
-    takes: ["url", "org", "scope", "status", "health", "team", "project", "json"],
+    takes: ["url", "org", "scope", "status", "health", "team", "workspace", "json"],
     run: ({ instance, flags }) => listFleet(instance, flags),
   },
   {
     path: ["fleet", "list"],
     what: "list autonomous agent fleet across the organization",
-    takes: ["url", "org", "scope", "status", "health", "team", "project", "json"],
+    takes: ["url", "org", "scope", "status", "health", "team", "workspace", "json"],
     run: ({ instance, flags }) => listFleet(instance, flags),
   },
   {
     path: ["fleet", "ls"],
     what: "list autonomous agent fleet across the organization",
-    takes: ["url", "org", "scope", "status", "health", "team", "project", "json"],
+    takes: ["url", "org", "scope", "status", "health", "team", "workspace", "json"],
     run: ({ instance, flags }) => listFleet(instance, flags),
   },
   {
     path: ["fleet", "get"],
-    what: "inspect agent configuration, credentials, and cross-project grants",
+    what: "inspect agent configuration, credentials, and cross-workspace grants",
     args: [{ name: "agentId", required: true, what: "agent id" }],
     takes: ["url", "org", "json"],
     run: ({ instance, args, flags }) => getFleetAgent(instance, args.agentId!, flags),
@@ -1362,7 +1301,7 @@ export const COMMANDS: Command[] = [
       "model",
       "description",
       "team",
-      "project",
+      "workspace",
       "no-key",
       "json",
     ],
@@ -1479,4 +1418,237 @@ export const COMMANDS: Command[] = [
     takes: ["url", "org", "timeframe", "team", "workspace", "json"],
     run: ({ instance, flags }) => getEnterpriseInsights(instance, flags),
   },
+
+  // ── Team Resource ──────────────────────────────────────────────────────
+  {
+    path: ["team"],
+    what: "list organization teams",
+    takes: ["url", "org", "json"],
+    landing: true,
+    run: ({ instance, flags }) => listTeams(instance, flags),
+  },
+  {
+    path: ["team", "list"],
+    what: "list organization teams",
+    takes: ["url", "org", "json"],
+    run: ({ instance, flags }) => listTeams(instance, flags),
+  },
+  {
+    path: ["team", "ls"],
+    what: "list organization teams",
+    takes: ["url", "org", "json"],
+    run: ({ instance, flags }) => listTeams(instance, flags),
+  },
+  {
+    path: ["team", "get"],
+    what: "view team details, workspaces, and agents",
+    args: [{ name: "id", required: true, what: "team ID" }],
+    takes: ["url", "org", "json"],
+    run: ({ instance, args, flags }) => getTeam(instance, args.id!, flags),
+  },
+  {
+    path: ["team", "new"],
+    what: "create a new team in the organization",
+    args: [{ name: "name", required: true, what: "team name" }],
+    takes: ["url", "org", "json"],
+    run: ({ instance, args, flags }) => createTeam(instance, args.name!, flags),
+  },
+  {
+    path: ["team", "create"],
+    what: "create a new team in the organization",
+    args: [{ name: "name", required: true, what: "team name" }],
+    takes: ["url", "org", "json"],
+    run: ({ instance, args, flags }) => createTeam(instance, args.name!, flags),
+  },
+  {
+    path: ["team", "update"],
+    what: "update team name",
+    args: [{ name: "id", required: true, what: "team ID" }],
+    takes: ["url", "org", "name", "json"],
+    run: ({ instance, args, flags }) => updateTeam(instance, args.id!, flags),
+  },
+  {
+    path: ["team", "delete"],
+    what: "delete a team from the organization",
+    args: [{ name: "id", required: true, what: "team ID" }],
+    takes: ["url", "org"],
+    run: ({ instance, args, flags }) => deleteTeam(instance, args.id!, flags),
+  },
+  {
+    path: ["team", "member"],
+    what: "list members of a team",
+    args: [{ name: "id", required: true, what: "team ID" }],
+    takes: ["url", "org", "json"],
+    run: ({ instance, args, flags }) => listTeamMembers(instance, args.id!, flags),
+  },
+  {
+    path: ["team", "member", "list"],
+    what: "list members of a team",
+    args: [{ name: "id", required: true, what: "team ID" }],
+    takes: ["url", "org", "json"],
+    run: ({ instance, args, flags }) => listTeamMembers(instance, args.id!, flags),
+  },
+  {
+    path: ["team", "member", "add"],
+    what: "add a user to a team",
+    args: [
+      { name: "id", required: true, what: "team ID" },
+      { name: "user", required: true, what: "user ID" },
+    ],
+    takes: ["url", "org", "role"],
+    run: ({ instance, args, flags }) => addTeamMember(instance, args.id!, args.user!, flags),
+  },
+  {
+    path: ["team", "member", "remove"],
+    what: "remove a user from a team",
+    args: [
+      { name: "id", required: true, what: "team ID" },
+      { name: "user", required: true, what: "user ID" },
+    ],
+    takes: ["url", "org"],
+    run: ({ instance, args, flags }) => removeTeamMember(instance, args.id!, args.user!, flags),
+  },
+
+  // ── Webhook Resource ───────────────────────────────────────────────────
+  {
+    path: ["webhook"],
+    what: "list workspace webhooks",
+    takes: ["url", "workspace", "json"],
+    landing: true,
+    run: ({ instance, flags }) => listWebhooks(instance, flags),
+  },
+  {
+    path: ["webhook", "list"],
+    what: "list workspace webhooks",
+    takes: ["url", "workspace", "json"],
+    run: ({ instance, flags }) => listWebhooks(instance, flags),
+  },
+  {
+    path: ["webhook", "ls"],
+    what: "list workspace webhooks",
+    takes: ["url", "workspace", "json"],
+    run: ({ instance, flags }) => listWebhooks(instance, flags),
+  },
+  {
+    path: ["webhook", "get"],
+    what: "inspect details of a webhook",
+    args: [{ name: "id", required: true, what: "webhook ID" }],
+    takes: ["url", "workspace", "json"],
+    run: ({ instance, args, flags }) => getWebhook(instance, args.id!, flags),
+  },
+  {
+    path: ["webhook", "new"],
+    what: "register a new webhook for workspace event delivery",
+    args: [
+      { name: "name", required: true, what: "webhook label" },
+      { name: "endpoint", required: true, what: "destination HTTP/S URL" },
+    ],
+    takes: ["url", "workspace", "secret", "events", "disabled", "json"],
+    run: ({ instance, args, flags }) => createWebhook(instance, args.name!, args.endpoint!, flags),
+  },
+  {
+    path: ["webhook", "create"],
+    what: "register a new webhook for workspace event delivery",
+    args: [
+      { name: "name", required: true, what: "webhook label" },
+      { name: "endpoint", required: true, what: "destination HTTP/S URL" },
+    ],
+    takes: ["url", "workspace", "secret", "events", "disabled", "json"],
+    run: ({ instance, args, flags }) => createWebhook(instance, args.name!, args.endpoint!, flags),
+  },
+  {
+    path: ["webhook", "update"],
+    what: "update webhook settings, URL, or events",
+    args: [{ name: "id", required: true, what: "webhook ID" }],
+    takes: [
+      "url",
+      "workspace",
+      "name",
+      "endpoint",
+      "secret",
+      "events",
+      "enable",
+      "disable",
+      "json",
+    ],
+    run: ({ instance, args, flags }) => updateWebhook(instance, args.id!, flags),
+  },
+  {
+    path: ["webhook", "delete"],
+    what: "delete a webhook from the workspace",
+    args: [{ name: "id", required: true, what: "webhook ID" }],
+    takes: ["url", "workspace"],
+    run: ({ instance, args, flags }) => deleteWebhook(instance, args.id!, flags),
+  },
+  {
+    path: ["webhook", "ping"],
+    what: "dispatch a test ping to verify webhook delivery and signature",
+    args: [{ name: "id", required: true, what: "webhook ID" }],
+    takes: ["url", "workspace", "json"],
+    run: ({ instance, args, flags }) => pingWebhook(instance, args.id!, flags),
+  },
+
+  // ── Operator Resource ──────────────────────────────────────────────────
+  {
+    path: ["operator"],
+    what: "cluster administration, platform limits, and runtime metrics",
+    takes: ["url", "json"],
+    run: ({ instance, flags }) => getOperatorStats(instance, flags),
+  },
+  {
+    path: ["operator", "stats"],
+    what: "view cluster-wide runtime, memory, and uptime metrics",
+    takes: ["url", "json"],
+    run: ({ instance, flags }) => getOperatorStats(instance, flags),
+  },
+  {
+    path: ["operator", "analytics"],
+    what: "view operator-level aggregated platform analytics",
+    takes: ["url", "timeframe", "json"],
+    run: ({ instance, flags }) => getOperatorAnalytics(instance, flags),
+  },
+  {
+    path: ["operator", "config"],
+    what: "inspect operator platform configuration and active flags",
+    takes: ["url", "json"],
+    run: ({ instance, flags }) => getOperatorConfig(instance, flags),
+  },
+  {
+    path: ["operator", "limit"],
+    what: "view operational quotas across global, accounts, or telemetry",
+    takes: ["url", "type", "json"],
+    run: ({ instance, flags }) => getOperatorLimits(instance, flags),
+  },
+  {
+    path: ["operator", "limit", "list"],
+    what: "view operational quotas across global, accounts, or telemetry",
+    takes: ["url", "type", "json"],
+    run: ({ instance, flags }) => getOperatorLimits(instance, flags),
+  },
+  {
+    path: ["operator", "user"],
+    what: "list platform users across all workspaces and organizations",
+    takes: ["url", "page", "limit", "json"],
+    run: ({ instance, flags }) => listOperatorUsers(instance, flags),
+  },
+  {
+    path: ["operator", "user", "list"],
+    what: "list platform users across all workspaces and organizations",
+    takes: ["url", "page", "limit", "json"],
+    run: ({ instance, flags }) => listOperatorUsers(instance, flags),
+  },
+  {
+    path: ["operator", "workspace"],
+    what: "list all provisioned workspaces on this cluster",
+    takes: ["url", "page", "limit", "json"],
+    run: ({ instance, flags }) => listOperatorWorkspaces(instance, flags),
+  },
+  {
+    path: ["operator", "workspace", "list"],
+    what: "list all provisioned workspaces on this cluster",
+    takes: ["url", "page", "limit", "json"],
+    run: ({ instance, flags }) => listOperatorWorkspaces(instance, flags),
+  },
 ];
+
+export const COMMANDS: Command[] = BASE_COMMANDS;

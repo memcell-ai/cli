@@ -66,6 +66,7 @@ export const KNOWN_DIRS: { dir: string; ext: string }[] = [
 export interface ImportOptions {
   files?: string[];
   url?: string;
+  workspace?: string;
   project?: string;
   owner?: string;
   dryRun?: boolean;
@@ -185,8 +186,9 @@ export async function importFiles(
     ? { files: filesOrOptions, url: legacyUrl }
     : filesOrOptions;
 
-  const hasProject = Boolean(options.project);
-  const here = await wired("import", options.url, { silent: hasProject });
+  const explicitWorkspace = options.workspace || options.project;
+  const hasWorkspace = Boolean(explicitWorkspace);
+  const here = await wired("import", options.url, { silent: hasWorkspace });
 
   let targetSpace: string;
   let root: string;
@@ -198,8 +200,8 @@ export async function importFiles(
     root = here.root;
     targetInstance = here.instance;
     targetBearer = here.key;
-  } else if (options.project) {
-    targetSpace = options.project;
+  } else if (explicitWorkspace) {
+    targetSpace = explicitWorkspace;
     root = process.cwd();
   } else {
     return 1;

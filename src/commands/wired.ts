@@ -44,7 +44,7 @@ export async function wired(
     }
     return null;
   }
-  const root = dirname(found.at);
+  const root = found.root;
   const instance = url ? normalize(url) : found.project.instance;
   const elsewhere = instance !== normalize(found.project.instance);
   const held = await agentKeyForProject(instance, root);

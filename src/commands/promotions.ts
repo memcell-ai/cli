@@ -19,13 +19,13 @@ import {
   warn,
 } from "../ui.js";
 
-function getTargetProject(flags: Record<string, string | true>): string | undefined {
-  if (typeof flags.project !== "string") return undefined;
-  const proj = flags.project.trim();
-  if (typeof flags.owner === "string" && !proj.includes("/")) {
-    return `${flags.owner.trim()}/${proj}`;
+function getTargetWorkspace(flags: Record<string, string | true>): string | undefined {
+  if (typeof flags.workspace !== "string") return undefined;
+  const ws = flags.workspace.trim();
+  if (typeof flags.owner === "string" && !ws.includes("/")) {
+    return `${flags.owner.trim()}/${ws}`;
   }
-  return proj;
+  return ws;
 }
 
 const needsSession = (instance: string) =>
@@ -53,8 +53,8 @@ export async function listPromotions(
 
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = getTargetProject(flags);
-    const namespace = await resolveNamespace(sdk, targetProject);
+    const targetWorkspace = getTargetWorkspace(flags);
+    const namespace = await resolveNamespace(sdk, targetWorkspace);
 
     const statusParam =
       typeof flags.status === "string" ? flags.status.trim().toLowerCase() : "pending";
@@ -78,7 +78,7 @@ export async function listPromotions(
 
     if (items.length === 0) {
       say(
-        row(0, [badge("memcell"), label("promotions"), place(namespace)]),
+        row(0, [badge("memcell"), label("promotion"), place(namespace)]),
         row(1, [label(`no ${status || "pending"} promotion requests found`)]),
       );
       return 0;
@@ -87,7 +87,7 @@ export async function listPromotions(
     say(
       row(
         0,
-        [badge("memcell"), label("promotions"), place(namespace)],
+        [badge("memcell"), label("promotion"), place(namespace)],
         [variant(`${items.length}${total ? ` of ${total}` : ""} ${status || "pending"}`)],
       ),
       ...items.flatMap((req: any) => [
@@ -96,7 +96,7 @@ export async function listPromotions(
           [variant(req.status || "pending")],
           [scopeBadge(req.fromScope || "user")],
           [variant("→")],
-          [scopeBadge(req.toScope || "project")],
+          [scopeBadge(req.toScope || "workspace")],
           req.memory?.title ? [label(req.memory.title)] : [label("memory"), idSeg(req.memoryId)],
         ),
         row(
@@ -110,7 +110,7 @@ export async function listPromotions(
             : null,
         ),
       ]),
-      row(2, [label("review one with"), cmd("memcell promotions approve <id>")]),
+      row(2, [label("review one with"), cmd("memcell promotion approve <id>")]),
     );
     return 0;
   } catch (error) {
@@ -131,8 +131,8 @@ export async function approvePromotion(
 
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = getTargetProject(flags);
-    const namespace = await resolveNamespace(sdk, targetProject);
+    const targetWorkspace = getTargetWorkspace(flags);
+    const namespace = await resolveNamespace(sdk, targetWorkspace);
 
     let res: any;
     if (typeof (sdk as any).promotions?.approve === "function") {
@@ -153,7 +153,7 @@ export async function approvePromotion(
 
     const mem = res.memory;
     say(
-      row(0, [badge("memcell"), label("promotions approve"), place(namespace)]),
+      row(0, [badge("memcell"), label("promotion approve"), place(namespace)]),
       row(
         1,
         [good("approved")],
@@ -181,8 +181,8 @@ export async function rejectPromotion(
 
   try {
     const sdk = await getSdkClient(instance);
-    const targetProject = getTargetProject(flags);
-    const namespace = await resolveNamespace(sdk, targetProject);
+    const targetWorkspace = getTargetWorkspace(flags);
+    const namespace = await resolveNamespace(sdk, targetWorkspace);
 
     if (typeof (sdk as any).promotions?.reject === "function") {
       await (sdk as any).promotions.reject(namespace, requestId, {
@@ -201,7 +201,7 @@ export async function rejectPromotion(
     }
 
     say(
-      row(0, [badge("memcell"), label("promotions reject"), place(namespace)]),
+      row(0, [badge("memcell"), label("promotion reject"), place(namespace)]),
       row(1, [bad("rejected")], [label("request"), idSeg(requestId)]),
       reason ? row(2, [label("reason:"), label(reason)]) : null,
     );

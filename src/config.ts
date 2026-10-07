@@ -3,7 +3,13 @@ import { dirname, join, resolve } from "node:path";
 
 import { parse, stringify } from "smol-toml";
 
-import { WORKSPACE_FILE, WORKSPACE_FILE_ASIDE } from "./workspace.js";
+import {
+  ensureGitignore,
+  findGitRoot,
+  findWorkspace,
+  WORKSPACE_CONFIG_FILE,
+  WORKSPACE_DIR,
+} from "./workspace.js";
 import { machineFile } from "./machine.js";
 
 // Settings, in two places with one precedence: **the project wins.**
@@ -38,6 +44,7 @@ const FROM_ENV: Record<string, string> = {
 const ALIASES: Record<string, string> = {
   instance: "instance.url",
   url: "instance.url",
+  workspace: "workspace.slug",
   org: "organization",
 };
 
@@ -164,28 +171,15 @@ export async function text(
  * directory CONNECTED" — a stricter question a settings write does not ask.
  */
 async function projectFile(): Promise<string> {
-  let dir = resolve(process.cwd());
-  for (;;) {
-    for (const name of [WORKSPACE_FILE, WORKSPACE_FILE_ASIDE]) {
-      const at = join(dir, name);
-      try {
-        // A FILE, not merely a path that exists: the machine's own data lives
-        // in a `.memcell` DIRECTORY in the home, so a project anywhere under
-        // the home reaches it on this walk, and opening it as TOML is EISDIR.
-        if ((await stat(at)).isFile()) return at;
-      } catch {
-        // Not here; keep checking
-      }
-    }
-    const up = dirname(dir);
-    if (up === dir) break;
-    dir = up;
-  }
-  const cwdClassic = join(resolve(process.cwd()), WORKSPACE_FILE);
-  const taken = await stat(cwdClassic)
-    .then((s) => s.isDirectory())
-    .catch(() => false);
-  return taken ? join(resolve(process.cwd()), WORKSPACE_FILE_ASIDE) : cwdClassic;
+  const found = await findWorkspace().catch(() => null);
+  if (found) return found.at;
+
+  const gitRoot = await findGitRoot(process.cwd());
+  const root = gitRoot ?? resolve(process.cwd());
+  const dotMemcellDir = join(root, WORKSPACE_DIR);
+  await mkdir(dotMemcellDir, { recursive: true });
+  await ensureGitignore(dotMemcellDir);
+  return join(dotMemcellDir, WORKSPACE_CONFIG_FILE);
 }
 
 /** Where a scope's settings are written, so a command can name the file. */

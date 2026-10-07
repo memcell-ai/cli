@@ -106,7 +106,7 @@ describe("enterprise SSO & IdP federation commands", () => {
     });
   });
 
-  describe("orgs sso list", () => {
+  describe("org sso list", () => {
     it("lists configured providers and enforcement status", async () => {
       answer = () => ({
         organization: {
@@ -136,7 +136,7 @@ describe("enterprise SSO & IdP federation commands", () => {
     });
   });
 
-  describe("orgs sso configure", () => {
+  describe("org sso configure", () => {
     it("requires provider-id flag", async () => {
       const code = await configureOrgSSO(instance, "acme", {});
       expect(code).toBe(1);
@@ -178,7 +178,7 @@ describe("enterprise SSO & IdP federation commands", () => {
     });
   });
 
-  describe("orgs sso verify", () => {
+  describe("org sso verify", () => {
     it("reports success when domain verification passes", async () => {
       answer = () => ({
         ok: true,
@@ -215,7 +215,7 @@ describe("enterprise SSO & IdP federation commands", () => {
     });
   });
 
-  describe("orgs sso enforce", () => {
+  describe("org sso enforce", () => {
     it("enables SSO enforcement", async () => {
       answer = () => ({
         ok: true,
@@ -247,7 +247,7 @@ describe("enterprise SSO & IdP federation commands", () => {
     });
   });
 
-  describe("orgs sso delete", () => {
+  describe("org sso delete", () => {
     it("deletes an SSO provider", async () => {
       answer = () => ({ ok: true });
 

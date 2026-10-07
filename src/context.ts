@@ -161,8 +161,8 @@ export function enforceRequirements(
   if (requiresProject && !context.project) {
     say(
       row(0, [badge("memcell"), label(command.path.join(" "))]),
-      row(1, [warn("no project specified")]),
-      row(2, [label("pass"), cmd("--project <slug>"), label("or run"), cmd("memcell connect")]),
+      row(1, [warn("no workspace specified")]),
+      row(2, [label("pass"), cmd("--workspace <slug>"), label("or run"), cmd("memcell connect")]),
     );
     return { ok: false, exitCode: 1 };
   }

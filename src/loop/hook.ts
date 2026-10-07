@@ -175,7 +175,7 @@ export async function resolveProjectWiring(cwd?: string, program?: string): Prom
 
   // Identity is the keyring's, found by the wired directory and program —
   // the project file names the memory, never the person.
-  const held = await agentKeyForProject(found.project.instance, dirname(found.at), program);
+  const held = await agentKeyForProject(found.project.instance, found.root, program);
   if (!held) {
     return {
       ok: false,

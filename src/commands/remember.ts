@@ -1,5 +1,7 @@
 import { MemCellError } from "@memcell/sdk";
 import { MemcellError } from "../client.js";
+import { credentialFor, resolveInstance } from "../instance.js";
+import { resolveNamespace } from "../namespace.js";
 import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, good, id, label, place, row, say, scopeBadge, value, variant } from "../ui.js";
 import { wired } from "./wired.js";
@@ -30,6 +32,7 @@ export async function remember(
   context?: string,
   observation?: string,
   enforce?: boolean,
+  flags?: Record<string, any>,
 ): Promise<number> {
   // Refused by name rather than dropped: a directive filed as applying at a
   // moment nothing fires would sit here looking wired and never be served.
@@ -60,13 +63,15 @@ export async function remember(
     }
   }
 
-  let normalizedScope = "project";
+  let normalizedScope = "workspace";
   if (scope) {
     const s = scope.trim().toLowerCase();
     if (s === "my-memory" || s === "my") {
       normalizedScope = "user";
     } else if (s === "org") {
       normalizedScope = "organization";
+    } else if (s === "project") {
+      normalizedScope = "workspace";
     } else {
       normalizedScope = s;
     }
@@ -91,6 +96,7 @@ export async function remember(
     context,
     observation,
     enforce,
+    flags,
   );
 }
 
@@ -99,20 +105,52 @@ async function file(
   type?: string,
   appliesAt: string[] = [],
   url?: string,
-  scope: string = "project",
+  scope: string = "workspace",
   metadata?: Record<string, unknown>,
   subject?: string,
   roles?: string[],
   context?: string,
   observation?: string,
   enforce?: boolean,
+  flags?: Record<string, any>,
 ): Promise<number> {
-  const here = await wired("remember", url);
-  if (!here) return 1;
+  const explicitWs =
+    typeof flags?.workspace === "string"
+      ? flags.workspace
+      : typeof flags?.project === "string"
+        ? flags.project
+        : undefined;
+
+  let instanceUrl: string;
+  let bearerToken: string | undefined;
+  let targetSpace: string;
+  let targetNamespace: string | undefined;
+
+  if (explicitWs) {
+    instanceUrl = await resolveInstance(url);
+    const cred = await credentialFor(instanceUrl);
+    if (!cred) {
+      say(
+        row(0, [badge("memcell"), bad("remember")]),
+        row(1, [bad("not signed in")], [label("run memcell login or set MEMCELL_API_KEY")]),
+      );
+      return 1;
+    }
+    bearerToken = cred.token;
+    targetSpace = explicitWs;
+    const tempSdk = await getSdkClient(instanceUrl, { bearer: bearerToken });
+    targetNamespace = await resolveNamespace(tempSdk, explicitWs).catch(() => explicitWs);
+  } else {
+    const here = await wired("remember", url);
+    if (!here) return 1;
+    instanceUrl = here.instance;
+    bearerToken = here.key;
+    targetSpace = here.space;
+  }
 
   try {
-    const sdk = await getSdkClient(here.instance, { bearer: here.key });
-    const written = (await sdk.remember({
+    const sdk = await getSdkClient(instanceUrl, { bearer: bearerToken });
+    const payload: any = {
       title: text,
       type: type as any,
       scope,
@@ -122,18 +160,27 @@ async function file(
       context,
       observation,
       enforce,
-    } as any)) as unknown as Written;
+      namespace: targetNamespace,
+      workspace: targetNamespace,
+    };
+    const written = (await sdk.remember(payload)) as any;
+    const first = written?.created?.[0] || written;
+    const memoryId = first?.id || written?.id;
+    const memoryScope = first?.scope || written?.scope || scope;
+    const memoryConfidence =
+      typeof first?.confidence === "number" ? first.confidence : (written?.confidence ?? 0.55);
+    const memoryNote = written?.note || first?.note || "Filed.";
 
     say(
-      row(0, [badge("memcell"), label("remember"), place(here.space)]),
+      row(0, [badge("memcell"), label("remember"), place(targetSpace)]),
       row(
         1,
-        [good(written.note || "Filed.")],
-        [label("confidence"), value(written.confidence ? written.confidence.toFixed(2) : "0.55")],
-        [scopeBadge(written.scope || scope)],
+        [good(memoryNote)],
+        [label("confidence"), value(memoryConfidence ? memoryConfidence.toFixed(2) : "0.55")],
+        [scopeBadge(memoryScope)],
         subject ? [label("subject"), value(subject)] : null,
       ),
-      row(2, [id(written.id)]),
+      row(2, [id(memoryId)]),
     );
     return 0;
   } catch (error) {

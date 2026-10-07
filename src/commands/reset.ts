@@ -32,7 +32,7 @@ import {
 //
 //   The keys stay live. A key is a credential on the instance, not here;
 //   forgetting a copy of it locally leaves it working for anybody who has
-//   another copy. Revoking is a different act — `memcell agents`.
+//   another copy. Revoking is a different act — `memcell agent`.
 //
 //   Hooks in OTHER directories stay. It only unwires the one it is run in,
 //   because it only knows that one. The rest fire, find no key, and do
@@ -91,7 +91,7 @@ export async function reset(force: boolean, at: string = process.cwd()): Promise
   // Read before anything goes: what is still live elsewhere afterwards.
   const keys = await agentKeys();
   const otherProjects = [...new Set(keys.map((k) => k.project))].filter(
-    (p) => !here || p !== dirname(here.at),
+    (p) => !here || p !== here.root,
   );
 
   // What is about to go, named before the question is asked.
@@ -101,11 +101,7 @@ export async function reset(force: boolean, at: string = process.cwd()): Promise
     ...there.map((entry) => row(2, [value(entry.path)], [label(entry.what)])),
     strays.length > 0 && row(1, [warn("left alone")], [list(strays)]),
     here &&
-      row(
-        1,
-        [value("this directory")],
-        [label("its connection and hooks"), place(dirname(here.at))],
-      ),
+      row(1, [value("this directory")], [label("its connection and hooks"), place(here.root)]),
   ];
 
   if (!force) {
@@ -132,14 +128,14 @@ export async function reset(force: boolean, at: string = process.cwd()): Promise
   // so the report names the directory rather than leaving somebody to
   // assume it meant the one they were standing in.
   if (here) {
-    await removeAllHooks(dirname(here.at));
+    await removeAllHooks(here.root);
     await removeWorkspace(here.at);
   }
 
   const out: (Row | false | null)[] = [
     row(0, [badge("memcell")]),
     there.length > 0 && row(1, [good("forgotten")], [label("this machine holds none of it")]),
-    here && row(1, [good("disconnected")], [place(dirname(here.at))]),
+    here && row(1, [good("disconnected")], [place(here.root)]),
     strays.length > 0 && row(1, [warn("left alone")], [list(strays)]),
     ...there.filter((entry) => entry.then).map((entry) => row(2, [label(entry.then!)])),
   ];
@@ -153,7 +149,7 @@ export async function reset(force: boolean, at: string = process.cwd()): Promise
         [variant(`${keys.length}`)],
         [label("forgotten here only")],
       ),
-      row(2, [label("revoke with")], [cmd("memcell agents")]),
+      row(2, [label("revoke with")], [cmd("memcell agent")]),
     );
   }
   if (otherProjects.length > 0) {

@@ -194,7 +194,7 @@ export async function agentKeyForProject(
       if (found) {
         const foundId = found.project.projectId;
         const foundSlug = found.project.project || found.project.space;
-        const foundRoot = await real(dirname(found.at));
+        const foundRoot = await real(found.root);
         for (const k of entries) {
           const keyPath = await real(k.projectPath ?? k.project);
           if (

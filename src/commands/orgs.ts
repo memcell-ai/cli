@@ -49,7 +49,7 @@ export async function listOrganizations(instance: string): Promise<number> {
       say(
         row(0, [badge("memcell"), place(instance)]),
         row(1, [label("no organizations")]),
-        row(2, [label("make one with"), cmd("memcell orgs create <slug> --name <name>")]),
+        row(2, [label("make one with"), cmd("memcell org create <slug> --name <name>")]),
       );
       return 0;
     }
@@ -65,7 +65,7 @@ export async function listOrganizations(instance: string): Promise<number> {
           org.slug === active && [variant("active")],
         ),
       ),
-      row(2, [label("switch active context with"), cmd("memcell orgs switch <slug>")]),
+      row(2, [label("switch active context with"), cmd("memcell org switch <slug>")]),
     );
     return 0;
   } catch (error) {
@@ -143,7 +143,7 @@ export async function updateOrganization(
     const updated = await sdk.organizations.update(slug, { name });
 
     say(
-      row(0, [badge("memcell"), label("orgs update"), place(instance)]),
+      row(0, [badge("memcell"), label("org update"), place(instance)]),
       row(1, [good("updated")], [value(updated.slug)], [label(updated.name)]),
     );
     return 0;
@@ -169,7 +169,7 @@ export async function deleteOrganization(instance: string, slug: string): Promis
     }
 
     say(
-      row(0, [badge("memcell"), label("orgs delete"), place(instance)]),
+      row(0, [badge("memcell"), label("org delete"), place(instance)]),
       row(1, [good("deleted organization")], [value(slug)]),
     );
     return 0;
@@ -197,7 +197,7 @@ export async function listOrgMembers(
     say(
       row(
         0,
-        [badge("memcell"), label("org members"), place(slug)],
+        [badge("memcell"), label("org member"), place(slug)],
         [variant(`${members.length} member${members.length === 1 ? "" : "s"}`)],
       ),
       ...members.map((m) =>
@@ -284,7 +284,7 @@ export async function listOrgInvitations(instance: string, slug: string): Promis
     say(
       row(
         0,
-        [badge("memcell"), label("org invitations"), place(slug)],
+        [badge("memcell"), label("org invite"), place(slug)],
         [variant(`${invitations.length}`)],
       ),
       ...invitations.map((inv) =>
@@ -381,7 +381,7 @@ export async function switchOrganization(instance: string, slug: string): Promis
       say(
         row(0, [badge("memcell"), place(instance)]),
         row(1, [warn("unknown organization")], [value(slug)]),
-        row(2, [label("see your organizations with"), cmd("memcell orgs list")]),
+        row(2, [label("see your organizations with"), cmd("memcell org list")]),
       );
       return 1;
     }
@@ -430,7 +430,7 @@ export async function listOrgSSO(instance: string, slug: string): Promise<number
             row(1, [label("no sso providers configured")]),
             row(2, [
               label("configure one with"),
-              cmd(`memcell orgs sso configure ${slug} --provider-id <id> --domain <domain>`),
+              cmd(`memcell org sso configure ${slug} --provider-id <id> --domain <domain>`),
             ]),
           ]
         : providers.map((p: any) =>
@@ -541,7 +541,7 @@ export async function configureOrgSSO(
                   value(provider.domain),
                   variant("unverified"),
                   label("— run"),
-                  cmd(`memcell orgs sso verify ${slug} --provider-id ${provider.providerId}`),
+                  cmd(`memcell org sso verify ${slug} --provider-id ${provider.providerId}`),
                 ],
           )
         : null,
@@ -623,7 +623,7 @@ export async function verifyOrgSSO(
       ]),
       row(3, [
         label("then re-run"),
-        cmd(`memcell orgs sso verify ${slug} --provider-id ${providerId}`),
+        cmd(`memcell org sso verify ${slug} --provider-id ${providerId}`),
       ]),
     );
     return 1;

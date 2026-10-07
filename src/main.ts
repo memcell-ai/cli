@@ -17,6 +17,9 @@ import { checkUpdate, printUpdateNotice } from "./update.js";
 // exists.
 
 export async function main(argv: string[], version: string): Promise<number> {
+  // Inspect workspace to ensure dedicated structure and .gitignore whenever CLI executes
+  await findWorkspace().catch(() => null);
+
   const parsed = parse(argv, COMMANDS);
 
   switch (parsed.kind) {
@@ -60,7 +63,7 @@ export async function main(argv: string[], version: string): Promise<number> {
       // fails the command it precedes — a wiring we could not rewrite is
       // still a wiring that fires.
       const found = await findWorkspace().catch(() => null);
-      if (found) await migrateWiring(dirname(found.at)).catch(() => []);
+      if (found) await migrateWiring(found.root).catch(() => []);
 
       const context = await resolveContext(instance, parsed.flags, from);
       const gate = enforceRequirements(parsed.command, context);

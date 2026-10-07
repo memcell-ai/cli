@@ -97,6 +97,14 @@ export async function whereInstance(flag?: string): Promise<{ instance: string; 
 }
 
 export async function credentialFor(instance: string): Promise<Credential | null> {
+  const envKey = process.env.MEMCELL_API_KEY?.trim();
+  if (envKey) {
+    return {
+      instance: normalize(instance),
+      token: envKey,
+      obtainedAt: new Date().toISOString(),
+    };
+  }
   const store = await read();
   return store.credentials?.[normalize(instance)] ?? null;
 }

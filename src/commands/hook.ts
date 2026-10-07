@@ -101,8 +101,8 @@ export async function hookRemove(): Promise<number> {
     return 0;
   }
 
-  const { project, at } = found;
-  const here = dirname(at);
+  const { project, at, root } = found;
+  const here = root;
   const removed = await removeHooks(here);
   // Identity lives in the keyring now — find it by the directory before the
   // pointer to it goes.
@@ -116,7 +116,7 @@ export async function hookRemove(): Promise<number> {
     removed.length > 0
       ? row(1, [good("hooks removed")], [list(removed)])
       : row(2, [label("no hook files here")]),
-    held ? row(2, [label("key still lives")], [cmd(`memcell agents revoke ${held.keyId}`)]) : null,
+    held ? row(2, [label("key still lives")], [cmd(`memcell agent revoke ${held.keyId}`)]) : null,
   );
   return 0;
 }

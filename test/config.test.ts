@@ -81,7 +81,7 @@ describe("what goes where", () => {
     const elsewhere = await mkdtemp(join(tmpdir(), "memcell-fresh-"));
     process.cwd = () => elsewhere;
     const file = await config.set("recall.limit", 1, "project");
-    expect(file).toBe(join(elsewhere, ".memcell"));
+    expect(file).toBe(join(elsewhere, ".memcell", "config.toml"));
     expect((await config.get("recall.limit"))?.value).toBe(1);
     process.cwd = () => project;
   });
@@ -98,7 +98,7 @@ describe("what goes where", () => {
     await mkdir(nested, { recursive: true });
     process.cwd = () => nested;
     const file = await config.set("instance.url", "http://localhost:3000", "project");
-    expect(file).toBe(join(nested, ".memcell"));
+    expect(file).toBe(join(nested, ".memcell", "config.toml"));
     expect((await config.get("instance.url", { only: "project" }))?.value).toBe(
       "http://localhost:3000",
     );
@@ -107,7 +107,7 @@ describe("what goes where", () => {
 
   it("keeps both files readable by their owner only", async () => {
     const { stat } = await import("node:fs/promises");
-    expect((await stat(join(project, ".memcell"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(project, ".memcell", "config.toml"))).mode & 0o777).toBe(0o600);
     expect((await stat(join(home, ".memcell", "config.json"))).mode & 0o777).toBe(0o600);
   });
 });

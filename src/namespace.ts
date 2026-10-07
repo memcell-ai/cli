@@ -33,7 +33,14 @@ export async function resolveNamespace(
     return slug;
   }
 
-  if (proj?.owner) {
+  if (!target && proj?.owner) {
+    return `${proj.owner}/${slug}`;
+  }
+  if (
+    target &&
+    proj?.owner &&
+    (target === proj.workspace || target === proj.project || target === proj.space)
+  ) {
     return `${proj.owner}/${slug}`;
   }
 

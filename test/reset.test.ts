@@ -94,7 +94,7 @@ describe("memcell reset", () => {
     // A forgotten key is not a revoked key. Somebody who reset to "clean up
     // after a leak" and read nothing here would believe the opposite.
     expect(out()).toContain("keys still live");
-    expect(out()).toContain("memcell agents");
+    expect(out()).toContain("memcell agent");
 
     // And the hooks stay in each project's own config, where they will fire,
     // find no key, and do nothing — silently, by design.

@@ -1,5 +1,8 @@
 import { call } from "../client.js";
 import { credentialFor } from "../instance.js";
+import { resolveNamespace } from "../namespace.js";
+import { getSdkClient } from "../sdk-client.js";
+import { findWorkspace } from "../workspace.js";
 import { resolveOrg } from "./fleet.js";
 import {
   bad,
@@ -30,13 +33,13 @@ function refused(instance: string, failure: Error): number {
   return 1;
 }
 
-function missingOrg(instance: string): number {
+function missingContext(instance: string): number {
   say(
     row(0, [badge("memcell"), place(instance)]),
     row(
       1,
-      [warn("organization required")],
-      [label("specify --org <slug> or set active org with"), cmd("memcell orgs use <slug>")],
+      [warn("context required")],
+      [label("specify --org <slug> or connect a workspace with"), cmd("memcell connect")],
     ),
   );
   return 1;
@@ -52,7 +55,54 @@ export async function getEnterpriseInsights(
   }
 
   const orgSlug = await resolveOrg(flags);
-  if (!orgSlug) return missingOrg(instance);
+  const targetWs =
+    typeof flags.workspace === "string" ? flags.workspace : (flags.project as string | undefined);
+
+  // If no org specified, see if workspace context is available
+  if (!orgSlug) {
+    try {
+      const sdk = await getSdkClient(instance);
+      const namespace = await resolveNamespace(sdk, targetWs);
+      const timeframe =
+        typeof flags.timeframe === "string" && ["24h", "7d", "30d"].includes(flags.timeframe.trim())
+          ? (flags.timeframe.trim() as "24h" | "7d" | "30d")
+          : "30d";
+
+      const parts = namespace.split("/");
+      const endpoint = `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/insights?timeframe=${encodeURIComponent(timeframe)}`;
+      const wsInsights = await call<any>(instance, endpoint);
+
+      if (flags.json === true) {
+        emit(JSON.stringify(wsInsights, null, 2) + "\n");
+        return 0;
+      }
+
+      say(
+        row(
+          0,
+          [badge("memcell"), label("workspace insights"), place(namespace)],
+          [variant(timeframe)],
+        ),
+      );
+
+      if (wsInsights.cards) {
+        say(
+          row(
+            1,
+            [label("Recalls:")],
+            [good(String(wsInsights.cards.recalls?.current ?? 0))],
+            [label("Remember:")],
+            [value(String(wsInsights.cards.remember?.current ?? 0))],
+            [label("Report:")],
+            [value(String(wsInsights.cards.report?.current ?? 0))],
+          ),
+        );
+      }
+      return 0;
+    } catch {
+      return missingContext(instance);
+    }
+  }
 
   const timeframe =
     typeof flags.timeframe === "string" && ["7d", "30d", "90d"].includes(flags.timeframe.trim())

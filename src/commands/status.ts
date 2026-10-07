@@ -29,7 +29,7 @@ export async function status(instance: string, _from: string): Promise<number> {
       row(1, [label("Status".padEnd(11, " ")), warn("not signed in")]),
       found ? row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]) : null,
       found
-        ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
+        ? row(1, [label("Directory".padEnd(11, " ")), place(found.root)])
         : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
       others.length > 0
         ? row(1, [label("Instances".padEnd(11, " ")), label(others.join(", "))])
@@ -49,7 +49,7 @@ export async function status(instance: string, _from: string): Promise<number> {
         row(1, [label("Status".padEnd(11, " ")), warn("session expired")]),
         found ? row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]) : null,
         found
-          ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
+          ? row(1, [label("Directory".padEnd(11, " ")), place(found.root)])
           : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
         blank(),
         row(0, [label("Next:")]),
@@ -64,14 +64,14 @@ export async function status(instance: string, _from: string): Promise<number> {
     if (found) {
       const keyRow = await hookKey(
         instance,
-        found.at,
+        found.root,
         found.project.projectId ?? (found.project.project || found.project.space),
       );
 
       say(
         row(0, [badge("memcell"), place(instance)], [instanceScope]),
         row(1, [label("Account".padEnd(11, " ")), value(accountDisplay)]),
-        row(1, [label("Project".padEnd(11, " ")), value(projectDisplay!)]),
+        row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]),
         found.project.paused
           ? row(
               1,
@@ -79,7 +79,7 @@ export async function status(instance: string, _from: string): Promise<number> {
               [label("hooks inactive · run memcell resume")],
             )
           : null,
-        row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
+        row(1, [label("Directory".padEnd(11, " ")), place(found.root)]),
         keyRow,
       );
       return 0;
@@ -117,7 +117,7 @@ export async function status(instance: string, _from: string): Promise<number> {
       row(1, [label("Status".padEnd(11, " ")), warn("unverified")], [label(failure.message)]),
       found ? row(1, [label("Workspace".padEnd(11, " ")), value(projectDisplay!)]) : null,
       found
-        ? row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))])
+        ? row(1, [label("Directory".padEnd(11, " ")), place(found.root)])
         : row(1, [label("Directory".padEnd(11, " ")), place(process.cwd())]),
     );
     return 1;
@@ -125,9 +125,13 @@ export async function status(instance: string, _from: string): Promise<number> {
 }
 
 /** The credential the HOOKS carry, which is verified independently. */
-async function hookKey(instance: string, projectAt: string | undefined, projectIdOrSlug?: string) {
-  if (!projectAt) return null;
-  const held = await agentKeyForProject(instance, dirname(projectAt), undefined, projectIdOrSlug);
+async function hookKey(
+  instance: string,
+  projectRoot: string | undefined,
+  projectIdOrSlug?: string,
+) {
+  if (!projectRoot) return null;
+  const held = await agentKeyForProject(instance, projectRoot, undefined, projectIdOrSlug);
   if (!held) {
     return row(
       1,

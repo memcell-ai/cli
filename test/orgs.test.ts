@@ -68,7 +68,7 @@ describe("orgs list", () => {
 
     const output = printed.join("\n");
     expect(output).toContain("no organizations");
-    expect(output).toContain("memcell orgs create <slug> --name <name>");
+    expect(output).toContain("memcell org create <slug> --name <name>");
   });
 
   it("lists organizations and marks the active context", async () => {

@@ -4,11 +4,11 @@ import { getSdkClient } from "../sdk-client.js";
 import { badge, bad, label, place, row, say, variant } from "../ui.js";
 import { wired } from "./wired.js";
 
-// `memcell scopes` — list active operational scopes and memory
+// `memcell scope` — list active operational scopes and memory
 // counts in the currently wired workspace.
 
-export async function scopes(url?: string): Promise<number> {
-  const here = await wired("scopes", url);
+export async function scope(url?: string): Promise<number> {
+  const here = await wired("scope", url);
   if (!here) return 1;
 
   try {
@@ -17,7 +17,7 @@ export async function scopes(url?: string): Promise<number> {
 
     if (scopesList.length === 0) {
       say(
-        row(0, [badge("memcell"), label("scopes"), place(here.space)]),
+        row(0, [badge("memcell"), label("scope"), place(here.space)]),
         row(1, [label("no active scopes established yet")]),
       );
       return 0;
@@ -26,8 +26,8 @@ export async function scopes(url?: string): Promise<number> {
     say(
       row(
         0,
-        [badge("memcell"), label("scopes"), place(here.space)],
-        [variant(`${scopesList.length} active`)],
+        [badge("memcell"), label("scope"), place(here.space)],
+        [variant(scopesList.length === 1 ? "1 active" : `${scopesList.length} active`)],
       ),
       ...scopesList.map((s) =>
         row(
@@ -41,7 +41,7 @@ export async function scopes(url?: string): Promise<number> {
   } catch (error) {
     if (error instanceof MemcellError || error instanceof MemCellError) {
       say(
-        row(0, [badge("memcell"), label("scopes")]),
+        row(0, [badge("memcell"), label("scope")]),
         row(1, [bad("refused")], [label(error.message)]),
       );
       return 1;
@@ -49,3 +49,5 @@ export async function scopes(url?: string): Promise<number> {
     throw error;
   }
 }
+
+export const scopes = scope;

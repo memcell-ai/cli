@@ -20,7 +20,7 @@ export async function pause(from?: string): Promise<number> {
         label("Project".padEnd(11, " ")),
         label(found.project.project || found.project.space),
       ]),
-      row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
+      row(1, [label("Directory".padEnd(11, " ")), place(found.root)]),
       row(1, [label("Status".padEnd(11, " ")), warn("paused (hooks inactive)")]),
       blank(),
       row(0, [label("Next:")]),
@@ -34,7 +34,7 @@ export async function pause(from?: string): Promise<number> {
   say(
     row(0, [badge("memcell"), good("paused")]),
     row(1, [label("Project".padEnd(11, " ")), label(found.project.project || found.project.space)]),
-    row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
+    row(1, [label("Directory".padEnd(11, " ")), place(found.root)]),
     row(1, [label("Status".padEnd(11, " ")), warn("paused (hooks inactive)")]),
     blank(),
     row(0, [label("Next:")]),
@@ -57,7 +57,7 @@ export async function resume(from?: string): Promise<number> {
         label("Project".padEnd(11, " ")),
         label(found.project.project || found.project.space),
       ]),
-      row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
+      row(1, [label("Directory".padEnd(11, " ")), place(found.root)]),
       row(1, [label("Status".padEnd(11, " ")), good("active (hooks enabled)")]),
     );
     return 0;
@@ -68,7 +68,7 @@ export async function resume(from?: string): Promise<number> {
   say(
     row(0, [badge("memcell"), good("resumed")]),
     row(1, [label("Project".padEnd(11, " ")), label(found.project.project || found.project.space)]),
-    row(1, [label("Directory".padEnd(11, " ")), place(dirname(found.at))]),
+    row(1, [label("Directory".padEnd(11, " ")), place(found.root)]),
     row(1, [label("Status".padEnd(11, " ")), good("active (hooks enabled)")]),
   );
   return 0;

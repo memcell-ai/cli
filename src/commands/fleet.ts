@@ -51,7 +51,7 @@ function missingOrg(instance: string): number {
     row(
       1,
       [warn("organization required")],
-      [label("specify --org <slug> or set active org with"), cmd("memcell orgs use <slug>")],
+      [label("specify --org <slug> or set active org with"), cmd("memcell org use <slug>")],
     ),
   );
   return 1;
@@ -76,7 +76,6 @@ export async function listFleet(
     if (typeof flags.health === "string") query.set("health", flags.health.trim());
     if (typeof flags.team === "string") query.set("teamId", flags.team.trim());
     if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
-    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     const qs = query.toString() ? `?${query.toString()}` : "";
 
     const res = await call<{ agents: any[] }>(
@@ -125,7 +124,7 @@ export async function listFleet(
           ag.framework ? [label(ag.framework)] : [],
           ag.model ? [variant(ag.model)] : [],
           [label(`${ag.activeKeyCount ?? 0} keys`)],
-          [label(`${ag.workspaceGrantCount ?? ag.projectGrantCount ?? 0} grants`)],
+          [label(`${ag.workspaceGrantCount ?? 0} grants`)],
         );
       }),
     );
@@ -180,9 +179,7 @@ export async function getFleetAgent(
         [label("scope:")],
         [value(agent.scope)],
         agent.teamName ? [label("team:"), value(agent.teamName)] : [],
-        agent.workspaceName || agent.projectName
-          ? [label("workspace:"), value(agent.workspaceName || agent.projectName)]
-          : [],
+        agent.workspaceName ? [label("workspace:"), value(agent.workspaceName)] : [],
       ),
       agent.framework || agent.model
         ? row(
@@ -225,8 +222,8 @@ export async function getFleetAgent(
         ...grants.map((g) =>
           row(
             2,
-            [idSeg(g.workspaceId || g.projectId)],
-            [value(g.workspaceName || g.projectName || g.workspaceId || g.projectId)],
+            [idSeg(g.workspaceId)],
+            [value(g.workspaceName || g.workspaceId)],
             [variant(g.permission)],
             [time(String(g.grantedAt))],
           ),
@@ -261,12 +258,7 @@ export async function registerFleetAgent(
     const description =
       typeof flags.description === "string" ? flags.description.trim() : undefined;
     const teamId = typeof flags.team === "string" ? flags.team.trim() : undefined;
-    const workspaceId =
-      typeof flags.workspace === "string"
-        ? flags.workspace.trim()
-        : typeof flags.project === "string"
-          ? flags.project.trim()
-          : undefined;
+    const workspaceId = typeof flags.workspace === "string" ? flags.workspace.trim() : undefined;
 
     const result = await call<{ agent: any; key?: any }>(
       instance,
@@ -282,7 +274,6 @@ export async function registerFleetAgent(
           description,
           teamId,
           workspaceId,
-          projectId: workspaceId,
           generateKey: flags["no-key"] !== true,
         },
       },
@@ -414,12 +405,7 @@ export async function grantFleetWorkspace(
   const orgSlug = await resolveOrg(flags);
   if (!orgSlug) return missingOrg(instance);
 
-  const workspaceId =
-    typeof flags.workspace === "string"
-      ? flags.workspace.trim()
-      : typeof flags.project === "string"
-        ? flags.project.trim()
-        : undefined;
+  const workspaceId = typeof flags.workspace === "string" ? flags.workspace.trim() : undefined;
   if (!workspaceId) {
     say(
       row(0, [badge("memcell"), place(instance)]),
@@ -440,7 +426,7 @@ export async function grantFleetWorkspace(
       `/api/v1/organizations/${encodeURIComponent(orgSlug)}/fleet/${encodeURIComponent(agentId)}/grant`,
       {
         method: "POST",
-        body: { workspaceId, projectId: workspaceId, permission },
+        body: { workspaceId, permission },
       },
     );
 
@@ -461,8 +447,6 @@ export async function grantFleetWorkspace(
   }
 }
 
-export const grantFleetProject = grantFleetWorkspace;
-
 export async function revokeFleetWorkspace(
   instance: string,
   agentId: string,
@@ -476,12 +460,7 @@ export async function revokeFleetWorkspace(
   const orgSlug = await resolveOrg(flags);
   if (!orgSlug) return missingOrg(instance);
 
-  const workspaceId =
-    typeof flags.workspace === "string"
-      ? flags.workspace.trim()
-      : typeof flags.project === "string"
-        ? flags.project.trim()
-        : undefined;
+  const workspaceId = typeof flags.workspace === "string" ? flags.workspace.trim() : undefined;
   if (!workspaceId) {
     say(
       row(0, [badge("memcell"), place(instance)]),
@@ -496,7 +475,7 @@ export async function revokeFleetWorkspace(
       `/api/v1/organizations/${encodeURIComponent(orgSlug)}/fleet/${encodeURIComponent(agentId)}/grant`,
       {
         method: "DELETE",
-        body: { workspaceId, projectId: workspaceId },
+        body: { workspaceId },
       },
     );
 
@@ -515,5 +494,3 @@ export async function revokeFleetWorkspace(
     return refused(instance, err as Error);
   }
 }
-
-export const revokeFleetProject = revokeFleetWorkspace;

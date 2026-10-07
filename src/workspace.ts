@@ -1,29 +1,27 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { parse, stringify } from "smol-toml";
 
-// What it means for a directory to be connected, written as a file the tools
-// in it can read.
-//
-// TOML, in tables, so each block can grow without moving the others. This
-// file carries WORKSPACE TRUTH only — which memcell, which space — the facts
-// that are the same for every person who clones the repository, which is
-// what makes committing it a feature. Identity is personal and lives in the
-// machine keyring: the agent, the key's id and the key itself belong to
-// whoever paired this machine, so a teammate's connect never rewrites a
-// committed file.
+// Dedicated workspace folder and file names
+export const WORKSPACE_DIR = ".memcell";
+export const WORKSPACE_CONFIG_FILE = "config.toml";
+export const WORKSPACE_GITIGNORE = ".gitignore";
 
-export const WORKSPACE_FILE = ".memcell";
+// Canonical path to config file relative to project root
+export const WORKSPACE_FILE = join(WORKSPACE_DIR, WORKSPACE_CONFIG_FILE);
 export const PROJECT_FILE = WORKSPACE_FILE;
 
-/** Where the workspace file goes when `.memcell` is taken by a DIRECTORY —
- *  the embedded record's own data dir claims that name in any workspace
- *  running the single-process story, and writing a file over a directory
- *  is not a connect, it is a crash. Both names are read; the classic one
- *  is preferred wherever it exists as a file. */
+// Legacy single-file formats that are automatically self-healed into .memcell/
+export const LEGACY_WORKSPACE_FILES = [".memcell", ".memcell.toml"] as const;
 export const WORKSPACE_FILE_ASIDE = ".memcell.toml";
 export const PROJECT_FILE_ASIDE = WORKSPACE_FILE_ASIDE;
+
+const DEFAULT_GITIGNORE = `# MemCell project workspace local state
+*
+!.gitignore
+!config.toml
+`;
 
 export interface Workspace {
   /** Which memcell — a key minted against a laptop's dev server must never
@@ -49,6 +47,15 @@ export interface Workspace {
 
 export type Project = Workspace;
 
+export interface FoundWorkspace {
+  workspace: Workspace;
+  project: Workspace;
+  /** Absolute path to .memcell/config.toml */
+  at: string;
+  /** Absolute path to the project root directory containing .memcell/ */
+  root: string;
+}
+
 interface Doc {
   instance?: { url?: string };
   workspace?: { id?: string; slug?: string; owner?: string; paused?: boolean };
@@ -59,31 +66,35 @@ interface Doc {
 }
 
 function fromToml(text: string): Workspace | null {
-  const doc = parse(text) as Doc;
-  const instance = doc.instance?.url;
-  const slug = doc.workspace?.slug ?? doc.project?.slug ?? doc.space?.slug;
-  if (!instance || !slug) return null;
-  const id = doc.workspace?.id ?? doc.project?.id ?? doc.space?.id;
-  const owner = doc.workspace?.owner ?? doc.project?.owner ?? doc.space?.owner;
-  const paused =
-    typeof doc.workspace?.paused === "boolean"
-      ? doc.workspace.paused
-      : typeof doc.project?.paused === "boolean"
-        ? doc.project.paused
-        : typeof doc.paused === "boolean"
-          ? doc.paused
-          : undefined;
-  return {
-    instance,
-    owner,
-    workspace: slug,
-    workspaceId: id,
-    project: slug,
-    projectId: id,
-    space: slug,
-    spaceId: id,
-    ...(typeof paused === "boolean" ? { paused } : {}),
-  };
+  try {
+    const doc = parse(text) as Doc;
+    const instance = doc.instance?.url;
+    const slug = doc.workspace?.slug ?? doc.project?.slug ?? doc.space?.slug;
+    if (!instance || !slug) return null;
+    const id = doc.workspace?.id ?? doc.project?.id ?? doc.space?.id;
+    const owner = doc.workspace?.owner ?? doc.project?.owner ?? doc.space?.owner;
+    const paused =
+      typeof doc.workspace?.paused === "boolean"
+        ? doc.workspace.paused
+        : typeof doc.project?.paused === "boolean"
+          ? doc.project.paused
+          : typeof doc.paused === "boolean"
+            ? doc.paused
+            : undefined;
+    return {
+      instance,
+      owner,
+      workspace: slug,
+      workspaceId: id,
+      project: slug,
+      projectId: id,
+      space: slug,
+      spaceId: id,
+      ...(typeof paused === "boolean" ? { paused } : {}),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function toToml(workspace: Workspace, existingDoc?: Doc): string {
@@ -101,22 +112,11 @@ function toToml(workspace: Workspace, existingDoc?: Doc): string {
     slug,
   };
 
-  const projectTable = {
-    ...(typeof existingDoc?.project === "object" && existingDoc?.project
-      ? existingDoc.project
-      : {}),
-    ...(id ? { id } : {}),
-    ...(owner ? { owner } : {}),
-    slug,
-  };
-
   if (typeof paused === "boolean") {
     if (paused) {
       workspaceTable.paused = true;
-      projectTable.paused = true;
     } else {
       delete workspaceTable.paused;
-      delete projectTable.paused;
     }
   }
 
@@ -129,16 +129,75 @@ function toToml(workspace: Workspace, existingDoc?: Doc): string {
       url: workspace.instance,
     },
     workspace: workspaceTable,
-    project: projectTable,
-    space: {
-      ...(typeof existingDoc?.space === "object" && existingDoc?.space ? existingDoc.space : {}),
-      ...(id ? { id } : {}),
-      ...(owner ? { owner } : {}),
-      slug,
-    },
   };
+  delete (doc as any).project;
+  delete (doc as any).space;
   delete doc.paused;
   return stringify(doc);
+}
+
+/**
+ * Resolves the project root directory from a FoundWorkspace object or path.
+ */
+export function workspaceRoot(found: { at: string; root?: string }): string {
+  if (found.root) return found.root;
+  if (found.at.endsWith(WORKSPACE_CONFIG_FILE)) {
+    return dirname(dirname(found.at));
+  }
+  return dirname(found.at);
+}
+
+/**
+ * Ensures the .memcell/ directory has a valid .gitignore file.
+ */
+export async function ensureGitignore(dotMemcellDir: string): Promise<void> {
+  const gitignorePath = join(dotMemcellDir, WORKSPACE_GITIGNORE);
+  try {
+    const s = await stat(gitignorePath);
+    if (s.size === 0) {
+      await writeFile(gitignorePath, DEFAULT_GITIGNORE, { mode: 0o644 });
+    }
+  } catch {
+    await writeFile(gitignorePath, DEFAULT_GITIGNORE, { mode: 0o644 }).catch(() => {});
+  }
+}
+
+/**
+ * Self-heals a legacy workspace (single `.memcell` or `.memcell.toml` file)
+ * into a dedicated `.memcell/` directory with `config.toml` and `.gitignore`.
+ */
+async function selfHealLegacyFile(dir: string, legacyFile: string): Promise<FoundWorkspace | null> {
+  const legacyPath = join(dir, legacyFile);
+  try {
+    const s = await stat(legacyPath);
+    if (!s.isFile()) return null;
+    const content = await readFile(legacyPath, "utf8");
+    const ws = fromToml(content);
+    if (!ws) return null;
+
+    // Delete legacy file before directory creation
+    await rm(legacyPath, { force: true });
+    const legacyAside = join(dir, WORKSPACE_FILE_ASIDE);
+    if (legacyAside !== legacyPath) {
+      await rm(legacyAside, { force: true }).catch(() => {});
+    }
+
+    const dotMemcellDir = join(dir, WORKSPACE_DIR);
+    await mkdir(dotMemcellDir, { recursive: true });
+    const configPath = join(dotMemcellDir, WORKSPACE_CONFIG_FILE);
+
+    await writeFile(configPath, `${toToml(ws)}\n`, { mode: 0o600 });
+    await ensureGitignore(dotMemcellDir);
+
+    return {
+      workspace: ws,
+      project: ws,
+      at: configPath,
+      root: dir,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -163,9 +222,7 @@ export async function findGitRoot(from: string = process.cwd()): Promise<string 
 /**
  * Finds the first connected workspace among multiple workspace root paths.
  */
-export async function findWorkspaceFromRoots(
-  roots: string[],
-): Promise<{ workspace: Workspace; project: Workspace; at: string } | null> {
+export async function findWorkspaceFromRoots(roots: string[]): Promise<FoundWorkspace | null> {
   for (const root of roots) {
     try {
       const found = await findWorkspace(root);
@@ -181,28 +238,77 @@ export const findProjectFromRoots = findWorkspaceFromRoots;
 
 /**
  * The nearest connected directory at or above `from`.
- *
- * Walking up is what makes this usable: agents run from wherever a task put
- * them, rarely the repository root, and a workspace that only answers from its
- * own top directory is unconnected half the time.
+ * Automatically self-heals legacy `.memcell` or `.memcell.toml` files into `.memcell/config.toml`.
  */
-export async function findWorkspace(
-  from: string = process.cwd(),
-): Promise<{ workspace: Workspace; project: Workspace; at: string } | null> {
+export async function findWorkspace(from: string = process.cwd()): Promise<FoundWorkspace | null> {
   let dir = resolve(from);
   for (;;) {
-    for (const name of [WORKSPACE_FILE, WORKSPACE_FILE_ASIDE]) {
-      const at = join(dir, name);
+    const dotMemcell = join(dir, WORKSPACE_DIR);
+    const legacyAside = join(dir, WORKSPACE_FILE_ASIDE);
+
+    try {
+      const s = await stat(dotMemcell);
+      if (s.isDirectory()) {
+        await ensureGitignore(dotMemcell);
+        const configPath = join(dotMemcell, WORKSPACE_CONFIG_FILE);
+        try {
+          const cs = await stat(configPath);
+          if (cs.isFile()) {
+            const raw = await readFile(configPath, "utf8");
+            const ws = fromToml(raw);
+            if (ws) {
+              await ensureGitignore(dotMemcell);
+              await rm(legacyAside, { force: true }).catch(() => {});
+              if (raw.includes("[project]") || raw.includes("[space]")) {
+                let existingDoc: Doc | undefined;
+                try {
+                  existingDoc = parse(raw) as Doc;
+                } catch {
+                  // ignore
+                }
+                await writeFile(configPath, `${toToml(ws, existingDoc)}\n`, { mode: 0o600 }).catch(
+                  () => {},
+                );
+              }
+              return { workspace: ws, project: ws, at: configPath, root: dir };
+            }
+          }
+        } catch {
+          // config.toml not in .memcell/ yet, check if legacy .memcell.toml is beside it
+          try {
+            const as = await stat(legacyAside);
+            if (as.isFile()) {
+              const rawAside = await readFile(legacyAside, "utf8");
+              const wsAside = fromToml(rawAside);
+              if (wsAside) {
+                await writeFile(configPath, `${toToml(wsAside)}\n`, { mode: 0o600 });
+                await ensureGitignore(dotMemcell);
+                await rm(legacyAside, { force: true }).catch(() => {});
+                return { workspace: wsAside, project: wsAside, at: configPath, root: dir };
+              }
+            }
+          } catch {
+            // Neither exists
+          }
+        }
+      } else if (s.isFile()) {
+        // .memcell exists as a FILE: self-heal it to a dedicated directory!
+        const healed = await selfHealLegacyFile(dir, WORKSPACE_DIR);
+        if (healed) return healed;
+      }
+    } catch {
+      // .memcell does not exist, check if legacy .memcell.toml exists alone
       try {
-        const s = await stat(at);
-        if (s.isFile()) {
-          const ws = fromToml(await readFile(at, "utf8"));
-          if (ws) return { workspace: ws, project: ws, at };
+        const as = await stat(legacyAside);
+        if (as.isFile()) {
+          const healed = await selfHealLegacyFile(dir, WORKSPACE_FILE_ASIDE);
+          if (healed) return healed;
         }
       } catch {
-        // Not here (or unreadable); try the other, then up.
+        // Neither exists in this directory
       }
     }
+
     const up = dirname(dir);
     if (up === dir) return null;
     dir = up;
@@ -212,56 +318,51 @@ export async function findWorkspace(
 export const findProject = findWorkspace;
 
 /**
- * Saves workspace configuration into the workspace file.
- *
- * If `at` points to an existing file (e.g. `found.at`), that file is updated.
- * If `at` is a directory or omitted, it targets the git repository root if in a git repo,
- * or the specified directory / cwd.
- * Preserves other TOML tables (such as `[config]`) already present in the file.
+ * Saves workspace configuration into the dedicated `.memcell/config.toml` file.
  */
 export async function saveWorkspace(ws: Workspace, at?: string): Promise<string> {
-  let targetFile: string;
+  let projectRoot: string;
 
   if (at) {
     const resolvedAt = resolve(at);
-    let isDir = false;
-    let isFile = false;
+    let s: any = null;
     try {
-      const s = await stat(resolvedAt);
-      isDir = s.isDirectory();
-      isFile = s.isFile();
+      s = await stat(resolvedAt);
     } catch {
-      // Does not exist yet: if it ends with .memcell or .memcell.toml, treat as file path
-      if (resolvedAt.endsWith(WORKSPACE_FILE) || resolvedAt.endsWith(WORKSPACE_FILE_ASIDE)) {
-        isFile = true;
+      // Does not exist yet
+    }
+
+    if (s?.isDirectory()) {
+      if (resolvedAt.endsWith(WORKSPACE_DIR) || resolvedAt.endsWith(`/${WORKSPACE_DIR}`)) {
+        projectRoot = dirname(resolvedAt);
+      } else {
+        projectRoot = resolvedAt;
+      }
+    } else if (s?.isFile()) {
+      if (resolvedAt.endsWith(WORKSPACE_CONFIG_FILE)) {
+        projectRoot = dirname(dirname(resolvedAt));
+      } else {
+        projectRoot = dirname(resolvedAt);
+      }
+    } else {
+      if (resolvedAt.endsWith(join(WORKSPACE_DIR, WORKSPACE_CONFIG_FILE))) {
+        projectRoot = dirname(dirname(resolvedAt));
+      } else if (resolvedAt.endsWith(WORKSPACE_DIR)) {
+        projectRoot = dirname(resolvedAt);
+      } else {
+        projectRoot = resolvedAt;
       }
     }
-
-    if (isFile) {
-      targetFile = resolvedAt;
-    } else if (isDir) {
-      const classic = join(resolvedAt, WORKSPACE_FILE);
-      const taken = await stat(classic)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
-      targetFile = taken ? join(resolvedAt, WORKSPACE_FILE_ASIDE) : classic;
-    } else {
-      // Target does not exist; if no extension or not named WORKSPACE_FILE, treat as dir
-      const classic = join(resolvedAt, WORKSPACE_FILE);
-      targetFile = classic;
-    }
   } else {
-    // No target given: check if in a git repository
     const gitRoot = await findGitRoot(process.cwd());
-    const targetDir = gitRoot ?? resolve(process.cwd());
-    const classic = join(targetDir, WORKSPACE_FILE);
-    const taken = await stat(classic)
-      .then((s) => s.isDirectory())
-      .catch(() => false);
-    targetFile = taken ? join(targetDir, WORKSPACE_FILE_ASIDE) : classic;
+    projectRoot = gitRoot ?? resolve(process.cwd());
   }
 
-  // Preserve existing TOML tables
+  const dotMemcellDir = join(projectRoot, WORKSPACE_DIR);
+  await mkdir(dotMemcellDir, { recursive: true });
+
+  const targetFile = join(dotMemcellDir, WORKSPACE_CONFIG_FILE);
+
   let existingDoc: Doc | undefined;
   try {
     const raw = await readFile(targetFile, "utf8");
@@ -271,13 +372,25 @@ export async function saveWorkspace(ws: Workspace, at?: string): Promise<string>
   }
 
   await writeFile(targetFile, `${toToml(ws, existingDoc)}\n`, { mode: 0o600 });
+  await ensureGitignore(dotMemcellDir);
+
+  // Clean up any legacy file
+  await rm(join(projectRoot, WORKSPACE_FILE_ASIDE), { force: true }).catch(() => {});
+
   return targetFile;
 }
 
 export const saveProject = saveWorkspace;
 
+/**
+ * Removes the dedicated `.memcell/` directory.
+ */
 export async function removeWorkspace(at: string): Promise<void> {
-  await rm(at, { force: true });
+  let targetDir = resolve(at);
+  if (targetDir.endsWith(WORKSPACE_CONFIG_FILE)) {
+    targetDir = dirname(targetDir);
+  }
+  await rm(targetDir, { recursive: true, force: true });
 }
 
 export const removeProject = removeWorkspace;
@@ -289,12 +402,12 @@ export const removeProject = removeWorkspace;
 export async function setWorkspacePaused(
   paused: boolean,
   at?: string,
-): Promise<{ workspace: Workspace; project: Workspace; at: string } | null> {
+): Promise<FoundWorkspace | null> {
   const found = at ? await findWorkspace(at) : await findWorkspace();
   if (!found || !found.workspace) return null;
   const updated: Workspace = { ...found.workspace, paused };
   await saveWorkspace(updated, found.at);
-  return { workspace: updated, project: updated, at: found.at };
+  return { workspace: updated, project: updated, at: found.at, root: found.root };
 }
 
 export const setProjectPaused = setWorkspacePaused;

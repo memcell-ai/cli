@@ -163,6 +163,260 @@ export const FLAGS: Record<string, FlagSpec> = {
     name: "all",
     what: "delete all versions instead of only the latest version",
   },
+  outcome: {
+    name: "outcome",
+    takes: "verdict",
+    what: "outcome filter: worked · failed",
+  },
+  subject: {
+    name: "subject",
+    takes: "entity",
+    what: "semantic domain entity or topic anchor",
+  },
+  "memory-id": {
+    name: "memory-id",
+    takes: "id",
+    what: "target memory ID",
+  },
+  memory: {
+    name: "memory",
+    takes: "id",
+    what: "target memory ID",
+  },
+  summary: {
+    name: "summary",
+    takes: "text",
+    what: "summary or note explaining the outcome",
+  },
+  target: {
+    name: "target",
+    takes: "id",
+    what: "target entity or memory ID",
+  },
+  roles: {
+    name: "roles",
+    takes: "roles",
+    what: "comma-separated required roles for duplex RBAC",
+  },
+  context: {
+    name: "context",
+    takes: "text",
+    what: "contextual background or rationale",
+  },
+  observation: {
+    name: "observation",
+    takes: "text",
+    what: "empirical observation anchor",
+  },
+  enforce: {
+    name: "enforce",
+    what: "enforce as strict operational guard directive",
+  },
+  "min-confidence": {
+    name: "min-confidence",
+    takes: "float",
+    what: "minimum calibrated confidence threshold (0.0 to 1.0)",
+  },
+  "confidence-floor": {
+    name: "confidence-floor",
+    takes: "float",
+    what: "confidence floor threshold (0.0 to 1.0)",
+  },
+  floor: {
+    name: "floor",
+    takes: "float",
+    what: "confidence floor threshold (0.0 to 1.0)",
+  },
+  confidence: {
+    name: "confidence",
+    takes: "float",
+    what: "confidence score (0.0 to 1.0)",
+  },
+  "allow-provisional": {
+    name: "allow-provisional",
+    what: "include provisional uncalibrated memories",
+  },
+  provisional: {
+    name: "provisional",
+    what: "include provisional uncalibrated memories",
+  },
+  "my-memory": {
+    name: "my-memory",
+    what: "include authenticated caller personal memory",
+  },
+  my: {
+    name: "my",
+    what: "include authenticated caller personal memory",
+  },
+  metadata: {
+    name: "metadata",
+    what: "include memory metadata in recall response",
+  },
+  sso: {
+    name: "sso",
+    takes: "slug",
+    what: "single sign-on organization slug",
+  },
+  org: {
+    name: "org",
+    takes: "slug",
+    what: "organization slug",
+  },
+  slug: {
+    name: "slug",
+    takes: "slug",
+    what: "custom URL-friendly slug",
+  },
+  framework: {
+    name: "framework",
+    takes: "name",
+    what: "agent framework name",
+  },
+  model: {
+    name: "model",
+    takes: "name",
+    what: "agent model identifier",
+  },
+  health: {
+    name: "health",
+    takes: "status",
+    what: "agent health status filter",
+  },
+  team: {
+    name: "team",
+    takes: "id",
+    what: "team ID filter",
+  },
+  "no-key": {
+    name: "no-key",
+    what: "skip generating an agent access key",
+  },
+  permission: {
+    name: "permission",
+    takes: "level",
+    what: "granted permission level: read · write · admin",
+  },
+  actor: {
+    name: "actor",
+    takes: "id",
+    what: "audit log actor ID filter",
+  },
+  "actor-type": {
+    name: "actor-type",
+    takes: "type",
+    what: "audit log actor type filter",
+  },
+  action: {
+    name: "action",
+    takes: "name",
+    what: "audit log action filter",
+  },
+  "target-type": {
+    name: "target-type",
+    takes: "type",
+    what: "audit log target type filter",
+  },
+  "target-id": {
+    name: "target-id",
+    takes: "id",
+    what: "audit log target ID filter",
+  },
+  from: {
+    name: "from",
+    takes: "iso",
+    what: "start timestamp filter",
+  },
+  events: {
+    name: "events",
+    takes: "events",
+    what: "comma-separated subscribed event names or *",
+  },
+  secret: {
+    name: "secret",
+    takes: "secret",
+    what: "shared HMAC signing secret for webhook payloads",
+  },
+  endpoint: {
+    name: "endpoint",
+    takes: "url",
+    what: "webhook delivery destination URL",
+  },
+  disabled: {
+    name: "disabled",
+    what: "set webhook delivery status to disabled",
+  },
+  "provider-id": {
+    name: "provider-id",
+    takes: "id",
+    what: "SSO provider configuration ID",
+  },
+  provider: {
+    name: "provider",
+    takes: "type",
+    what: "SSO provider type (e.g. saml, oidc)",
+  },
+  domain: {
+    name: "domain",
+    takes: "domain",
+    what: "corporate email domain for SSO routing",
+  },
+  "metadata-url": {
+    name: "metadata-url",
+    takes: "url",
+    what: "SAML IdP metadata XML endpoint URL",
+  },
+  "metadata-xml": {
+    name: "metadata-xml",
+    takes: "xml",
+    what: "SAML IdP metadata raw XML string",
+  },
+  "client-id": {
+    name: "client-id",
+    takes: "id",
+    what: "OIDC client ID",
+  },
+  "client-secret": {
+    name: "client-secret",
+    takes: "secret",
+    what: "OIDC client secret",
+  },
+  issuer: {
+    name: "issuer",
+    takes: "url",
+    what: "OIDC issuer URL",
+  },
+  "authorization-endpoint": {
+    name: "authorization-endpoint",
+    takes: "url",
+    what: "OIDC authorization endpoint URL",
+  },
+  "token-endpoint": {
+    name: "token-endpoint",
+    takes: "url",
+    what: "OIDC token endpoint URL",
+  },
+  "user-info-endpoint": {
+    name: "user-info-endpoint",
+    takes: "url",
+    what: "OIDC userinfo endpoint URL",
+  },
+  "jwks-uri": {
+    name: "jwks-uri",
+    takes: "url",
+    what: "OIDC JSON Web Key Set (JWKS) URL",
+  },
+  enable: {
+    name: "enable",
+    what: "enforce SSO requirement",
+  },
+  disable: {
+    name: "disable",
+    what: "disable SSO requirement",
+  },
+  off: {
+    name: "off",
+    what: "disable SSO requirement",
+  },
 };
 
 /** Universal flags accepted across all commands without throwing unknown flag errors. */

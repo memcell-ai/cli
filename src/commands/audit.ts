@@ -40,7 +40,7 @@ function missingOrg(instance: string): number {
     row(
       1,
       [warn("organization required")],
-      [label("specify --org <slug> or set active org with"), cmd("memcell orgs use <slug>")],
+      [label("specify --org <slug> or set active org with"), cmd("memcell org use <slug>")],
     ),
   );
   return 1;
@@ -67,7 +67,6 @@ export async function listAuditLogs(
       query.set("targetType", flags["target-type"].trim());
     if (typeof flags["target-id"] === "string") query.set("targetId", flags["target-id"].trim());
     if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
-    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     if (typeof flags.team === "string") query.set("teamId", flags.team.trim());
     if (typeof flags.from === "string") query.set("from", flags.from.trim());
     if (typeof flags.to === "string") query.set("to", flags.to.trim());
@@ -148,7 +147,6 @@ export async function exportAuditLogs(
     if (typeof flags.to === "string") query.set("to", flags.to.trim());
     if (typeof flags.action === "string") query.set("action", flags.action.trim());
     if (typeof flags.workspace === "string") query.set("workspaceId", flags.workspace.trim());
-    else if (typeof flags.project === "string") query.set("workspaceId", flags.project.trim());
     const qs = `?${query.toString()}`;
 
     const exportData = await call<string>(

@@ -6,6 +6,7 @@ import {
   badge,
   bad,
   cmd,
+  emit,
   good,
   id as idSeg,
   label,
@@ -81,12 +82,12 @@ export async function listMemories(
       q,
     });
 
-    const items = res.items || [];
+    const items = res.items || res.memories || [];
     if (items.length === 0) {
       say(
-        row(0, [badge("memcell"), label("memories"), place(namespace)]),
+        row(0, [badge("memcell"), label("memory"), place(namespace)]),
         row(1, [label("no memories found matching criteria")]),
-        row(2, [label("record one with"), cmd("memcell memories create <text>")]),
+        row(2, [label("record one with"), cmd("memcell memory create <text>")]),
       );
       return 0;
     }
@@ -94,7 +95,7 @@ export async function listMemories(
     say(
       row(
         0,
-        [badge("memcell"), label("memories"), place(namespace)],
+        [badge("memcell"), label("memory"), place(namespace)],
         [variant(`${items.length}${res.pagination?.total ? ` of ${res.pagination.total}` : ""}`)],
       ),
       ...items.flatMap((s: any) => [
@@ -109,7 +110,7 @@ export async function listMemories(
         ),
         row(2, [idSeg(s.id)]),
       ]),
-      row(2, [label("inspect one with"), cmd("memcell memories get <id>")]),
+      row(2, [label("inspect one with"), cmd("memcell memory get <id>")]),
     );
     return 0;
   } catch (error) {
@@ -128,7 +129,8 @@ export async function getMemory(
     const target = getTargetWorkspace(flags);
     const namespace = await resolveNamespace(sdk, target);
 
-    const s = await memClient.get(namespace, memoryId);
+    const rawMem = await memClient.get(namespace, memoryId);
+    const s = (rawMem as any)?.memory || rawMem;
 
     let rels: { incoming: any[]; outgoing: any[] } = { incoming: [], outgoing: [] };
     try {
@@ -282,7 +284,7 @@ export async function createMemory(
     } as any);
 
     say(
-      row(0, [badge("memcell"), label("memories create"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory create"), place(namespace)]),
       row(
         1,
         [good("created")],
@@ -343,7 +345,7 @@ export async function updateMemory(
     });
 
     say(
-      row(0, [badge("memcell"), label("memories update"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory update"), place(namespace)]),
       row(1, [good("updated")], [idSeg(updated.id)]),
       row(2, [label(updated.title)]),
     );
@@ -377,7 +379,7 @@ export async function deleteMemory(
         : "deleted";
 
     say(
-      row(0, [badge("memcell"), label("memories delete"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory delete"), place(namespace)]),
       row(1, [good(detail)], [idSeg(memoryId)]),
     );
     return 0;
@@ -400,7 +402,7 @@ export async function starMemory(
     const res = await memClient.star(namespace, memoryId);
 
     say(
-      row(0, [badge("memcell"), label("memories star"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory star"), place(namespace)]),
       row(1, [good(res.starred ? "starred" : "unstarred")], [idSeg(memoryId)]),
     );
     return 0;
@@ -423,7 +425,7 @@ export async function historyMemory(
     const res = await memClient.history(namespace, memoryId);
 
     say(
-      row(0, [badge("memcell"), label("memories history"), place(namespace)], [idSeg(memoryId)]),
+      row(0, [badge("memcell"), label("memory history"), place(namespace)], [idSeg(memoryId)]),
       ...((res as any).history || (res as any).items || []).map((h: any) =>
         row(
           1,
@@ -460,7 +462,7 @@ export async function adoptMemory(
     const targetInfo = res.adopted?.[0];
 
     say(
-      row(0, [badge("memcell"), label("memories adopt"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory adopt"), place(namespace)]),
       row(1, [good("adopted into")], [value(into)]),
       row(2, [idSeg(targetInfo?.memoryId || memoryId)]),
     );
@@ -507,7 +509,7 @@ export async function relateMemories(
     }
 
     say(
-      row(0, [badge("memcell"), label("memories relate"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory relate"), place(namespace)]),
       row(
         1,
         [good("connected")],
@@ -550,7 +552,7 @@ export async function unrelateMemories(
     }
 
     say(
-      row(0, [badge("memcell"), label("memories unrelate"), place(namespace)]),
+      row(0, [badge("memcell"), label("memory unrelate"), place(namespace)]),
       row(1, [good("unrelated")], [idSeg(relationId)]),
     );
     return 0;
@@ -561,7 +563,7 @@ export async function unrelateMemories(
 
 export async function memoryRelations(
   instance: string,
-  memoryId: string,
+  memoryId?: string,
   flags: Record<string, string | true> = {},
 ): Promise<number> {
   try {
@@ -571,6 +573,61 @@ export async function memoryRelations(
     const namespace = await resolveNamespace(sdk, target);
 
     const relNamespace = (memClient as any).relations;
+
+    if (!memoryId) {
+      // Workspace-wide listing
+      const page = typeof flags.page === "string" ? parseInt(flags.page, 10) : 1;
+      const perPage = typeof flags.limit === "string" ? parseInt(flags.limit, 10) : 30;
+      const relationType = typeof flags.type === "string" ? (flags.type as any) : undefined;
+
+      let res: any;
+      if (relNamespace?.listWorkspace) {
+        res = await relNamespace.listWorkspace(namespace, { page, perPage, relationType });
+      } else {
+        const parts = namespace.split("/");
+        const q = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+        if (relationType) q.set("type", relationType);
+        res = await (sdk as any).request(
+          `/api/v1/${encodeURIComponent(parts[0] || "")}/${encodeURIComponent(parts[1] || "")}/relations?${q.toString()}`,
+          { method: "GET" },
+        );
+      }
+
+      if (flags.json === true) {
+        emit(JSON.stringify(res, null, 2) + "\n");
+        return 0;
+      }
+
+      const items = res.items || res.relations || [];
+      if (items.length === 0) {
+        say(
+          row(0, [badge("memcell"), label("workspace relations"), place(namespace)]),
+          row(1, [label("no relations declared across this workspace")]),
+          row(2, [label("declare one with"), cmd("memcell memory relate <sourceId> <targetId>")]),
+        );
+        return 0;
+      }
+
+      say(
+        row(
+          0,
+          [badge("memcell"), label("workspace relations"), place(namespace)],
+          [variant(`${items.length} relation${items.length === 1 ? "" : "s"}`)],
+        ),
+        ...items.map((r: any) =>
+          row(
+            1,
+            [idSeg(r.sourceId || r.source_id)],
+            [variant(`--${r.relationType || r.relation_type}-->`)],
+            [idSeg(r.targetId || r.target_id)],
+            [value(r.confidence !== undefined ? Number(r.confidence).toFixed(2) : "0.90")],
+            [idSeg(r.id)],
+          ),
+        ),
+      );
+      return 0;
+    }
+
     let res: { incoming: any[]; outgoing: any[] };
 
     if (relNamespace?.list) {
@@ -592,7 +649,7 @@ export async function memoryRelations(
         row(1, [label("no relations declared for this memory")]),
         row(2, [
           label("relate to another with"),
-          cmd(`memcell memories relate ${memoryId} <targetId> --type <type>`),
+          cmd(`memcell memory relate ${memoryId} <targetId> --type <type>`),
         ]),
       );
       return 0;

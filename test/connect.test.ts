@@ -130,7 +130,7 @@ describe("connect idempotency & self-healing", () => {
     expect(found).not.toBeNull();
     expect(found?.project.project).toBe("fresh-proj");
 
-    const content = await readFile(join(freshDir, ".memcell"), "utf8");
+    const content = await readFile(join(freshDir, ".memcell", "config.toml"), "utf8");
     expect(content).toContain('slug = "fresh-proj"');
   });
 
@@ -158,7 +158,7 @@ describe("connect idempotency & self-healing", () => {
     expect(found?.project.owner).toBe("acme");
     expect(found?.project.project).toBe("analytics");
 
-    const content = await readFile(join(orgDir, ".memcell"), "utf8");
+    const content = await readFile(join(orgDir, ".memcell", "config.toml"), "utf8");
     expect(content).toContain('owner = "acme"');
     expect(content).toContain('slug = "analytics"');
   });

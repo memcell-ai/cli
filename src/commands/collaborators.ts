@@ -34,7 +34,7 @@ function refused(instance: string, failure: Error): number {
 
 export async function listCollaborators(
   instance: string,
-  targetProject?: string,
+  targetWorkspace?: string,
   flags: Record<string, string | true> = {},
 ): Promise<number> {
   if (!(await credentialFor(instance))) {
@@ -44,7 +44,7 @@ export async function listCollaborators(
 
   try {
     const sdk = await getSdkClient(instance);
-    const namespace = await resolveNamespace(sdk, targetProject || (flags.project as string));
+    const namespace = await resolveNamespace(sdk, targetWorkspace || (flags.workspace as string));
 
     const role = typeof flags.role === "string" ? (flags.role as any) : undefined;
     const res = await sdk.collaborators.list(namespace, { role });
@@ -55,7 +55,7 @@ export async function listCollaborators(
     say(
       row(
         0,
-        [badge("memcell"), label("collaborators"), place(namespace)],
+        [badge("memcell"), label("collaborator"), place(namespace)],
         [variant(`${members.length} member${members.length === 1 ? "" : "s"}`)],
       ),
       ...members.map((c) =>
@@ -82,7 +82,7 @@ export async function listCollaborators(
             ),
           ]
         : []),
-      row(2, [label("invite one with"), cmd("memcell collaborators invite <email> --role <role>")]),
+      row(2, [label("invite one with"), cmd("memcell collaborator invite <email> --role <role>")]),
     );
     return 0;
   } catch (error) {
@@ -104,12 +104,12 @@ export async function inviteCollaborator(
 
   try {
     const sdk = await getSdkClient(instance);
-    const namespace = await resolveNamespace(sdk, flags.project as string);
+    const namespace = await resolveNamespace(sdk, flags.workspace as string);
 
     const inv = await sdk.collaborators.invite(namespace, { identifier: email, role });
 
     say(
-      row(0, [badge("memcell"), label("collaborators invite"), place(namespace)]),
+      row(0, [badge("memcell"), label("collaborator invite"), place(namespace)]),
       row(1, [good("invited")], [value(email)], [label("as"), variant(role)]),
       row(2, [idSeg(inv.id)]),
     );
@@ -137,12 +137,12 @@ export async function updateCollaboratorRole(
 
   try {
     const sdk = await getSdkClient(instance);
-    const namespace = await resolveNamespace(sdk, flags.project as string);
+    const namespace = await resolveNamespace(sdk, flags.workspace as string);
 
     await sdk.collaborators.updateRole(namespace, userId, role);
 
     say(
-      row(0, [badge("memcell"), label("collaborators update-role"), place(namespace)]),
+      row(0, [badge("memcell"), label("collaborator update-role"), place(namespace)]),
       row(1, [good("updated role")], [value(userId)], [label("to"), variant(role)]),
     );
     return 0;
@@ -163,12 +163,12 @@ export async function removeCollaborator(
 
   try {
     const sdk = await getSdkClient(instance);
-    const namespace = await resolveNamespace(sdk, flags.project as string);
+    const namespace = await resolveNamespace(sdk, flags.workspace as string);
 
     await sdk.collaborators.remove(namespace, userId);
 
     say(
-      row(0, [badge("memcell"), label("collaborators remove"), place(namespace)]),
+      row(0, [badge("memcell"), label("collaborator remove"), place(namespace)]),
       row(1, [good("removed")], [value(userId)]),
     );
     return 0;
@@ -189,12 +189,12 @@ export async function revokeCollaboratorInvite(
 
   try {
     const sdk = await getSdkClient(instance);
-    const namespace = await resolveNamespace(sdk, flags.project as string);
+    const namespace = await resolveNamespace(sdk, flags.workspace as string);
 
     await sdk.collaborators.revokeInvitation(namespace, invitationId);
 
     say(
-      row(0, [badge("memcell"), label("collaborators revoke-invite"), place(namespace)]),
+      row(0, [badge("memcell"), label("collaborator revoke-invite"), place(namespace)]),
       row(1, [good("revoked invitation")], [idSeg(invitationId)]),
     );
     return 0;

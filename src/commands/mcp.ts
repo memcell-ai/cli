@@ -1,4 +1,4 @@
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -13,7 +13,12 @@ import {
 
 import { agentKeyForProject, listConnectedProjects } from "../keyring.js";
 import { detectActiveRuntimeModel } from "../model-detect.js";
-import { findWorkspace, findWorkspaceFromRoots, type Workspace } from "../workspace.js";
+import {
+  findWorkspace,
+  findWorkspaceFromRoots,
+  type Workspace,
+  type FoundWorkspace,
+} from "../workspace.js";
 
 // `memcell mcp` — the stdio face of the paired instance's /mcp endpoint.
 //
@@ -140,9 +145,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
 
   const upstreamPool = new Map<string, Client>();
 
-  async function resolveCurrentProject(
-    workspaceHint?: string,
-  ): Promise<{ project: Workspace; at: string } | null> {
+  async function resolveCurrentProject(workspaceHint?: string): Promise<FoundWorkspace | null> {
     // 1. Explicit workspace hint passed to tool call
     if (workspaceHint) {
       const found = await findWorkspace(workspaceHint).catch(() => null);
@@ -192,15 +195,21 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
         const found = await findWorkspace(c.projectPath).catch(() => null);
         if (found) return found;
       }
+      const projPath = c.projectPath ?? process.cwd();
+      const wsObj: Workspace = {
+        instance: c.instance,
+        owner: c.ownerSlug,
+        project: c.projectSlug ?? "default",
+        workspace: c.projectSlug ?? "default",
+        workspaceId: c.projectId,
+        projectId: c.projectId,
+        space: c.projectSlug ?? "default",
+      };
       return {
-        project: {
-          instance: c.instance,
-          owner: c.ownerSlug,
-          project: c.projectSlug ?? "default",
-          projectId: c.projectId,
-          space: c.projectSlug ?? "default",
-        },
-        at: c.projectPath ?? process.cwd(),
+        workspace: wsObj,
+        project: wsObj,
+        at: join(projPath, ".memcell", "config.toml"),
+        root: projPath,
       };
     }
 
@@ -248,7 +257,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
     const resolved = await resolveCurrentProject();
     if (resolved) {
       try {
-        const upstream = await getUpstreamClient(resolved.project, dirname(resolved.at));
+        const upstream = await getUpstreamClient(resolved.project, resolved.root);
         if (upstream) {
           return await upstream.listTools();
         }
@@ -281,7 +290,7 @@ export async function mcp(targetDir?: string, agentName?: string): Promise<numbe
       };
     }
 
-    const upstream = await getUpstreamClient(resolved.project, dirname(resolved.at));
+    const upstream = await getUpstreamClient(resolved.project, resolved.root);
     if (!upstream) {
       const projName =
         resolved.project.owner && resolved.project.project

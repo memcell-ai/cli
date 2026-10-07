@@ -2,7 +2,18 @@
 // loop in-process than shell out imports from here.
 
 export { call, MemcellError, whoami, type Session } from "./client.js";
-export { findWorkspace, removeWorkspace, saveWorkspace, type Workspace } from "./workspace.js";
+export {
+  ensureGitignore,
+  findWorkspace,
+  removeWorkspace,
+  saveWorkspace,
+  workspaceRoot,
+  WORKSPACE_DIR,
+  WORKSPACE_CONFIG_FILE,
+  WORKSPACE_GITIGNORE,
+  type Workspace,
+  type FoundWorkspace,
+} from "./workspace.js";
 export {
   credentialFor,
   DEFAULT_INSTANCE,
@@ -55,12 +66,10 @@ export class MemCell extends BaseMemCell {
       const captured = this._capturedMemories as any[] | undefined;
       if (captured && captured.length > 0) {
         res.memories = captured;
-      } else if (!res.memories && res.statements?.length) {
-        res.memories = res.statements;
       } else if (!res.memories && res.items?.length) {
         res.memories = res.items;
       } else if (!res.memories) {
-        res.memories = res.statements || [];
+        res.memories = [];
       }
     }
     return res;

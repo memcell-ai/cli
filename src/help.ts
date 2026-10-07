@@ -22,23 +22,73 @@ function block(commands: Command[], depth: number): Row[] {
   return commands.map((c) => row(depth, [cmd(pad(usage(c), width)), label(c.what)]));
 }
 
-/** The bare screen. Three commands tell the story; the rest are a nudge. */
-export function overview(): string {
-  const landing = COMMANDS.filter((c) => c.landing && !c.hidden);
-  const nounWidth = Math.max(...RESOURCES.map((r) => r.name.length)) + 2;
+interface Category {
+  title: string;
+  commands: string[];
+}
 
-  return render([
+const CATEGORIES: Category[] = [
+  {
+    title: "Lifecycle & Authentication",
+    commands: ["login", "logout", "connect", "status", "reset", "pause", "resume"],
+  },
+  {
+    title: "Agent Reasoning & Memory Loop",
+    commands: ["recall", "remember", "report", "sweep", "import", "export", "hook remove"],
+  },
+  {
+    title: "Epistemic Memory & Governance",
+    commands: ["workspace", "memory", "scope", "promotion"],
+  },
+  {
+    title: "Organizations, Teams & Agents",
+    commands: ["org", "team", "collaborator", "agent", "fleet", "webhook"],
+  },
+  {
+    title: "Platform Administration & Telemetry",
+    commands: ["account", "usage", "insights", "audit", "config", "operator"],
+  },
+];
+
+/** The bare screen. Complete categorized command surface. */
+export function overview(): string {
+  const categoryBlocks: { title: string; commands: Command[] }[] = [];
+  const allCategoryCommands: Command[] = [];
+
+  for (const cat of CATEGORIES) {
+    const cmds: Command[] = [];
+    for (const p of cat.commands) {
+      const found = COMMANDS.find((c) => c.path.join(" ") === p && !c.hidden);
+      if (found) {
+        cmds.push(found);
+        allCategoryCommands.push(found);
+      }
+    }
+    if (cmds.length > 0) {
+      categoryBlocks.push({ title: cat.title, commands: cmds });
+    }
+  }
+
+  const width = Math.max(...allCategoryCommands.map((c) => usage(c).length)) + 2;
+
+  const rows: Row[] = [
     row(0, [text("")]),
     row(0, [cmd("memcell"), label("— living memory for AI agents")]),
-    row(0, [text("")]),
-    ...block(landing, 0),
-    row(0, [text("")]),
-    row(0, [label("then, by what you are acting on")]),
-    ...RESOURCES.map((r) => row(0, [cmd(pad(r.name, nounWidth)), label(r.what)])),
-    row(0, [text("")]),
+  ];
+
+  for (const catBlock of categoryBlocks) {
+    rows.push(row(0, [text("")]));
+    rows.push(row(0, [label(catBlock.title)]));
+    for (const c of catBlock.commands) {
+      rows.push(row(0, [cmd(pad(usage(c), width)), label(c.what)]));
+    }
+  }
+
+  rows.push(row(0, [text("")]));
+  rows.push(
     row(
       0,
-      [label("everything"), cmd("memcell --help <name>")],
+      [label("everything"), cmd("memcell <command> --help")],
       [
         label("options:"),
         // Only flags a PERSON's command takes. A flag that exists solely for
@@ -50,14 +100,21 @@ export function overview(): string {
         ),
       ],
     ),
-    viaNpx() &&
+  );
+
+  if (viaNpx()) {
+    rows.push(
       row(
         0,
         [label("keep it"), value("npm install -g memcell")],
         [label("after that it is just"), value("memcell")],
       ),
-    row(0, [text("")]),
-  ]);
+    );
+  }
+
+  rows.push(row(0, [text("")]));
+
+  return render(rows);
 }
 
 /** One command, or one resource's verbs. */
@@ -65,7 +122,9 @@ export function detail(topic: string): string {
   const matching = COMMANDS.filter((c) => c.path[0] === topic && !c.hidden);
   if (matching.length === 0) return overview();
 
-  const flags = [...new Set(matching.flatMap((c) => c.takes ?? []))].map((name) => FLAGS[name]!);
+  const flags = [...new Set(matching.flatMap((c) => c.takes ?? []))].map(
+    (name) => FLAGS[name] ?? { name, what: "" },
+  );
   const width =
     Math.max(...flags.map((f) => (f.takes ? `--${f.name} <${f.takes}>` : `--${f.name}`).length)) +
     2;

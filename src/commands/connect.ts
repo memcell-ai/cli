@@ -18,7 +18,7 @@ import {
 } from "../instance.js";
 import { pruneProjectKeys, saveAgentKey } from "../keyring.js";
 import { resolveModelForAgent } from "../model-detect.js";
-import { findGitRoot, findWorkspace, WORKSPACE_FILE, saveWorkspace } from "../workspace.js";
+import { findGitRoot, findWorkspace, saveWorkspace, workspaceRoot } from "../workspace.js";
 import { ask, CAN_ASK, choose, type Choice } from "../select.js";
 import {
   badge,
@@ -58,6 +58,7 @@ export async function connect(
   instance: string,
   options: {
     pair?: string;
+    workspace?: string;
     project?: string;
     space?: string;
     agent?: string;
@@ -67,9 +68,10 @@ export async function connect(
 ): Promise<number> {
   const pair = options.pair?.trim();
   const existing = await findWorkspace(process.cwd()).catch(() => null);
-  let targetProject = (options.project || options.space)?.trim();
+  let targetProject = (options.workspace || options.project || options.space)?.trim();
 
-  const isInteractive = !pair && !options.project && !options.space && CAN_ASK();
+  const isInteractive =
+    !pair && !options.workspace && !options.project && !options.space && CAN_ASK();
 
   if (isInteractive) {
     let action: string | null = null;
@@ -409,7 +411,7 @@ export async function connect(
   const linked = exchanged.project || exchanged.space;
   const ownerSlug = exchanged.project?.ownerSlug || exchanged.space?.ownerSlug;
   const gitRoot = !existing ? await findGitRoot(process.cwd()) : null;
-  const targetPath = existing?.at ?? (gitRoot ? join(gitRoot, WORKSPACE_FILE) : process.cwd());
+  const projectRoot = existing?.root ?? gitRoot ?? process.cwd();
   const at = await saveWorkspace(
     {
       instance,
@@ -419,9 +421,8 @@ export async function connect(
       space: linked.slug,
       spaceId: linked.id,
     },
-    targetPath,
+    projectRoot,
   );
-  const projectRoot = dirname(at);
   await pruneProjectKeys(instance, projectRoot, undefined, linked.id);
   await saveAgentKey({
     instance,
@@ -488,14 +489,14 @@ export async function connect(
   // arrives later; the hooks above stay the enforcement.
   installSkill(process.cwd());
 
-  const projectUrl = ownerSlug
+  const workspaceUrl = ownerSlug
     ? `${instance}/${ownerSlug}/${linked.slug}`
-    : `${instance}/home?space=${linked.slug}`;
+    : `${instance}/home?workspace=${linked.slug}`;
 
-  const projectDisplay = ownerSlug ? `${ownerSlug}/${linked.slug}` : linked.slug;
+  const workspaceDisplay = ownerSlug ? `${ownerSlug}/${linked.slug}` : linked.slug;
 
   say(
-    row(0, [badge("memcell"), good(`Connected to ${projectDisplay}`)]),
+    row(0, [badge("memcell"), good(`Connected to ${workspaceDisplay}`)]),
     row(1, [label("Directory".padEnd(11, " ")), place(dirname(at))]),
     wired.length > 0
       ? row(1, [label("Agents".padEnd(11, " ")), value(wired.join(", "))])
@@ -519,7 +520,7 @@ export async function connect(
       [label("Skill".padEnd(11, " ")), place(".agents/skills/memcell")],
       [label("(agent memory tools)")],
     ),
-    row(1, [label("Dashboard".padEnd(11, " ")), place(projectUrl)]),
+    row(1, [label("Dashboard".padEnd(11, " ")), place(workspaceUrl)]),
     !onPath &&
       row(
         1,

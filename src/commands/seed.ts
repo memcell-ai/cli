@@ -104,7 +104,7 @@ export async function seed(
   if (!source) {
     say(
       row(0, [badge("memcell"), place(instance)]),
-      row(1, [warn("no source")], [label("try"), cmd("memcell memories seed facebook/react")]),
+      row(1, [warn("no source")], [label("try"), cmd("memcell memory seed facebook/react")]),
     );
     return 1;
   }
@@ -153,7 +153,7 @@ export async function seed(
     started
       ? row(1, [state("good", "seeding", "✦")], [label("the crawl is queued")])
       : row(1, [state("good", "watching", "✦")], [label("this memory is already in the commons")]),
-    started && row(2, [label("watch it any time with"), cmd(`memcell memories seed ${slug}`)]),
+    started && row(2, [label("watch it any time with"), cmd(`memcell memory seed ${slug}`)]),
   );
 
   if (!options.watch) return 0;
@@ -187,10 +187,7 @@ export async function seed(
     say(
       row(0, [badge(slug), place(instance)]),
       row(1, [state("warn", "lost the stream", "◇")], [label((error as Error).message)]),
-      row(2, [
-        label("the crawl keeps going — reattach with"),
-        cmd(`memcell memories seed ${slug}`),
-      ]),
+      row(2, [label("the crawl keeps going — reattach with"), cmd(`memcell memory seed ${slug}`)]),
     );
     return 0;
   } finally {

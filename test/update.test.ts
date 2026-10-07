@@ -89,7 +89,7 @@ describe("update", () => {
       delete process.env.MEMCELL_NO_UPDATE_NOTIFIER;
       expect(shouldCheckForUpdates(["status"])).toBe(true);
       expect(shouldCheckForUpdates(["connect"])).toBe(true);
-      expect(shouldCheckForUpdates(["memories"])).toBe(true);
+      expect(shouldCheckForUpdates(["memory"])).toBe(true);
     });
   });
 
